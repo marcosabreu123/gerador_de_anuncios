@@ -5,6 +5,9 @@ Transforma uma foto simples de produto em uma arte publicitária profissional
 
 **Stack:** Next.js 16 (App Router) · Supabase (Auth/DB/Storage) · Google Gemini (imagem) · OpenAI GPT-4.1 mini (montagem de prompt). Mobile-first.
 
+**Produção:** https://gerador-de-anuncios-delta.vercel.app
+(deploy automático a cada push na branch `main` — projeto Vercel `gerador-de-anuncios`)
+
 ---
 
 ## 1. Configuração inicial (uma vez)
