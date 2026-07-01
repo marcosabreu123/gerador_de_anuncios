@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+:root {
+  /* Paleta premium — bege/areia + grafite, coerente com o nicho */
+  --background: #faf7f2;
+  --surface: #ffffff;
+  --foreground: #1c1a17;
+  --muted: #6f6a61;
+  --border: #e7e0d5;
+  --primary: #1c1a17;
+  --primary-foreground: #faf7f2;
+  --accent: #b08d57; /* dourado fosco */
+  --accent-soft: #f0e6d6;
+  --danger: #b3261e;
+  --radius: 16px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-geist-sans);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Container mobile-first: coluna estreita centralizada */
+.app-shell {
+  width: 100%;
+  max-width: 480px;
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+
+/* Componentes utilitários reutilizáveis */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 600;
+  border-radius: 12px;
+  padding: 14px 20px;
+  transition: opacity 0.15s, transform 0.05s;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-size: 16px;
+  text-align: center;
+}
+.btn:active {
+  transform: scale(0.985);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.btn-accent {
+  background: var(--accent);
+  color: #fff;
+}
+.btn-outline {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--foreground);
+}
+.btn-block {
+  width: 100%;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 16px; /* evita zoom no iOS */
+  color: var(--foreground);
+  outline: none;
+}
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--foreground);
+  margin-bottom: 6px;
+  display: block;
+}
