@@ -64,8 +64,13 @@ create index if not exists idx_credits_user on public.credits(user_id);
 -- ---------- Provisionamento automático de usuário ----------
 -- Cria a row em public.users sempre que alguém se cadastra no Auth,
 -- já com 3 créditos de bônus.
+--
+-- NOME COM SUFIXO "_artes_ia": este projeto Supabase é compartilhado com
+-- outro app (tabelas profiles/creations/chat_sessions), que já tem sua
+-- própria trigger "on_auth_user_created" -> "handle_new_user()" na mesma
+-- auth.users. Nomes únicos evitam substituir a trigger/função do outro app.
 
-create or replace function public.handle_new_user()
+create or replace function public.handle_new_user_artes_ia()
 returns trigger
 language plpgsql
 security definer set search_path = public
@@ -88,10 +93,10 @@ begin
 end;
 $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
+drop trigger if exists on_auth_user_created_artes_ia on auth.users;
+create trigger on_auth_user_created_artes_ia
   after insert on auth.users
-  for each row execute function public.handle_new_user();
+  for each row execute function public.handle_new_user_artes_ia();
 
 -- ---------- Débito atômico de crédito ----------
 -- Decrementa 1 crédito somente se houver saldo. Retorna o saldo novo,
