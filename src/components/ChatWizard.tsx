@@ -3,9 +3,25 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { TIPOS_PECA, type BriefingCompleto, type ContratoAgente, type MensagemChat } from "@/lib/types";
+import {
+  TIPOS_IMAGEM_ANEXO,
+  TIPOS_PECA,
+  type BriefingCompleto,
+  type ContratoAgente,
+  type ImagemAnexo,
+  type MensagemChat,
+  type TipoImagemAnexo,
+} from "@/lib/types";
 
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
+
+// campoEmColeta usa "foto" (pergunta em linguagem simples) mas o anexo em si
+// é do tipo "produto" (ver ImagemAnexo/TIPOS_IMAGEM_ANEXO em lib/types.ts).
+const CAMPO_PARA_TIPO_IMAGEM: Record<string, TipoImagemAnexo> = {
+  foto: "produto",
+  referencia: "referencia",
+  logotipo: "logotipo",
+};
 
 // Primeira pergunta é fixa (não gasta chamada à IA) — já entra no formato do
 // contrato do agente pra manter o histórico consistente (ver agente-conversa.ts).
@@ -28,6 +44,23 @@ function parseContrato(content: string): ContratoAgente | null {
   }
 }
 
+function mensagemEnvio(tipo: TipoImagemAnexo, n: number): string {
+  switch (tipo) {
+    case "produto":
+      return n > 1 ? `Enviei ${n} fotos do produto.` : "Enviei a foto do produto.";
+    case "referencia":
+      return n > 1 ? `Enviei ${n} imagens de referência.` : "Enviei uma imagem de referência.";
+    case "logotipo":
+      return "Enviei o logotipo.";
+  }
+}
+
+function mensagemPular(campo: string): string {
+  if (campo === "foto") return "Não tenho foto agora, pode gerar do zero.";
+  if (campo === "referencia") return "Não tenho imagem de referência, pode pular.";
+  return "Não tenho logotipo, pode pular.";
+}
+
 export default function ChatWizard() {
   const router = useRouter();
   const supabase = createClient();
@@ -39,14 +72,16 @@ export default function ChatWizard() {
   ]);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [enviandoFoto, setEnviandoFoto] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [originalUrl, setOriginalUrl] = useState<string | null>(null);
+  const [enviandoTipo, setEnviandoTipo] = useState<TipoImagemAnexo | null>(null);
+  const [imagens, setImagens] = useState<ImagemAnexo[]>([]);
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   const ultimaAssistente = [...mensagens].reverse().find((m) => m.role === "assistant");
   const contrato = ultimaAssistente ? parseContrato(ultimaAssistente.content) : null;
+  const tipoImagemAtual = contrato?.campoEmColeta
+    ? CAMPO_PARA_TIPO_IMAGEM[contrato.campoEmColeta]
+    : undefined;
 
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -77,34 +112,36 @@ export default function ChatWizard() {
     }
   }
 
-  async function onSelecionarFoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function onSelecionarImagens(tipo: TipoImagemAnexo, e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     setErro(null);
-    setPreview(URL.createObjectURL(file));
-    setEnviandoFoto(true);
+    setEnviandoTipo(tipo);
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Sessão expirada. Faça login novamente.");
 
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${user.id}/originais/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-        contentType: file.type,
-        upsert: false,
-      });
-      if (error) throw error;
-
-      const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-      setOriginalUrl(data.publicUrl);
-      await enviarMensagem("Enviei a foto do produto.");
+      const novas: ImagemAnexo[] = [];
+      for (const file of Array.from(files)) {
+        const ext = file.name.split(".").pop() || "jpg";
+        const path = `${user.id}/originais/${tipo}/${crypto.randomUUID()}.${ext}`;
+        const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+          contentType: file.type,
+          upsert: false,
+        });
+        if (error) throw error;
+        const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+        novas.push({ tipo, url: data.publicUrl });
+      }
+      setImagens((prev) => [...prev, ...novas]);
+      await enviarMensagem(mensagemEnvio(tipo, novas.length));
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Falha ao enviar a foto.");
-      setPreview(null);
+      setErro(err instanceof Error ? err.message : "Falha ao enviar a imagem.");
     } finally {
-      setEnviandoFoto(false);
+      setEnviandoTipo(null);
+      if (fileRef.current) fileRef.current.value = "";
     }
   }
 
@@ -117,7 +154,7 @@ export default function ChatWizard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          originalUrl: originalUrl ?? undefined,
+          imagens,
           briefing: contrato.briefingParcial as BriefingCompleto,
           mensagens,
         }),
@@ -131,8 +168,8 @@ export default function ChatWizard() {
     }
   }
 
-  const aguardandoFoto = contrato?.campoEmColeta === "foto" && !originalUrl;
-  const temOpcoes = !!contrato?.opcoes?.length && !aguardandoFoto;
+  const aguardandoImagem = !!tipoImagemAtual;
+  const temOpcoes = !!contrato?.opcoes?.length && !aguardandoImagem;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -160,10 +197,18 @@ export default function ChatWizard() {
           </div>
         )}
 
-        {preview && (
-          <div className="self-end w-28 aspect-square rounded-xl overflow-hidden border border-[var(--border)]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={preview} alt="Foto enviada" className="w-full h-full object-cover" />
+        {imagens.length > 0 && (
+          <div className="self-end flex gap-2 flex-wrap justify-end">
+            {imagens.map((img, i) => (
+              <div
+                key={i}
+                className="w-16 h-16 rounded-lg overflow-hidden border border-[var(--border)] relative"
+                title={TIPOS_IMAGEM_ANEXO[img.tipo].label}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={img.url} alt={img.tipo} className="w-full h-full object-cover" />
+              </div>
+            ))}
           </div>
         )}
 
@@ -185,31 +230,33 @@ export default function ChatWizard() {
         </button>
       )}
 
-      {/* Área de interação: foto, botões de resposta rápida, ou texto livre */}
-      {aguardandoFoto ? (
+      {/* Área de interação: upload de imagem, botões de resposta rápida, ou texto livre */}
+      {aguardandoImagem && tipoImagemAtual ? (
         <div className="flex flex-col gap-2">
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            disabled={enviandoFoto || enviando}
+            disabled={enviandoTipo !== null || enviando}
             className="btn btn-primary btn-block"
           >
-            {enviandoFoto ? "Enviando foto…" : "📷 Enviar foto do produto"}
+            {enviandoTipo === tipoImagemAtual
+              ? "Enviando…"
+              : TIPOS_IMAGEM_ANEXO[tipoImagemAtual].botao}
           </button>
           <button
             type="button"
-            onClick={() => enviarMensagem("Não tenho foto agora, pode gerar do zero.")}
-            disabled={enviandoFoto || enviando}
+            onClick={() => enviarMensagem(mensagemPular(contrato!.campoEmColeta!))}
+            disabled={enviandoTipo !== null || enviando}
             className="text-sm text-[var(--muted)] underline text-center"
           >
-            Não tenho foto agora
+            {contrato?.campoEmColeta === "foto" ? "Não tenho foto agora" : "Não tenho / pular"}
           </button>
           <input
             ref={fileRef}
             type="file"
             accept="image/*"
-            capture="environment"
-            onChange={onSelecionarFoto}
+            multiple
+            onChange={(e) => onSelecionarImagens(tipoImagemAtual, e)}
             className="hidden"
           />
         </div>

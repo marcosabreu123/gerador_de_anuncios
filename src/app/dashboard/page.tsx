@@ -48,9 +48,14 @@ export default async function DashboardPage() {
             </p>
           </div>
         ) : (
-          <Link href="/novo" className="btn btn-primary btn-block text-lg py-4">
-            + Criar nova arte
-          </Link>
+          <div className="flex flex-col gap-3">
+            <Link href="/novo" className="btn btn-primary btn-block text-lg py-4">
+              ✨ Criar arte nova
+            </Link>
+            <Link href="/editar" className="btn btn-outline btn-block">
+              ✏️ Editar um design que já tenho
+            </Link>
+          </div>
         )}
 
         <div className="flex items-center justify-between mt-10 mb-3">

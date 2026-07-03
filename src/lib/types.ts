@@ -115,6 +115,36 @@ export const TIPOS_PECA: Record<TipoPeca, { label: string }> = {
 // atua como redatora e propõe opções para aprovação.
 export type ModoConteudo = "usuario-tem-copy" | "ia-cria-copy";
 
+// Tipos de imagem que o lojista pode anexar durante a conversa. Cada tipo
+// aceita mais de um arquivo (ex.: produto em vários ângulos).
+export type TipoImagemAnexo = "produto" | "referencia" | "logotipo";
+
+export const TIPOS_IMAGEM_ANEXO: Record<
+  TipoImagemAnexo,
+  { label: string; botao: string; ajuda: string }
+> = {
+  produto: {
+    label: "foto do produto",
+    botao: "📷 Enviar foto do produto",
+    ajuda: "Uma ou mais fotos reais do produto (ângulos diferentes ajudam).",
+  },
+  referencia: {
+    label: "imagem de referência",
+    botao: "🖼️ Enviar referência de anúncio",
+    ajuda: "Um anúncio ou arte que você goste, como inspiração de estilo.",
+  },
+  logotipo: {
+    label: "logotipo",
+    botao: "🏷️ Enviar logotipo",
+    ajuda: "Sua marca/logo, se quiser que apareça na arte.",
+  },
+};
+
+export interface ImagemAnexo {
+  tipo: TipoImagemAnexo;
+  url: string;
+}
+
 // Briefing completo e resolvido — exigido para poder gerar a imagem.
 // `frase` precisa estar PREENCHIDA aqui (seja porque o usuário digitou, seja
 // porque uma sugestão da IA foi aprovada) — ver regra de negócio no agente.
@@ -128,6 +158,8 @@ export interface BriefingCompleto {
   estilo: Estilo;
   publicoTom?: string;
   temFotoProduto: boolean;
+  temReferencia?: boolean;
+  temLogotipo?: boolean;
   modoConteudo?: ModoConteudo;
   conceito?: string;
   frase?: string;

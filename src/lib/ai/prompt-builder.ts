@@ -11,11 +11,13 @@ const SYSTEM = `Você é diretor de arte sênior de publicidade, especializado e
 
 Trate cada elemento:
 - PRODUTO HERÓI: se houver foto do produto, ela é o protagonista — preserve características reais (formato, cor, rótulo, proporção); nunca invente outro produto nem altere a marca. Se não houver foto, componha o produto do zero a partir da descrição, com o máximo de coerência e realismo possível.
+- REFERÊNCIA DE ESTILO: se houver uma imagem de referência anexada, use-a apenas como inspiração de composição/paleta/clima visual — nunca copie texto, marca ou logotipo de terceiros que apareçam nela.
+- LOGOTIPO: se houver logotipo anexado, inclua-o de forma discreta e legível na arte (ex.: canto inferior), sem distorcer suas proporções ou cores.
 - COMPOSIÇÃO: enquadramento e regra de terços coerentes com o formato (9:16 vertical, 4:5, 1:1). Respiro adequado; produto com peso visual.
 - ILUMINAÇÃO: luz realista de estúdio/produto, sombras coerentes, reflexos naturais. Nada de aparência artificial ou "cara de IA".
 - PALETA E ESTILO: siga o estilo pedido de forma consistente.
 - TIPOGRAFIA E HIERARQUIA: se houver headline, preço e chamada, organize a hierarquia (headline > preço > CTA), tipografia elegante, alto contraste e legibilidade. Texto curto, correto e em português.
-- RESTRIÇÕES: sem texto quebrado ou ilegível, sem marcas d'água, sem logos inventadas, sem elementos aleatórios, sem estética de IA genérica.
+- RESTRIÇÕES: sem texto quebrado ou ilegível, sem marcas d'água, sem logos inventadas (a não ser a anexada), sem elementos aleatórios, sem estética de IA genérica.
 
 Saída: apenas o prompt final, em um parágrafo corrido. Sem títulos, sem aspas, sem explicações.`;
 
@@ -41,6 +43,8 @@ function briefingParaTexto(b: BriefingCompleto): string {
       ? "Há uma foto real do produto anexada — use-a como base fiel."
       : "NÃO há foto do produto — componha a partir da descrição, com o máximo de realismo possível.",
   );
+  if (b.temReferencia) linhas.push("Há uma imagem de referência de estilo anexada — inspire-se nela.");
+  if (b.temLogotipo) linhas.push("Há um logotipo anexado — inclua-o discretamente na arte.");
   if (b.publicoTom) linhas.push(`Público/tom: ${b.publicoTom}`);
   if (b.conceito) linhas.push(`Ângulo criativo/conceito: ${b.conceito}`);
   if (b.preco) linhas.push(`Preço: ${b.preco}`);
@@ -128,6 +132,38 @@ export async function montarPromptAjuste(
     return { prompt, usouFallback: false };
   } catch (e) {
     console.error("[prompt-builder] ajuste OpenAI falhou, usando fallback:", e);
+    return { prompt: fallback, usouFallback: true };
+  }
+}
+
+// Fluxo de edição direta (/editar): o lojista sobe um design PRONTO (feito
+// fora do app, sem briefing/prompt anterior nosso) e pede uma mudança em
+// linguagem natural. Diferente de montarPromptAjuste, aqui não existe
+// "prompt anterior" — só a imagem em si e o pedido.
+export async function montarPromptEdicaoDireta(pedidoUsuario: string): Promise<PromptGerado> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const fallback = `Edite a imagem enviada aplicando exatamente este pedido: ${pedidoUsuario}. Preserve o restante do design (produto, textos, composição, marca) tal como está, mudando apenas o que foi pedido. Mantenha alta qualidade e realismo.`;
+  if (!apiKey) return { prompt: fallback, usouFallback: true };
+
+  try {
+    const openai = new OpenAI({ apiKey });
+    const completion = await openai.chat.completions.create({
+      model: OPENAI_CHAT_MODEL,
+      temperature: 0.5,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Você escreve instruções de edição de imagem para um modelo de geração. O lojista enviou um design pronto (uma arte publicitária já existente) e pediu uma mudança em linguagem simples. Escreva UM prompt de edição em português, claro e específico, que aplica exatamente o pedido e instrui a preservar tudo o mais (produto, textos, composição, marca) como está na imagem original. Apenas o prompt final, sem aspas, sem explicações.",
+        },
+        { role: "user", content: `PEDIDO DE EDIÇÃO:\n${pedidoUsuario}` },
+      ],
+    });
+    const prompt = completion.choices[0]?.message?.content?.trim();
+    if (!prompt) return { prompt: fallback, usouFallback: true };
+    return { prompt, usouFallback: false };
+  } catch (e) {
+    console.error("[prompt-builder] edição direta OpenAI falhou, usando fallback:", e);
     return { prompt: fallback, usouFallback: true };
   }
 }

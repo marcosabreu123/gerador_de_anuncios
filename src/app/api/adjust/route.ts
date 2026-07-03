@@ -14,12 +14,12 @@ interface Body {
   pedido: string; // ajuste em linguagem natural
 }
 
-async function baixarBase64(url: string): Promise<{ base64: string; mimeType: string }> {
+async function baixarBase64(url: string): Promise<{ base64: string; mimeType: string; tipo: "base" }> {
   const res = await fetch(url);
   if (!res.ok) throw new Error("Não foi possível ler a imagem base.");
   const mimeType = res.headers.get("content-type") ?? "image/png";
   const buf = Buffer.from(await res.arrayBuffer());
-  return { base64: buf.toString("base64"), mimeType };
+  return { base64: buf.toString("base64"), mimeType, tipo: "base" };
 }
 
 export async function POST(request: NextRequest) {
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     const imagens = await gerarVariacoes({
       prompt,
-      produto: base,
+      imagens: [base],
       modelo,
       variacoes: 1,
     });

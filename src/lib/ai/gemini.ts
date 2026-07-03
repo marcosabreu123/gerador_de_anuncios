@@ -7,14 +7,30 @@ export interface ImagemGerada {
   mimeType: string;
 }
 
-export interface EntradaProduto {
-  base64: string; // foto original do produto
+// Tipo de imagem de entrada — usado para rotular cada imagem no prompt
+// multimodal, já que a API não tem um campo estruturado de "papel" por
+// imagem (só uma sequência de partes texto/imagem).
+export type TipoEntradaImagem = "produto" | "referencia" | "logotipo" | "base";
+
+export interface EntradaImagem {
+  base64: string;
   mimeType: string;
+  tipo: TipoEntradaImagem;
 }
+
+const LABELS_ENTRADA: Record<TipoEntradaImagem, string> = {
+  produto:
+    "Foto real do produto (herói da composição — preserve formato, cor e rótulo reais):",
+  referencia:
+    "Imagem de referência de estilo (inspire-se na composição/paleta/clima, mas NÃO copie texto, marca ou logotipo de terceiros que apareçam nela):",
+  logotipo:
+    "Logotipo da marca do lojista (inclua de forma discreta e legível na arte, sem distorcer):",
+  base: "Imagem base a ser editada (aplique o ajuste pedido preservando o restante):",
+};
 
 export interface OpcoesGeracao {
   prompt: string;
-  produto?: EntradaProduto; // foto do produto (edição/composição). Opcional.
+  imagens?: EntradaImagem[]; // 0+ imagens de entrada (produto/referência/logo/base). Opcional.
   modelo?: string; // default: flash
   variacoes?: number; // quantas artes gerar (default 2)
 }
@@ -50,12 +66,14 @@ async function gerarUma(
   ai: GoogleGenAI,
   modelo: string,
   prompt: string,
-  produto?: EntradaProduto,
+  imagens: EntradaImagem[],
 ): Promise<ImagemGerada | null> {
-  // partes do conteúdo: texto sempre; foto do produto quando houver.
+  // partes do conteúdo: texto sempre; cada imagem de entrada rotulada com uma
+  // linha de texto antes dela, pra o modelo entender o papel de cada uma.
   const parts: Array<Record<string, unknown>> = [{ text: prompt }];
-  if (produto) {
-    parts.push({ inlineData: { mimeType: produto.mimeType, data: produto.base64 } });
+  for (const img of imagens) {
+    parts.push({ text: LABELS_ENTRADA[img.tipo] });
+    parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
   }
 
   const resp = await ai.models.generateContent({
@@ -71,18 +89,19 @@ export async function gerarVariacoes(opts: OpcoesGeracao): Promise<ImagemGerada[
   const ai = getClient();
   const modelo = opts.modelo ?? GEMINI_FLASH_IMAGE;
   const n = Math.max(1, Math.min(opts.variacoes ?? 2, 4));
+  const imagens = opts.imagens ?? [];
 
   const resultados = await Promise.allSettled(
-    Array.from({ length: n }, () => gerarUma(ai, modelo, opts.prompt, opts.produto)),
+    Array.from({ length: n }, () => gerarUma(ai, modelo, opts.prompt, imagens)),
   );
 
-  const imagens: ImagemGerada[] = [];
+  const geradas: ImagemGerada[] = [];
   for (const r of resultados) {
-    if (r.status === "fulfilled" && r.value) imagens.push(r.value);
+    if (r.status === "fulfilled" && r.value) geradas.push(r.value);
   }
 
-  if (imagens.length === 0) {
+  if (geradas.length === 0) {
     throw new Error("O Gemini não retornou nenhuma imagem. Verifique o modelo e a API key.");
   }
-  return imagens;
+  return geradas;
 }

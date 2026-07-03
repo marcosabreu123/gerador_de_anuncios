@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { debitarCredito, estornarCredito } from "@/lib/credits";
 import { montarPrompt } from "@/lib/ai/prompt-builder";
-import { gerarVariacoes } from "@/lib/ai/gemini";
+import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/gemini";
 import { uploadImagem } from "@/lib/storage";
 import { modeloParaEtapa } from "@/lib/ai/models";
 import { normalizarBriefing } from "@/lib/ai/normalizar-briefing";
@@ -13,6 +13,7 @@ import {
   type BriefingCompleto,
   type Estilo,
   type Formato,
+  type ImagemAnexo,
   type MensagemChat,
 } from "@/lib/types";
 
@@ -22,18 +23,18 @@ export const maxDuration = 60;
 const VARIACOES = 2;
 
 interface Body {
-  originalUrl?: string; // ausente quando temFotoProduto = false
+  imagens?: ImagemAnexo[]; // fotos de produto/referência/logotipo anexadas na conversa
   briefing: BriefingCompleto;
   mensagens?: MensagemChat[]; // transcrição da conversa, para auditoria/depuração
 }
 
-// Baixa a foto original do produto e converte para base64 (para enviar ao Gemini).
-async function baixarBase64(url: string): Promise<{ base64: string; mimeType: string }> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Não foi possível ler a foto do produto.");
+// Baixa uma imagem anexada e converte para base64 (para enviar ao Gemini).
+async function baixarBase64(img: ImagemAnexo): Promise<EntradaImagem> {
+  const res = await fetch(img.url);
+  if (!res.ok) throw new Error(`Não foi possível ler a imagem (${img.tipo}).`);
   const mimeType = res.headers.get("content-type") ?? "image/jpeg";
   const buf = Buffer.from(await res.arrayBuffer());
-  return { base64: buf.toString("base64"), mimeType };
+  return { base64: buf.toString("base64"), mimeType, tipo: img.tipo };
 }
 
 // Validação mínima no servidor — o agente conversacional já garante o
@@ -74,8 +75,9 @@ export async function POST(request: NextRequest) {
   if (!validar(body.briefing)) {
     return NextResponse.json({ error: "Dados do briefing incompletos." }, { status: 400 });
   }
-  // originalUrl só é obrigatório quando o lojista de fato enviou uma foto.
-  if (body.briefing.temFotoProduto && !body.originalUrl) {
+  const imagensAnexadas = body.imagens ?? [];
+  // Foto do produto só é obrigatória quando o lojista de fato disse que tinha uma.
+  if (body.briefing.temFotoProduto && !imagensAnexadas.some((i) => i.tipo === "produto")) {
     return NextResponse.json({ error: "Foto do produto não encontrada." }, { status: 400 });
   }
 
@@ -90,21 +92,22 @@ export async function POST(request: NextRequest) {
 
   try {
     // 2) Prepara insumos. Foto é opcional — sem ela, o Gemini compõe do zero.
-    const produto = body.originalUrl ? await baixarBase64(body.originalUrl) : undefined;
+    const entradas = await Promise.all(imagensAnexadas.map(baixarBase64));
     const { prompt } = await montarPrompt(body.briefing);
     const modelo = modeloParaEtapa("rascunho"); // rascunho = flash (barato/rápido)
 
     // 3) Gera variações no Gemini.
     const imagens = await gerarVariacoes({
       prompt,
-      produto,
+      imagens: entradas,
       modelo,
       variacoes: VARIACOES,
     });
 
-    // 4) Cria o projeto (guarda a transcrição da conversa para auditoria).
+    // 4) Cria o projeto (guarda a transcrição da conversa + anexos para auditoria).
     const formato = body.briefing.formato as Formato;
     const estilo = body.briefing.estilo as Estilo;
+    const urlProduto = imagensAnexadas.find((i) => i.tipo === "produto")?.url ?? null;
     const { data: projeto, error: projErr } = await supabase
       .from("projects")
       .insert({
@@ -113,7 +116,7 @@ export async function POST(request: NextRequest) {
         tipo_arte: ESTILOS[estilo].label,
         formato,
         status: "concluido",
-        conversa: { briefing: body.briefing, mensagens: body.mensagens ?? [] },
+        conversa: { briefing: body.briefing, mensagens: body.mensagens ?? [], imagens: imagensAnexadas },
       })
       .select("id")
       .single();
@@ -128,7 +131,7 @@ export async function POST(request: NextRequest) {
         .insert({
           project_id: projeto.id,
           user_id: user.id,
-          imagem_original_url: body.originalUrl ?? null,
+          imagem_original_url: urlProduto,
           imagem_gerada_url: urlGerada,
           prompt_usado: prompt,
           modelo_usado: modelo,
