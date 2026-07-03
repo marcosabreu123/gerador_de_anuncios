@@ -11,7 +11,6 @@ import {
   FORMATOS,
   TIPOS_PECA,
   type BriefingCompleto,
-  type Estilo,
   type Formato,
   type ImagemAnexo,
   type MensagemChat,
@@ -45,7 +44,8 @@ function validar(b: BriefingCompleto | undefined): b is BriefingCompleto {
   if (!b.nomeProduto?.trim()) return false;
   if (!(b.tipoPeca in TIPOS_PECA)) return false;
   if (!(b.formato in FORMATOS)) return false;
-  if (!(b.estilo in ESTILOS)) return false;
+  // Estilo é híbrido: precisa de um preset OU uma descrição livre.
+  if (!(b.estilo && b.estilo in ESTILOS) && !b.estiloLivre?.trim()) return false;
   if (!b.frase?.trim()) return false; // precisa estar resolvida (usuário ou IA aprovada)
   return true;
 }
@@ -106,14 +106,14 @@ export async function POST(request: NextRequest) {
 
     // 4) Cria o projeto (guarda a transcrição da conversa + anexos para auditoria).
     const formato = body.briefing.formato as Formato;
-    const estilo = body.briefing.estilo as Estilo;
+    const tipoArte = body.briefing.estilo ? ESTILOS[body.briefing.estilo].label : (body.briefing.estiloLivre ?? "Personalizado");
     const urlProduto = imagensAnexadas.find((i) => i.tipo === "produto")?.url ?? null;
     const { data: projeto, error: projErr } = await supabase
       .from("projects")
       .insert({
         user_id: user.id,
         nome_projeto: body.briefing.nomeProduto,
-        tipo_arte: ESTILOS[estilo].label,
+        tipo_arte: tipoArte,
         formato,
         status: "concluido",
         conversa: { briefing: body.briefing, mensagens: body.mensagens ?? [], imagens: imagensAnexadas },

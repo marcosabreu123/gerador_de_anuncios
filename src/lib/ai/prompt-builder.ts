@@ -11,13 +11,18 @@ const SYSTEM = `Você é diretor de arte sênior de publicidade, especializado e
 
 Trate cada elemento:
 - PRODUTO HERÓI: se houver foto do produto, ela é o protagonista — preserve características reais (formato, cor, rótulo, proporção); nunca invente outro produto nem altere a marca. Se não houver foto, componha o produto do zero a partir da descrição, com o máximo de coerência e realismo possível.
-- REFERÊNCIA DE ESTILO: se houver uma imagem de referência anexada, use-a apenas como inspiração de composição/paleta/clima visual — nunca copie texto, marca ou logotipo de terceiros que apareçam nela.
-- LOGOTIPO: se houver logotipo anexado, inclua-o de forma discreta e legível na arte (ex.: canto inferior), sem distorcer suas proporções ou cores.
-- COMPOSIÇÃO: enquadramento e regra de terços coerentes com o formato (9:16 vertical, 4:5, 1:1). Respiro adequado; produto com peso visual.
+- COMPOSIÇÃO POR OBJETIVO: adapte a composição ao tipo de peça:
+  - anúncio de produto / promoção → hero shot dinâmico do produto, hierarquia visual forte, senso de urgência quando for promoção
+  - lançamento / prova social → composição editorial, espaço negativo elegante, sensação premium
+  - data comemorativa → atmosfera festiva, tipografia em destaque, alto contraste
+  - anúncio de serviço → composição limpa, confiável, centrada no resultado/benefício
+  Enquadramento e regra de terços coerentes com o formato (9:16 vertical, 4:5, 1:1). Respiro adequado; produto com peso visual.
 - ILUMINAÇÃO: luz realista de estúdio/produto, sombras coerentes, reflexos naturais. Nada de aparência artificial ou "cara de IA".
-- PALETA E ESTILO: siga o estilo pedido de forma consistente.
-- TIPOGRAFIA E HIERARQUIA: se houver headline, preço e chamada, organize a hierarquia (headline > preço > CTA), tipografia elegante, alto contraste e legibilidade. Texto curto, correto e em português.
-- RESTRIÇÕES: sem texto quebrado ou ilegível, sem marcas d'água, sem logos inventadas (a não ser a anexada), sem elementos aleatórios, sem estética de IA genérica.
+- PALETA E ESTILO: se houver um estilo preset, siga-o de forma consistente. Se houver uma descrição livre de estilo, traduza-a em atributos visuais concretos antes de compor o prompt — ex: "parece luxo" → paleta dourada/escura, acabamento premium; "colorido/alegre" → paleta vibrante, composição descontraída; "simples/direto" → layout minimalista, bastante espaço em branco; "mais impacto" → alto contraste, tipografia ousada.
+- IDENTIDADE VISUAL: se houver logotipo ou imagem de referência anexados, extraia mentalmente as cores predominantes e o estilo tipográfico percebido, e mantenha consistência com essa identidade ao longo da arte. Posicione o logotipo (se houver) num canto discreto, sem competir com o produto. Se houver referência de estilo, use-a só como inspiração de composição/paleta/clima — nunca copie texto, marca ou logotipo de terceiros que apareçam nela.
+- TIPOGRAFIA E HIERARQUIA: organize a hierarquia de todos os elementos textuais presentes no briefing (headline, preço, contato, endereço, horário, promoção, ou qualquer outro item informado), do mais importante pro menos importante. Tipografia elegante, alto contraste e legibilidade. Texto curto, correto e em português. Nem todo anúncio precisa de todos os elementos — inclua só o que estiver no briefing.
+- RESTRIÇÕES: sem marcas d'água, sem texto quebrado ou ilegível, sem elementos distorcidos, sem aparência amadora, sem "cara de banco de imagens", sem fundo branco genérico, sem composição entediante, sem logos inventadas (a não ser a anexada).
+- VARIAÇÃO ENTRE AS ARTES: este prompt pode ser usado para gerar mais de uma variação da mesma arte — garanta que a descrição permita variações visivelmente diferentes entre si em composição, ângulo ou iluminação (não a mesma arte só com a cor trocada).
 
 Saída: apenas o prompt final, em um parágrafo corrido. Sem títulos, sem aspas, sem explicações.`;
 
@@ -26,14 +31,19 @@ export interface PromptGerado {
   usouFallback: boolean;
 }
 
+function estiloParaTexto(b: BriefingCompleto): string {
+  if (b.estilo) return `${ESTILOS[b.estilo].label} — ${ESTILOS[b.estilo].hint}`;
+  if (b.estiloLivre) return `descrito pelo lojista em suas palavras: "${b.estiloLivre}" (traduza em atributos visuais concretos)`;
+  return "não especificado — use um estilo comercial neutro e elegante";
+}
+
 // Monta uma descrição textual do briefing para alimentar o modelo.
 function briefingParaTexto(b: BriefingCompleto): string {
   const fmt = FORMATOS[b.formato];
-  const est = ESTILOS[b.estilo];
   const linhas = [
     `Tipo de peça: ${TIPOS_PECA[b.tipoPeca]?.label ?? b.tipoPeca}`,
     `Formato: ${fmt.label} (${fmt.aspecto}) — ${fmt.descricao}`,
-    `Estilo visual: ${est.label} — ${est.hint}`,
+    `Estilo visual: ${estiloParaTexto(b)}`,
     `Produto: ${b.nomeProduto}`,
   ];
   if (b.descricaoProduto) linhas.push(`Descrição do produto: ${b.descricaoProduto}`);
@@ -52,6 +62,14 @@ function briefingParaTexto(b: BriefingCompleto): string {
   if (b.beneficio) linhas.push(`Benefício principal: ${b.beneficio}`);
   if (b.chamadaWhatsapp) linhas.push(`Chamada de ação (WhatsApp): ${b.chamadaWhatsapp}`);
   if (b.objetivo) linhas.push(`Objetivo: ${b.objetivo}`);
+  if (b.elementosExtras?.length) {
+    linhas.push("Elementos adicionais do anúncio:");
+    for (const el of b.elementosExtras) linhas.push(`- ${el.tipo}: ${el.valor}`);
+  }
+  if (b.perguntasSegmento?.length) {
+    linhas.push("Contexto específico do nicho (perguntas e respostas do lojista):");
+    for (const p of b.perguntasSegmento) linhas.push(`- ${p.pergunta}: ${p.resposta}`);
+  }
   return linhas.join("\n");
 }
 
@@ -59,10 +77,10 @@ function briefingParaTexto(b: BriefingCompleto): string {
 // Garante que o fluxo funciona ponta a ponta mesmo sem a IA de conversa.
 export function montarPromptFallback(b: BriefingCompleto): string {
   const fmt = FORMATOS[b.formato];
-  const est = ESTILOS[b.estilo];
+  const estiloHint = b.estilo ? ESTILOS[b.estilo].hint : (b.estiloLivre ?? "estilo comercial neutro e elegante");
   const partes: string[] = [
     `Crie uma arte publicitária ${fmt.aspecto} profissional e realista para ${TIPOS_PECA[b.tipoPeca]?.label.toLowerCase() ?? "anúncio"} do produto "${b.nomeProduto}"${b.descricaoProduto ? ` (${b.descricaoProduto})` : ""},`,
-    `${est.hint},`,
+    `${estiloHint},`,
     b.temFotoProduto
       ? "produto real em destaque como herói da composição, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA."
       : "produto composto a partir da descrição com máximo realismo, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA.",
@@ -71,6 +89,7 @@ export function montarPromptFallback(b: BriefingCompleto): string {
   if (b.beneficio) partes.push(`Reforce o benefício: ${b.beneficio}.`);
   if (b.preco) partes.push(`Mostre o preço ${b.preco} de forma clara e legível na parte inferior.`);
   if (b.chamadaWhatsapp) partes.push(`Inclua a chamada comercial: "${b.chamadaWhatsapp}".`);
+  for (const el of b.elementosExtras ?? []) partes.push(`Inclua também: ${el.tipo}: ${el.valor}.`);
   partes.push(`Composição pronta para ${fmt.descricao}.`);
   return partes.join(" ");
 }
@@ -102,6 +121,7 @@ export async function montarPrompt(b: BriefingCompleto): Promise<PromptGerado> {
 
 // Reinterpreta um pedido de ajuste em linguagem natural sobre uma arte já gerada,
 // combinando com o prompt anterior para gerar um novo prompt de edição.
+// Curto e direto por design: ajustes devem mudar só o que foi pedido.
 export async function montarPromptAjuste(
   promptAnterior: string,
   pedidoUsuario: string,
@@ -114,12 +134,12 @@ export async function montarPromptAjuste(
     const openai = new OpenAI({ apiKey });
     const completion = await openai.chat.completions.create({
       model: OPENAI_CHAT_MODEL,
-      temperature: 0.6,
+      temperature: 0.4,
       messages: [
         {
           role: "system",
           content:
-            "Você reescreve prompts de arte publicitária. Receba o prompt anterior e um pedido de ajuste do lojista (linguagem simples). Devolva UM novo prompt em português que mantém o produto e a identidade da arte e aplica o ajuste. Apenas o prompt final, sem aspas.",
+            'Você reescreve prompts de arte publicitária para aplicar um ajuste pontual. Receba o prompt anterior e um pedido de ajuste do lojista (linguagem simples). Devolva UM novo prompt em português, curto e direto (no máximo 2 frases), no formato: "Altere [elemento específico] para [novo valor]. Mantenha todo o restante exatamente igual." Nunca mude elementos que o lojista não pediu. Apenas o prompt final, sem aspas.',
         },
         {
           role: "user",
@@ -165,5 +185,55 @@ export async function montarPromptEdicaoDireta(pedidoUsuario: string): Promise<P
   } catch (e) {
     console.error("[prompt-builder] edição direta OpenAI falhou, usando fallback:", e);
     return { prompt: fallback, usouFallback: true };
+  }
+}
+
+export type TipoPedidoAjuste = "ajuste" | "nova-criacao" | "ambiguo";
+
+export interface ClassificacaoAjuste {
+  tipo: TipoPedidoAjuste;
+  resumo: string; // frase curta descrevendo o que vai mudar, para confirmação
+}
+
+// Decide se um pedido em linguagem natural sobre uma arte já gerada é um
+// AJUSTE pontual (chamar /api/adjust) ou parece uma NOVA CRIAÇÃO disfarçada
+// (o lojista deveria recomeçar o briefing). Roda antes de gastar 1 crédito.
+export async function classificarPedidoAjuste(pedido: string): Promise<ClassificacaoAjuste> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  // Fallback heurístico simples caso a IA não esteja configurada/disponível.
+  const heuristicaNovaCríacao = /\b(refaz|refazer|refeito|n[aã]o gostei|cria outra|completamente diferente|come[cç]a de novo|do zero)\b/i;
+  if (!apiKey) {
+    return heuristicaNovaCríacao.test(pedido)
+      ? { tipo: "nova-criacao", resumo: pedido }
+      : { tipo: "ajuste", resumo: pedido };
+  }
+
+  try {
+    const openai = new OpenAI({ apiKey });
+    const completion = await openai.chat.completions.create({
+      model: OPENAI_CHAT_MODEL,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            'Classifique um pedido de mudança sobre uma arte publicitária já gerada. Responda em JSON: {"tipo": "ajuste" | "nova-criacao" | "ambiguo", "resumo": "frase curta e específica descrevendo exatamente o que vai mudar, em português"}. ' +
+            '"ajuste" = mudança pontual e específica (ex: trocar preço, cor de fundo, tamanho de texto). ' +
+            '"nova-criacao" = o lojista quer recomeçar ou não gostou do resultado (ex: "refaz tudo", "não gostei", "cria outra completamente diferente"). ' +
+            '"ambiguo" = o pedido muda vários elementos ao mesmo tempo (produto, formato E estilo, por exemplo) e pode ser tanto um ajuste grande quanto uma nova criação.',
+        },
+        { role: "user", content: pedido },
+      ],
+    });
+    const texto = completion.choices[0]?.message?.content;
+    if (!texto) return { tipo: "ajuste", resumo: pedido };
+    const j = JSON.parse(texto);
+    const tipo: TipoPedidoAjuste = ["ajuste", "nova-criacao", "ambiguo"].includes(j.tipo) ? j.tipo : "ajuste";
+    const resumo = typeof j.resumo === "string" && j.resumo.trim() ? j.resumo.trim() : pedido;
+    return { tipo, resumo };
+  } catch (e) {
+    console.error("[prompt-builder] classificação de ajuste falhou:", e);
+    return { tipo: "ajuste", resumo: pedido };
   }
 }

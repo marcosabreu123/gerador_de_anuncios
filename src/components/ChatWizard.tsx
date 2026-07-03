@@ -260,43 +260,49 @@ export default function ChatWizard() {
             className="hidden"
           />
         </div>
-      ) : temOpcoes ? (
-        <div className="flex flex-wrap gap-2">
-          {contrato!.opcoes.map((o) => (
-            <button
-              key={o}
-              type="button"
-              onClick={() => enviarMensagem(o)}
-              disabled={enviando || gerando}
-              className="text-sm font-medium bg-[var(--accent-soft)] px-4 py-2.5 rounded-full disabled:opacity-50"
-            >
-              {o}
-            </button>
-          ))}
-        </div>
       ) : (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            enviarMensagem(texto);
-          }}
-          className="flex gap-2"
-        >
-          <input
-            className="input flex-1"
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            placeholder="Digite sua resposta…"
-            disabled={enviando || gerando}
-          />
-          <button
-            type="submit"
-            disabled={!texto.trim() || enviando || gerando}
-            className="btn btn-primary"
+        <div className="flex flex-col gap-2">
+          {/* Botões de resposta rápida — quando existem, ficam disponíveis
+              JUNTO com o texto livre abaixo (híbrido: ex. estilo aceita
+              preset OU descrição com as próprias palavras). */}
+          {temOpcoes && (
+            <div className="flex flex-wrap gap-2">
+              {contrato!.opcoes.map((o) => (
+                <button
+                  key={o}
+                  type="button"
+                  onClick={() => enviarMensagem(o)}
+                  disabled={enviando || gerando}
+                  className="text-sm font-medium bg-[var(--accent-soft)] px-4 py-2.5 rounded-full disabled:opacity-50"
+                >
+                  {o}
+                </button>
+              ))}
+            </div>
+          )}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              enviarMensagem(texto);
+            }}
+            className="flex gap-2"
           >
-            Enviar
-          </button>
-        </form>
+            <input
+              className="input flex-1"
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              placeholder={temOpcoes ? "Ou descreva com suas palavras…" : "Digite sua resposta…"}
+              disabled={enviando || gerando}
+            />
+            <button
+              type="submit"
+              disabled={!texto.trim() || enviando || gerando}
+              className="btn btn-primary"
+            >
+              Enviar
+            </button>
+          </form>
+        </div>
       )}
     </div>
   );

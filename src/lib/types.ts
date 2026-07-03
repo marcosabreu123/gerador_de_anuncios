@@ -111,9 +111,26 @@ export const TIPOS_PECA: Record<TipoPeca, { label: string }> = {
   "prova-social": { label: "Prova social" },
 };
 
-// De onde vem a frase/headline principal: o próprio lojista escreve, ou a IA
-// atua como redatora e propõe opções para aprovação.
-export type ModoConteudo = "usuario-tem-copy" | "ia-cria-copy";
+// De onde vem o conteúdo do anúncio (frase + outros elementos textuais): o
+// próprio lojista especifica, ou a IA propõe e o lojista aprova.
+export type ModoConteudo = "usuario-especificou" | "ia-sugere-conteudo";
+
+// Elemento textual/informativo do anúncio que não cabe nos campos fixos
+// (endereço, horário, rede social, código promocional, selo de garantia...).
+// Estrutura livre porque varia muito por segmento e tipo de peça.
+export interface ElementoExtra {
+  tipo: string;
+  valor: string;
+  origem: "usuario" | "ia-sugerido";
+}
+
+// Pergunta específica de nicho que o agente decidiu fazer dinamicamente
+// (ver "inteligência de segmento" em agente-conversa.ts). Estrutura livre
+// porque as perguntas mudam por segmento — não há lista fixa no código.
+export interface PerguntaSegmento {
+  pergunta: string;
+  resposta: string;
+}
 
 // Tipos de imagem que o lojista pode anexar durante a conversa. Cada tipo
 // aceita mais de um arquivo (ex.: produto em vários ângulos).
@@ -148,6 +165,9 @@ export interface ImagemAnexo {
 // Briefing completo e resolvido — exigido para poder gerar a imagem.
 // `frase` precisa estar PREENCHIDA aqui (seja porque o usuário digitou, seja
 // porque uma sugestão da IA foi aprovada) — ver regra de negócio no agente.
+// `estilo` é híbrido: OU um preset (chave abaixo) OU `estiloLivre` (descrição
+// em texto livre que o agente traduz em atributos visuais) — pelo menos um
+// dos dois precisa estar resolvido.
 export interface BriefingCompleto {
   tipoPeca: TipoPeca;
   nomeProduto: string;
@@ -155,7 +175,8 @@ export interface BriefingCompleto {
   detalhesVisuaisProduto?: string;
   formato: Formato;
   objetivo?: string;
-  estilo: Estilo;
+  estilo?: Estilo;
+  estiloLivre?: string;
   publicoTom?: string;
   temFotoProduto: boolean;
   temReferencia?: boolean;
@@ -166,6 +187,8 @@ export interface BriefingCompleto {
   preco?: string;
   beneficio?: string;
   chamadaWhatsapp?: string;
+  elementosExtras?: ElementoExtra[];
+  perguntasSegmento?: PerguntaSegmento[];
 }
 
 // Estado em andamento durante a conversa — nada é obrigatório até o agente
