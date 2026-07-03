@@ -5,20 +5,26 @@ import { montarPrompt } from "@/lib/ai/prompt-builder";
 import { gerarVariacoes } from "@/lib/ai/gemini";
 import { uploadImagem } from "@/lib/storage";
 import { modeloParaEtapa } from "@/lib/ai/models";
+import { normalizarBriefing } from "@/lib/ai/normalizar-briefing";
 import {
   ESTILOS,
   FORMATOS,
+  TIPOS_PECA,
   type BriefingCompleto,
   type Estilo,
   type Formato,
+  type MensagemChat,
 } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const VARIACOES = 2;
+
 interface Body {
-  originalUrl: string;
+  originalUrl?: string; // ausente quando temFotoProduto = false
   briefing: BriefingCompleto;
+  mensagens?: MensagemChat[]; // transcrição da conversa, para auditoria/depuração
 }
 
 // Baixa a foto original do produto e converte para base64 (para enviar ao Gemini).
@@ -30,11 +36,16 @@ async function baixarBase64(url: string): Promise<{ base64: string; mimeType: st
   return { base64: buf.toString("base64"), mimeType };
 }
 
+// Validação mínima no servidor — o agente conversacional já garante o
+// preenchimento completo antes de liberar o botão "Gerar" no front, mas a
+// API nunca confia só nisso.
 function validar(b: BriefingCompleto | undefined): b is BriefingCompleto {
   if (!b) return false;
   if (!b.nomeProduto?.trim()) return false;
+  if (!(b.tipoPeca in TIPOS_PECA)) return false;
   if (!(b.formato in FORMATOS)) return false;
   if (!(b.estilo in ESTILOS)) return false;
+  if (!b.frase?.trim()) return false; // precisa estar resolvida (usuário ou IA aprovada)
   return true;
 }
 
@@ -54,8 +65,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
   }
 
-  if (!body.originalUrl || !validar(body.briefing)) {
+  // O agente conversacional às vezes devolve o label em português (ex:
+  // "Story") em vez da chave interna ("story") — normaliza antes de validar.
+  if (body.briefing) {
+    body.briefing = { ...body.briefing, ...normalizarBriefing(body.briefing) } as BriefingCompleto;
+  }
+
+  if (!validar(body.briefing)) {
     return NextResponse.json({ error: "Dados do briefing incompletos." }, { status: 400 });
+  }
+  // originalUrl só é obrigatório quando o lojista de fato enviou uma foto.
+  if (body.briefing.temFotoProduto && !body.originalUrl) {
+    return NextResponse.json({ error: "Foto do produto não encontrada." }, { status: 400 });
   }
 
   // 1) Debita crédito ANTES de gerar (atômico). Estorna se falhar.
@@ -68,8 +89,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // 2) Prepara insumos.
-    const produto = await baixarBase64(body.originalUrl);
+    // 2) Prepara insumos. Foto é opcional — sem ela, o Gemini compõe do zero.
+    const produto = body.originalUrl ? await baixarBase64(body.originalUrl) : undefined;
     const { prompt } = await montarPrompt(body.briefing);
     const modelo = modeloParaEtapa("rascunho"); // rascunho = flash (barato/rápido)
 
@@ -78,10 +99,10 @@ export async function POST(request: NextRequest) {
       prompt,
       produto,
       modelo,
-      variacoes: 3,
+      variacoes: VARIACOES,
     });
 
-    // 4) Cria o projeto.
+    // 4) Cria o projeto (guarda a transcrição da conversa para auditoria).
     const formato = body.briefing.formato as Formato;
     const estilo = body.briefing.estilo as Estilo;
     const { data: projeto, error: projErr } = await supabase
@@ -92,6 +113,7 @@ export async function POST(request: NextRequest) {
         tipo_arte: ESTILOS[estilo].label,
         formato,
         status: "concluido",
+        conversa: { briefing: body.briefing, mensagens: body.mensagens ?? [] },
       })
       .select("id")
       .single();
@@ -106,7 +128,7 @@ export async function POST(request: NextRequest) {
         .insert({
           project_id: projeto.id,
           user_id: user.id,
-          imagem_original_url: body.originalUrl,
+          imagem_original_url: body.originalUrl ?? null,
           imagem_gerada_url: urlGerada,
           prompt_usado: prompt,
           modelo_usado: modelo,

@@ -22,8 +22,14 @@ create table if not exists public.projects (
   tipo_arte text,
   formato text,
   status text default 'rascunho',
+  -- Transcrição da conversa guiada (agente conversacional) + briefing final
+  -- resolvido. Guardado por auditoria/depuração — não é usado em queries.
+  conversa jsonb,
   created_at timestamptz default now()
 );
+
+-- Migração para bancos já existentes (create table if not exists não adiciona colunas novas).
+alter table public.projects add column if not exists conversa jsonb;
 
 create table if not exists public.images (
   id uuid primary key default gen_random_uuid(),

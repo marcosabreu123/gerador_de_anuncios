@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import AppHeader from "@/components/AppHeader";
-import NovoWizard from "@/components/NovoWizard";
+import ChatWizard from "@/components/ChatWizard";
 
 export default async function NovoPage() {
   const { perfil } = await requireUser();
@@ -12,8 +12,8 @@ export default async function NovoPage() {
   return (
     <>
       <AppHeader creditos={perfil.creditos_disponiveis} />
-      <main className="app-shell flex-1 flex flex-col py-6">
-        <NovoWizard />
+      <main className="app-shell flex flex-col py-4 h-[calc(100dvh-3.5rem)]">
+        <ChatWizard />
       </main>
     </>
   );

@@ -93,18 +93,66 @@ export const ESTILOS: Record<Estilo, { label: string; descricao: string; hint: s
   },
 };
 
-// Informações do produto coletadas no formulário guiado.
-export interface BriefingProduto {
+// Tipo de peça publicitária — primeira pergunta da conversa guiada.
+export type TipoPeca =
+  | "anuncio-produto"
+  | "anuncio-servico"
+  | "promocao"
+  | "lancamento"
+  | "data-comemorativa"
+  | "prova-social";
+
+export const TIPOS_PECA: Record<TipoPeca, { label: string }> = {
+  "anuncio-produto": { label: "Anúncio de produto" },
+  "anuncio-servico": { label: "Anúncio de serviço" },
+  promocao: { label: "Promoção" },
+  lancamento: { label: "Lançamento" },
+  "data-comemorativa": { label: "Data comemorativa" },
+  "prova-social": { label: "Prova social" },
+};
+
+// De onde vem a frase/headline principal: o próprio lojista escreve, ou a IA
+// atua como redatora e propõe opções para aprovação.
+export type ModoConteudo = "usuario-tem-copy" | "ia-cria-copy";
+
+// Briefing completo e resolvido — exigido para poder gerar a imagem.
+// `frase` precisa estar PREENCHIDA aqui (seja porque o usuário digitou, seja
+// porque uma sugestão da IA foi aprovada) — ver regra de negócio no agente.
+export interface BriefingCompleto {
+  tipoPeca: TipoPeca;
   nomeProduto: string;
-  preco?: string;
+  descricaoProduto?: string;
+  detalhesVisuaisProduto?: string;
+  formato: Formato;
+  objetivo?: string;
+  estilo: Estilo;
+  publicoTom?: string;
+  temFotoProduto: boolean;
+  modoConteudo?: ModoConteudo;
+  conceito?: string;
   frase?: string;
+  preco?: string;
   beneficio?: string;
   chamadaWhatsapp?: string;
-  objetivo?: string;
 }
 
-// Payload completo do fluxo guiado enviado ao backend.
-export interface BriefingCompleto extends BriefingProduto {
-  formato: Formato;
-  estilo: Estilo;
+// Estado em andamento durante a conversa — nada é obrigatório até o agente
+// sinalizar `prontoParaGerar: true`.
+export type BriefingParcial = Partial<BriefingCompleto>;
+
+// ==== Agente conversacional ====
+
+export interface MensagemChat {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// Contrato de resposta do agente a cada turno (ver system prompt em
+// src/lib/ai/agente-conversa.ts). `opcoes` vazio = pergunta de texto livre.
+export interface ContratoAgente {
+  mensagem: string;
+  opcoes: string[];
+  campoEmColeta: string | null;
+  briefingParcial: BriefingParcial;
+  prontoParaGerar: boolean;
 }

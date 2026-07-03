@@ -1,21 +1,23 @@
 import OpenAI from "openai";
 import { OPENAI_CHAT_MODEL } from "./models";
-import { ESTILOS, FORMATOS, type BriefingCompleto } from "@/lib/types";
+import { ESTILOS, FORMATOS, TIPOS_PECA, type BriefingCompleto } from "@/lib/types";
 
-// A "IA de conversa" (GPT-4.1 mini) transforma as respostas do formulário
-// guiado num prompt visual estruturado em português, pronto para o Gemini.
-// O usuário NUNCA escreve prompt manualmente — só responde perguntas.
+// A "IA de conversa" (GPT-4.1 mini) transforma o briefing coletado pelo
+// agente conversacional (src/lib/ai/agente-conversa.ts) num prompt visual
+// estruturado em português, pronto para o Gemini. O usuário NUNCA escreve
+// prompt manualmente — só responde perguntas na conversa guiada.
 
-const SYSTEM = `Você é diretor de arte de publicidade especializado em anúncios de produto para pequenos lojistas brasileiros (Instagram, WhatsApp, tráfego pago).
-Sua tarefa: escrever UM prompt de geração de imagem, em português, descrevendo uma arte publicitária profissional a partir do briefing.
+const SYSTEM = `Você é diretor de arte sênior de publicidade, especializado em anúncios de produto para pequenos lojistas brasileiros (Instagram, WhatsApp, tráfego pago). Sua tarefa: a partir do briefing, escrever UM prompt de geração de imagem, em português, descrevendo uma arte publicitária profissional, realista e vendedora.
 
-Regras do prompt:
-- Estética realista, premium e comercial. Nada de "cara de IA".
-- O produto enviado na foto é o herói: mantenha suas características reais (formato, cor, rótulo). Não invente outro produto.
-- Descreva fundo, iluminação, composição e enquadramento coerentes com o formato e o estilo pedidos.
-- Se houver preço, frase ou chamada, posicione como texto legível e elegante na arte (ex.: preço na parte inferior, chamada comercial clara). Tipografia sofisticada.
-- Texto na imagem deve ser curto, correto e em português.
-- Saída: apenas o prompt final em um parágrafo. Sem títulos, sem aspas, sem explicações.`;
+Trate cada elemento:
+- PRODUTO HERÓI: se houver foto do produto, ela é o protagonista — preserve características reais (formato, cor, rótulo, proporção); nunca invente outro produto nem altere a marca. Se não houver foto, componha o produto do zero a partir da descrição, com o máximo de coerência e realismo possível.
+- COMPOSIÇÃO: enquadramento e regra de terços coerentes com o formato (9:16 vertical, 4:5, 1:1). Respiro adequado; produto com peso visual.
+- ILUMINAÇÃO: luz realista de estúdio/produto, sombras coerentes, reflexos naturais. Nada de aparência artificial ou "cara de IA".
+- PALETA E ESTILO: siga o estilo pedido de forma consistente.
+- TIPOGRAFIA E HIERARQUIA: se houver headline, preço e chamada, organize a hierarquia (headline > preço > CTA), tipografia elegante, alto contraste e legibilidade. Texto curto, correto e em português.
+- RESTRIÇÕES: sem texto quebrado ou ilegível, sem marcas d'água, sem logos inventadas, sem elementos aleatórios, sem estética de IA genérica.
+
+Saída: apenas o prompt final, em um parágrafo corrido. Sem títulos, sem aspas, sem explicações.`;
 
 export interface PromptGerado {
   prompt: string;
@@ -27,12 +29,22 @@ function briefingParaTexto(b: BriefingCompleto): string {
   const fmt = FORMATOS[b.formato];
   const est = ESTILOS[b.estilo];
   const linhas = [
+    `Tipo de peça: ${TIPOS_PECA[b.tipoPeca]?.label ?? b.tipoPeca}`,
     `Formato: ${fmt.label} (${fmt.aspecto}) — ${fmt.descricao}`,
     `Estilo visual: ${est.label} — ${est.hint}`,
     `Produto: ${b.nomeProduto}`,
   ];
+  if (b.descricaoProduto) linhas.push(`Descrição do produto: ${b.descricaoProduto}`);
+  if (b.detalhesVisuaisProduto) linhas.push(`Detalhes visuais reais do produto: ${b.detalhesVisuaisProduto}`);
+  linhas.push(
+    b.temFotoProduto
+      ? "Há uma foto real do produto anexada — use-a como base fiel."
+      : "NÃO há foto do produto — componha a partir da descrição, com o máximo de realismo possível.",
+  );
+  if (b.publicoTom) linhas.push(`Público/tom: ${b.publicoTom}`);
+  if (b.conceito) linhas.push(`Ângulo criativo/conceito: ${b.conceito}`);
   if (b.preco) linhas.push(`Preço: ${b.preco}`);
-  if (b.frase) linhas.push(`Frase/gancho: ${b.frase}`);
+  if (b.frase) linhas.push(`Frase/headline: ${b.frase}`);
   if (b.beneficio) linhas.push(`Benefício principal: ${b.beneficio}`);
   if (b.chamadaWhatsapp) linhas.push(`Chamada de ação (WhatsApp): ${b.chamadaWhatsapp}`);
   if (b.objetivo) linhas.push(`Objetivo: ${b.objetivo}`);
@@ -45,9 +57,11 @@ export function montarPromptFallback(b: BriefingCompleto): string {
   const fmt = FORMATOS[b.formato];
   const est = ESTILOS[b.estilo];
   const partes: string[] = [
-    `Crie uma arte publicitária ${fmt.aspecto} profissional e realista para anúncio do produto "${b.nomeProduto}",`,
+    `Crie uma arte publicitária ${fmt.aspecto} profissional e realista para ${TIPOS_PECA[b.tipoPeca]?.label.toLowerCase() ?? "anúncio"} do produto "${b.nomeProduto}"${b.descricaoProduto ? ` (${b.descricaoProduto})` : ""},`,
     `${est.hint},`,
-    "produto real em destaque como herói da composição, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA.",
+    b.temFotoProduto
+      ? "produto real em destaque como herói da composição, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA."
+      : "produto composto a partir da descrição com máximo realismo, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA.",
   ];
   if (b.frase) partes.push(`Inclua a frase "${b.frase}" com tipografia elegante e legível.`);
   if (b.beneficio) partes.push(`Reforce o benefício: ${b.beneficio}.`);

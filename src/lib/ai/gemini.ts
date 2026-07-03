@@ -16,7 +16,7 @@ export interface OpcoesGeracao {
   prompt: string;
   produto?: EntradaProduto; // foto do produto (edição/composição). Opcional.
   modelo?: string; // default: flash
-  variacoes?: number; // quantas artes gerar (default 3)
+  variacoes?: number; // quantas artes gerar (default 2)
 }
 
 function getClient(): GoogleGenAI {
@@ -70,7 +70,7 @@ async function gerarUma(
 export async function gerarVariacoes(opts: OpcoesGeracao): Promise<ImagemGerada[]> {
   const ai = getClient();
   const modelo = opts.modelo ?? GEMINI_FLASH_IMAGE;
-  const n = Math.max(1, Math.min(opts.variacoes ?? 3, 4));
+  const n = Math.max(1, Math.min(opts.variacoes ?? 2, 4));
 
   const resultados = await Promise.allSettled(
     Array.from({ length: n }, () => gerarUma(ai, modelo, opts.prompt, opts.produto)),
