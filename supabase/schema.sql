@@ -11,9 +11,14 @@ create table if not exists public.users (
   nome text,
   email text unique not null,
   plano text default 'free',
-  creditos_disponiveis integer default 3,
+  creditos_disponiveis integer default 10,
+  is_admin boolean default false,
   created_at timestamptz default now()
 );
+
+-- Migração para bancos já existentes (create table if not exists não altera colunas).
+alter table public.users add column if not exists is_admin boolean default false;
+alter table public.users alter column creditos_disponiveis set default 10;
 
 create table if not exists public.projects (
   id uuid primary key default gen_random_uuid(),
@@ -69,7 +74,7 @@ create index if not exists idx_credits_user on public.credits(user_id);
 
 -- ---------- Provisionamento automático de usuário ----------
 -- Cria a row em public.users sempre que alguém se cadastra no Auth,
--- já com 3 créditos de bônus.
+-- já com 10 créditos de bônus.
 --
 -- NOME COM SUFIXO "_artes_ia": este projeto Supabase é compartilhado com
 -- outro app (tabelas profiles/creations/chat_sessions), que já tem sua
@@ -87,12 +92,12 @@ begin
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'nome', new.raw_user_meta_data->>'full_name'),
-    3
+    10
   )
   on conflict (id) do nothing;
 
   insert into public.credits (user_id, tipo, quantidade, motivo)
-  values (new.id, 'bonus', 3, 'Créditos de boas-vindas')
+  values (new.id, 'bonus', 10, 'Créditos de boas-vindas')
   on conflict do nothing;
 
   return new;
@@ -107,6 +112,7 @@ create trigger on_auth_user_created_artes_ia
 -- ---------- Débito atômico de crédito ----------
 -- Decrementa 1 crédito somente se houver saldo. Retorna o saldo novo,
 -- ou -1 se não havia saldo. Evita corrida entre gerações simultâneas.
+-- Admin (is_admin = true) tem créditos ilimitados: nunca debita.
 
 create or replace function public.debitar_credito(p_user uuid, p_motivo text)
 returns integer
@@ -115,7 +121,15 @@ security definer set search_path = public
 as $$
 declare
   novo_saldo integer;
+  eh_admin boolean;
 begin
+  select is_admin, creditos_disponiveis into eh_admin, novo_saldo
+    from public.users where id = p_user;
+
+  if coalesce(eh_admin, false) then
+    return coalesce(novo_saldo, 0); -- admin: não debita, saldo é ilimitado
+  end if;
+
   update public.users
     set creditos_disponiveis = creditos_disponiveis - 1
     where id = p_user and creditos_disponiveis > 0
@@ -127,6 +141,42 @@ begin
 
   insert into public.credits (user_id, tipo, quantidade, motivo)
   values (p_user, 'consumo', -1, coalesce(p_motivo, 'Geração de arte'));
+
+  return novo_saldo;
+end;
+$$;
+
+-- ---------- Admin: adicionar créditos a um usuário ----------
+-- Só quem tem is_admin = true (verificado pelo auth.uid() da sessão que
+-- está chamando, nunca por um parâmetro vindo do cliente) pode conceder
+-- créditos a outra conta.
+
+create or replace function public.adicionar_credito(p_user uuid, p_quantidade integer, p_motivo text default null)
+returns integer
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  eh_admin boolean;
+  novo_saldo integer;
+begin
+  select is_admin into eh_admin from public.users where id = auth.uid();
+
+  if not coalesce(eh_admin, false) then
+    raise exception 'Apenas administradores podem adicionar créditos.';
+  end if;
+
+  update public.users
+    set creditos_disponiveis = creditos_disponiveis + p_quantidade
+    where id = p_user
+    returning creditos_disponiveis into novo_saldo;
+
+  if novo_saldo is null then
+    raise exception 'Usuário não encontrado.';
+  end if;
+
+  insert into public.credits (user_id, tipo, quantidade, motivo)
+  values (p_user, 'compra', p_quantidade, coalesce(p_motivo, 'Créditos adicionados pelo admin'));
 
   return novo_saldo;
 end;
@@ -219,3 +269,13 @@ create policy "produtos_delete_own" on storage.objects
 drop policy if exists "produtos_read_public" on storage.objects;
 create policy "produtos_read_public" on storage.objects
   for select using (bucket_id = 'produtos');
+
+-- ============================================================
+--  Admin — promove a conta de dono do app
+-- ============================================================
+-- Idempotente: pode rodar de novo sem efeito colateral. Se a conta ainda
+-- não tiver se cadastrado, este update não faz nada (rode de novo depois
+-- que ela se cadastrar).
+
+update public.users set is_admin = true
+where email = 'marcosabreu.ben10000@gmail.com';

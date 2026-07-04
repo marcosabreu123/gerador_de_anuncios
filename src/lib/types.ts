@@ -8,6 +8,7 @@ export interface UserRow {
   email: string;
   plano: Plano;
   creditos_disponiveis: number;
+  is_admin: boolean;
   created_at: string;
 }
 

@@ -97,7 +97,7 @@ function LoginForm() {
       </div>
 
       <p className="text-center text-xs text-[var(--muted)] mt-6">
-        Ao continuar, você ganha 3 créditos grátis para testar.
+        Ao continuar, você ganha 10 créditos grátis para testar.
       </p>
     </div>
   );

@@ -26,7 +26,7 @@ export async function requireUser(): Promise<{ authId: string; email: string; pe
         id: user.id,
         email: user.email,
         nome: (user.user_metadata?.nome as string) ?? null,
-        creditos_disponiveis: 3,
+        creditos_disponiveis: 10,
       })
       .select("*")
       .single();
@@ -34,4 +34,12 @@ export async function requireUser(): Promise<{ authId: string; email: string; pe
   }
 
   return { authId: user.id, email: user.email!, perfil: perfil as UserRow };
+}
+
+// Como requireUser(), mas exige is_admin = true — usado nas telas internas
+// de administração. Redireciona lojistas comuns para o dashboard.
+export async function requireAdmin() {
+  const resultado = await requireUser();
+  if (!resultado.perfil.is_admin) redirect("/dashboard");
+  return resultado;
 }

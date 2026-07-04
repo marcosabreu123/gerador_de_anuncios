@@ -21,22 +21,28 @@ export default async function DashboardPage() {
     "id" | "project_id" | "imagem_gerada_url" | "created_at" | "status"
   >[];
 
-  const semCredito = perfil.creditos_disponiveis <= 0;
+  const semCredito = !perfil.is_admin && perfil.creditos_disponiveis <= 0;
 
   return (
     <>
-      <AppHeader creditos={perfil.creditos_disponiveis} />
+      <AppHeader creditos={perfil.creditos_disponiveis} isAdmin={perfil.is_admin} />
       <main className="app-shell flex-1 py-6">
         <div className="mb-6">
           <h1 className="text-xl font-bold">
             Olá{perfil.nome ? `, ${perfil.nome.split(" ")[0]}` : ""} 👋
           </h1>
           <p className="text-sm text-[var(--muted)] mt-1">
-            Você tem{" "}
-            <strong className="text-[var(--foreground)]">
-              {perfil.creditos_disponiveis} crédito{perfil.creditos_disponiveis === 1 ? "" : "s"}
-            </strong>
-            . Cada arte usa 1 crédito.
+            {perfil.is_admin ? (
+              <>Você tem créditos ilimitados (admin).</>
+            ) : (
+              <>
+                Você tem{" "}
+                <strong className="text-[var(--foreground)]">
+                  {perfil.creditos_disponiveis} crédito{perfil.creditos_disponiveis === 1 ? "" : "s"}
+                </strong>
+                . Cada arte usa 1 crédito.
+              </>
+            )}
           </p>
         </div>
 

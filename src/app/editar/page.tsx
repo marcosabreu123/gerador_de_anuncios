@@ -6,12 +6,12 @@ import EditarWizard from "@/components/EditarWizard";
 export default async function EditarPage() {
   const { perfil } = await requireUser();
 
-  // Sem créditos → não deixa entrar no fluxo.
-  if (perfil.creditos_disponiveis <= 0) redirect("/dashboard");
+  // Sem créditos → não deixa entrar no fluxo (admin tem créditos ilimitados).
+  if (!perfil.is_admin && perfil.creditos_disponiveis <= 0) redirect("/dashboard");
 
   return (
     <>
-      <AppHeader creditos={perfil.creditos_disponiveis} />
+      <AppHeader creditos={perfil.creditos_disponiveis} isAdmin={perfil.is_admin} />
       <main className="app-shell flex-1 flex flex-col py-6">
         <EditarWizard />
       </main>

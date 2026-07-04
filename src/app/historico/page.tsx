@@ -23,7 +23,7 @@ export default async function HistoricoPage() {
 
   return (
     <>
-      <AppHeader creditos={perfil.creditos_disponiveis} />
+      <AppHeader creditos={perfil.creditos_disponiveis} isAdmin={perfil.is_admin} />
       <main className="app-shell flex-1 py-6">
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold">Histórico</h1>

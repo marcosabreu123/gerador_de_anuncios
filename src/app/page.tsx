@@ -27,7 +27,7 @@ export default async function Home() {
           <Link href="/login" className="btn btn-primary btn-block">
             Começar grátis
           </Link>
-          <p className="text-xs text-[var(--muted)]">3 créditos grátis para testar</p>
+          <p className="text-xs text-[var(--muted)]">10 créditos grátis para testar</p>
         </div>
       </div>
 
