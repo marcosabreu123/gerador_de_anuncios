@@ -54,10 +54,9 @@ export async function POST(request: NextRequest) {
     const modelo = modeloParaEtapa("final"); // pro — melhor legibilidade ao preservar texto existente
 
     const imagens = await gerarVariacoes({
-      prompt,
+      prompts: [prompt],
       imagens: [base],
       modelo,
-      variacoes: 1,
     });
 
     const { data: projeto, error: projErr } = await supabase

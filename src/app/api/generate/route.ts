@@ -19,8 +19,6 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const VARIACOES = 2;
-
 interface Body {
   imagens?: ImagemAnexo[]; // fotos de produto/referência/logotipo anexadas na conversa
   briefing: BriefingCompleto;
@@ -97,15 +95,14 @@ export async function POST(request: NextRequest) {
   try {
     // 2) Prepara insumos. Foto é opcional — sem ela, o Gemini compõe do zero.
     const entradas = await Promise.all(imagensAnexadas.map(baixarBase64));
-    const { prompt } = await montarPrompt(body.briefing);
+    const { prompts } = await montarPrompt(body.briefing);
     const modelo = modeloParaEtapa("rascunho"); // rascunho = flash (barato/rápido)
 
-    // 3) Gera variações no Gemini.
+    // 3) Gera as variações no Gemini — uma por direção criativa distinta.
     const imagens = await gerarVariacoes({
-      prompt,
+      prompts,
       imagens: entradas,
       modelo,
-      variacoes: VARIACOES,
     });
 
     // 4) Cria o projeto (guarda a transcrição da conversa + anexos para auditoria).
@@ -140,7 +137,7 @@ export async function POST(request: NextRequest) {
           user_id: user.id,
           imagem_original_url: urlProduto,
           imagem_gerada_url: urlGerada,
-          prompt_usado: prompt,
+          prompt_usado: img.promptUsado,
           modelo_usado: modelo,
           status: "gerada",
         })

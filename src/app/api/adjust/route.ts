@@ -64,10 +64,9 @@ export async function POST(request: NextRequest) {
     const modelo = modeloParaEtapa("final"); // final = pro (melhor legibilidade de texto)
 
     const imagens = await gerarVariacoes({
-      prompt,
+      prompts: [prompt],
       imagens: [base],
       modelo,
-      variacoes: 1,
     });
 
     const urlGerada = await uploadImagem(user.id, imagens[0], "geradas");

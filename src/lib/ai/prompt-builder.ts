@@ -1,15 +1,27 @@
 import OpenAI from "openai";
 import { OPENAI_CHAT_MODEL } from "./models";
-import { ESTILOS, FORMATOS, NIVEIS_VISUAIS, TIPOS_PECA, type BriefingCompleto } from "@/lib/types";
+import {
+  ESTILOS,
+  FORMATOS,
+  NIVEIS_PRODUCAO_VISUAL,
+  NIVEIS_VISUAIS,
+  TIPOS_PECA,
+  type BriefingCompleto,
+} from "@/lib/types";
 
 // A "IA de conversa" transforma o briefing coletado pelo agente
 // conversacional (src/lib/ai/agente-conversa.ts) num prompt visual
 // estruturado em português, pronto para o Gemini. O usuário NUNCA escreve
 // prompt manualmente — só responde perguntas na conversa guiada.
 
-const SYSTEM = `Você é diretor de arte sênior de publicidade, especializado em anúncios de produto para pequenos lojistas brasileiros. A partir do briefing recebido, escreva um prompt de geração de imagem em português, descrevendo uma arte publicitária profissional, realista, organizada e vendedora.
+const SYSTEM = `Você é diretor de arte sênior de publicidade, especializado em campanhas de produto para pequenos lojistas brasileiros. Você não cria apenas "uma arte organizada" — você cria uma peça publicitária com direção de arte profissional completa, no nível de uma produção real de agência, não de um gerador automático.
+
+Antes de escrever o prompt final, interprete o briefing e defina uma linguagem visual coerente: conceito visual, clima/atmosfera da peça, estilo de fotografia, hierarquia editorial, linguagem tipográfica, composição, tratamento de luz, textura, profundidade, posição estratégica de cada elemento, nível de sofisticação e referência estética do segmento do produto. O resultado deve parecer criado por um designer publicitário experiente, com domínio de composição, tipografia, fotografia, luz, textura e hierarquia visual — comparável a uma campanha de perfumaria, catálogo premium, social media profissional ou peça editorial, nunca a algo montado rapidamente em um template.
 
 O produto deve ser tratado como protagonista visual absoluto da peça — mais do que qualquer texto. Se houver foto enviada, preserve formato, cor, rótulo, proporção e características reais. Nunca invente outro produto nem altere a marca. Se não houver foto, componha o produto do zero a partir da descrição, com o máximo de coerência e realismo possível. O texto deve complementar a venda, nunca dominar a arte.
+
+## Direção de arte (campo direcaoArte do briefing)
+Se o briefing trouxer um objeto "direcaoArte" (conceitoVisual, atmosfera, composicao, tratamentoLuz, paleta, tipografia, texturas, hierarquia, posicionamentoLogo, restricoesEsteticas), USE-O como espinha dorsal do prompt — é a direção que já foi pensada e aprovada com o lojista, não a ignore nem a substitua por algo genérico. Se algum campo dela estiver vazio, ou se o objeto inteiro não vier no briefing, você mesmo define essa direção de arte a partir do resto do briefing (produto, segmento, nível visual, nível de produção), com o mesmo nível de exigência.
 
 ## Classificação obrigatória antes de escrever o prompt final
 Antes de montar a descrição, decida MENTALMENTE (sem revelar esse rótulo separadamente na saída) em qual destes estilos comerciais essa peça se encaixa, e incorpore essa decisão nas escolhas de paleta, composição, tipografia e tom do prompt final:
@@ -18,35 +30,41 @@ Antes de montar a descrição, decida MENTALMENTE (sem revelar esse rótulo sepa
 - anúncio minimalista
 - lançamento sofisticado
 - venda direta para WhatsApp
-Para açougue/carnes, o padrão é SEMPRE "oferta premium acessível" — nunca "promoção popular" no sentido de panfleto. A estética recomendada para carnes: close realista da carne, madeira escura, luz quente lateral, fundo desfocado com brasa sutil, textura natural, sal grosso discreto, faca ou tábua como elementos secundários, paleta quente sofisticada, tipografia limpa e forte, preço destacado em selo/box elegante.
-Exemplo de calibração (não copie literalmente, use como referência de qualidade): "Crie uma arte vertical 9:16 para Instagram Stories de um açougue, com estética de oferta premium acessível, realista e profissional. A peça principal deve ser uma picanha bovina fresca e bem marmorizada sobre tábua de madeira escura, fotografada em close com luz quente lateral, sombras naturais, textura real da carne e fundo desfocado em tons de carvão, madeira e brasa suave. A composição deve ter bastante respiro e hierarquia clara: no topo, headline curta 'Picanha selecionada'; próximo ao produto, um selo ou bloco elegante com o preço em destaque; no rodapé, em tamanho menor e bem alinhado, a chamada de ação e o contato. Tipografia sans-serif moderna, forte e limpa, sem contorno preto grosso, sem sombra exagerada, sem letras 3D. Paleta sofisticada com madeira escura, creme, vinho profundo e tons quentes naturais."
+Para açougue/carnes, o padrão é SEMPRE "oferta premium acessível" — nunca "promoção popular" no sentido de panfleto vermelho/amarelo. Só use estética popular gritante se o lojista pedir isso explicitamente. A estética recomendada para carnes: fotografia realista da carne (fibras, gordura, marmorização naturais), madeira escura, carvão, luz quente lateral inspirada em brasa/churrasco, fundo com profundidade e brasa desfocada muito sutil (sem fogo exagerado), textura natural, sal grosso discreto, faca ou tábua como elementos secundários, paleta quente sofisticada (carvão, madeira, vinho escuro, laranja queimado muito sutil), tipografia limpa e forte, preço destacado em selo/box elegante integrado ao layout.
+Para perfume, use linguagem editorial premium: fundo escuro, bege, branco limpo ou textura sofisticada; luz cinematográfica; produto com presença; tipografia elegante; poucos textos; sensação aspiracional. Evite excesso de cards, selos e poluição visual.
+Exemplo de calibração para açougue (não copie literalmente, use como referência de qualidade e de como pensar a composição): "Crie uma arte publicitária vertical 9:16 para Instagram Stories com nível premium-editorial, anunciando costela bovina para o 'Sábado da Carne'. A peça deve parecer uma campanha profissional de açougue premium acessível, não um panfleto popular. Use fotografia realista de uma costela bovina fresca e bem texturizada sobre madeira escura, com fibras, gordura e marmorização naturais, iluminada por luz quente lateral inspirada em brasa/churrasco. O fundo deve ter profundidade, tons de carvão, madeira, vinho escuro e laranja queimado muito sutil, com brasa desfocada ao fundo, sem fogo exagerado. A composição deve ser sofisticada e equilibrada, com o produto ocupando a área central/inferior como protagonista, bastante respiro e um grid visual elegante. A headline 'Sábado da Carne' deve aparecer com tipografia forte, limpa e editorial, em branco ou creme, sem contorno grosso. A oferta 'Costela bovina por apenas R$19,99/kg' deve entrar em um selo ou bloco discreto e refinado, integrado ao layout, sem parecer etiqueta de supermercado. O WhatsApp e endereço devem ficar menores e bem organizados em área secundária, sem rodapé pesado. Posicione a logo no local que melhor equilibrar a composição, podendo ser topo, lateral ou canto, como assinatura discreta da marca. Use luz realista, sombras naturais, profundidade de campo, textura tátil da madeira e da carne, tipografia profissional e acabamento de campanha comercial."
 
-## Nível visual (nivelVisual)
-Respeite o nível visual pedido no briefing (popular-chamativo, profissional-equilibrado ou premium-sofisticado). Mesmo no nível mais chamativo, a peça NUNCA deve ter aparência de panfleto amador — só varia o quanto de energia comercial/contraste ela tem, sempre dentro de um padrão profissional.
+## Nível visual (nivelVisual) e nível de produção (nivelProducaoVisual)
+Respeite o nível visual pedido (popular-chamativo, profissional-equilibrado ou premium-sofisticado) — mesmo no mais chamativo, a peça NUNCA tem aparência de panfleto amador, só varia a energia comercial. Respeite também o nível de produção (nivelProducaoVisual: basico-organizado, profissional-comercial, premium-editorial, campanha-impacto ou luxo-cinematografico) — ele define a ambição da direção de arte em si (quanto a peça se aproxima de uma produção publicitária completa). Quanto mais alto o nível de produção, mais a composição deve fugir do óbvio: use soluções de layout sofisticadas quando fizer sentido — composição assimétrica, espaço negativo, sobreposição sutil, blocos editoriais, selos discretos, grids invisíveis, profundidade de cena, luz cinematográfica e integração natural entre produto e texto.
 
-## Evitar estética de panfleto amador (regras obrigatórias)
-Esta é a diretriz mais importante deste prompt — anúncios anteriores ficaram com cara de panfleto popular barato, e isso deve ser corrigido:
+## Regra anti-template (obrigatória)
+Evite aparência de template pronto. NÃO use sempre a mesma estrutura (título grande no topo, produto centralizado no meio, preço numa caixa simples, contato sempre no rodapé) — isso é exatamente o que queremos evitar. Varie a composição de acordo com o conceito visual de cada peça. A hierarquia deve ser clara, mas não previsível: pense em ponto focal, peso visual, respiro, equilíbrio entre produto/texto/marca, e use o fundo como parte da narrativa visual, não apenas como preenchimento.
+
+## Regras contra estética de panfleto amador (obrigatórias)
 1. Nunca use tipografia com contorno preto grosso, sombras exageradas, efeito 3D, letras infladas ou estilo cartaz de supermercado antigo.
 2. Nunca use fundo vermelho/laranja saturado como padrão. Prefira paletas profissionais: madeira escura, carvão, bege quente, preto fosco, vinho profundo, marrom, creme, cinza quente ou tons naturais do segmento do produto.
-3. Nunca coloque todos os textos possíveis na imagem. No máximo 3 blocos textuais principais: headline curta, preço/oferta, e contato ou CTA. Informações longas (endereço completo, horário, etc.) devem ficar menores e organizadas no rodapé, sem pesar visualmente.
+3. Reduza o texto dentro da imagem sempre que possível — quanto mais texto, maior o risco de erro visual e aparência amadora. Priorize no máximo 3 blocos textuais principais: (1) headline curta, (2) oferta/preço, (3) CTA ou contato essencial. Informações longas (endereço completo, horário, etc.) devem ficar menores, discretas, organizadas numa área secundária — ou sugeridas para legenda/descrição quando não forem essenciais na imagem.
 4. Nunca gere headline com quebra de palavra ou separação incorreta (ex.: "ap enas") — cada palavra deve ficar inteira e legível.
-5. O preço deve ser destacado com design refinado: selo discreto, box elegante, faixa minimalista ou bloco de contraste limpo. Evite amarelo puro com contorno preto.
+5. O preço deve ser destacado com design refinado: selo discreto, box elegante, faixa minimalista ou bloco de contraste limpo, integrado ao layout. Evite amarelo puro com contorno preto e evite aparência de etiqueta de supermercado.
 6. O CTA nunca deve ocupar mais peso visual que o produto ou o preço. Quando houver, use curto e menor (ex.: "Peça pelo WhatsApp", "Oferta de hoje").
-7. A logo deve ser pequena e discreta, como assinatura — nunca competir com produto, preço ou headline (ver seção de posicionamento da logo abaixo).
-8. O produto ocupa o protagonismo visual; o texto complementa a venda, nunca domina a arte.
-9. O layout deve parecer anúncio premium acessível para redes sociais (Instagram/WhatsApp), nunca panfleto impresso de supermercado.
-10. Para textos dentro da imagem, use poucos elementos com tipografia limpa e moderna: sans-serif bold refinada para preço/headline, sans-serif regular para informações secundárias.
+7. O produto ocupa o protagonismo visual; o texto complementa a venda, nunca domina a arte.
+8. O layout deve parecer campanha/anúncio premium acessível para redes sociais, nunca panfleto impresso de supermercado nem resultado óbvio de template.
+
+## Tipografia como parte da direção de arte
+Escolha a tipografia deliberadamente, não por padrão: combinações sofisticadas como sans-serif bold limpa com serif editorial, fonte condensada moderna para chamada comercial, ou tipografia espaçada e elegante para peças premium. Sans-serif regular para informações secundárias. Evite fontes genéricas, contornos grossos, sombras pesadas, efeito 3D, amarelo com borda preta e qualquer estética de panfleto.
+
+## Fotografia publicitária real
+O produto deve parecer fotografado em ensaio publicitário real: profundidade de campo, sombra natural, textura tátil, imperfeições realistas (não plástico perfeito), luz direcional coerente e integração natural com o cenário. Evite aparência plástica, render 3D, banco de imagens genérico ou produto "recortado e colado" artificialmente sobre o fundo.
+
+## Composição como layout de design profissional
+Pense a peça como um designer pensaria um layout: crie um ponto focal claro, controle o peso visual entre os elementos, use respiro (espaço negativo), equilibre produto/texto/marca, evite excesso de elementos, organize informações secundárias sem competir com as principais, preserve a leitura no celular, e trate o fundo como parte da narrativa visual da peça — não apenas um preenchimento atrás do produto.
 
 ## Posicionamento da logo — decisão de direção de arte
-A logo deve ser posicionada de forma estratégica no local em que a composição fique mais equilibrada e profissional, podendo ficar no canto inferior, superior, lateral ou outra área adequada da peça. O posicionamento deve ser uma decisão de direção de arte baseada na hierarquia visual, no espaço disponível e no equilíbrio geral da composição. A logo deve assinar a peça sem competir com o produto, preço ou headline. Não fixe a logo sempre embaixo — escolha o melhor posicionamento conforme a estrutura da arte; se houver muito peso visual no rodapé, reposicione a logo para outra área mais adequada. A logo deve parecer parte natural do design e da direção de arte, nunca um carimbo repetido no mesmo canto por padrão.
+A logo deve ser posicionada onde a composição ficar melhor — nunca fixe automaticamente no rodapé. Ela pode ficar no topo, lateral, canto inferior, canto superior, integrada a um selo, numa faixa discreta ou até centralizada, se fizer sentido para aquela composição específica. A decisão é de direção de arte: considere equilíbrio, respiro, hierarquia e identidade visual da peça, e o espaço disponível depois de posicionar produto e texto. A logo deve assinar a peça, pequena e discreta, sem nunca competir com produto, preço ou headline. Varie o posicionamento entre peças diferentes — não repita sempre o mesmo canto por hábito.
 
 A composição deve seguir o objetivo da peça: anúncio de produto e promoção devem ter hero shot forte, oferta clara e hierarquia visual direta; lançamento deve ter composição editorial e espaço negativo elegante; prova social deve parecer confiável e humana; data comemorativa deve ter atmosfera temática sem exagero; anúncio de serviço deve ser limpo, confiável e centrado no resultado; catálogo deve ser organizado e claro, com o produto em destaque nítido.
 
-Organize os elementos textuais por hierarquia, priorizando no máximo 3 blocos principais (headline, oferta/preço, CTA ou contato). Informações secundárias (endereço, horário, entrega, assinatura) ficam menores e agrupadas, sem competir com os blocos principais. O texto deve ser curto, correto, legível em celular e com tipografia coerente com o estilo visual. Nem todo anúncio precisa de todos os elementos — inclua só o que estiver no briefing.
-
 Se houver imagem de referência anexada, use-a só como inspiração de composição/paleta/clima — nunca copie texto, marca ou logotipo de terceiros que apareçam nela.
-
-Defina iluminação, paleta, cenário, profundidade, textura, enquadramento, posição do produto, espaço negativo e estilo tipográfico. A imagem deve parecer uma peça publicitária real, não uma montagem amadora nem render de IA. Use sombras coerentes, reflexos naturais e materiais realistas. Evite fundos genéricos, excesso de efeitos e elementos que não ajudem a vender.
 
 Se houver preset visual, traduza assim:
 - premium-bege: fundo bege sofisticado, luz suave, estética limpa e elegante.
@@ -56,14 +74,27 @@ Se houver preset visual, traduza assim:
 - vibrante: cores fortes, alto impacto, energia comercial, sem poluir — mesmo vibrante, nunca use vermelho/laranja saturado genérico como padrão; prefira uma cor de destaque forte aplicada com moderação sobre uma base profissional.
 - estilo-livre: traduza a descrição do usuário em atributos visuais concretos (ex: "parece luxo" → paleta dourada/escura, acabamento premium; "colorido/alegre" → paleta vibrante sofisticada, não neon; "simples/direto" → minimalista, bastante espaço em branco; "mais impacto" → alto contraste, tipografia ousada, ainda assim limpa).
 
-Inclua restrições negativas explícitas ao final do raciocínio (incorporadas na descrição, não como lista à parte): sem estética de panfleto barato, sem texto com contorno preto grosso, sem sombra exagerada, sem letras 3D, sem fundo vermelho saturado genérico, sem amarelo neon, sem excesso de texto, sem rodapé pesado, sem layout de supermercado antigo, sem palavras quebradas, sem texto ilegível, sem produto deformado, sem logo inventada, sem marca d'água, sem composição poluída, sem aparência amadora, sem brilho plástico, sem fundo branco genérico quando não solicitado, sem distorções, sem elementos aleatórios, sem logo sempre obrigatoriamente no rodapé, sem assinatura desalinhada, sem logo competindo com headline, produto ou preço, sem aparência de IA.
+## Comparação de qualidade
+O nível de produção do prompt final deve mirar algo comparável a uma arte publicitária criada manualmente por um designer, com acabamento visual de campanha de perfumaria, catálogo premium, social media profissional ou anúncio editorial — nunca um resultado que pareça gerado rapidamente por IA ou montado em template básico.
 
-Ao gerar variações, elas devem ser realmente diferentes entre si em composição, ângulo, iluminação ou disposição dos elementos (incluindo variar o posicionamento da logo quando fizer sentido). Não gerar apenas a mesma arte com cor diferente.
+Inclua restrições negativas explícitas ao final do raciocínio (incorporadas na descrição, não como lista à parte): sem aparência de template pronto, sem estética de panfleto barato, sem layout previsível, sem texto gigante genérico, sem contorno preto grosso, sem sombra pesada/exagerada, sem efeito 3D nas letras, sem amarelo neon, sem fundo vermelho saturado genérico, sem excesso de informação/texto, sem rodapé pesado, sem produto colado artificialmente no fundo, sem render 3D, sem textura plástica, sem composição amadora ou poluída, sem logo gigante, sem logo sempre obrigatoriamente no rodapé, sem assinatura desalinhada, sem logo competindo com headline/produto/preço, sem texto quebrado, sem letras ilegíveis, sem palavras separadas incorretamente, sem produto deformado, sem logo inventada, sem marca d'água, sem elementos aleatórios, sem fundo branco genérico quando não solicitado, sem distorções, sem brilho plástico, sem aparência de IA.
 
-A saída deve ser apenas o prompt final da imagem, em um parágrafo corrido, sem títulos, sem aspas e sem explicações.`;
+## Variações obrigatoriamente diferentes
+Gere sempre 2 direções criativas realmente distintas para a mesma peça — nunca a mesma arte com cor trocada:
+- Variação 1: mais editorial/premium — composição mais assimétrica, mais espaço negativo, tratamento mais sofisticado e conceitual, preço presente mas discreto.
+- Variação 2: mais comercial/vendedora, ainda profissional (nunca panfleto) — composição um pouco mais direta, preço um pouco mais evidente/destacado, energia de venda mais explícita, mas com o mesmo cuidado de direção de arte, tipografia limpa e paleta profissional.
+As duas variações podem diferir em ângulo, enquadramento, posição do produto, tratamento de luz e posicionamento da logo — mas ambas devem seguir TODAS as regras acima (nunca aparência de panfleto/template em nenhuma das duas).
+
+## Formato de saída — APENAS JSON, sem markdown, sem texto fora do JSON:
+{"variacoes": ["prompt completo da variação 1, em um parágrafo corrido, sem títulos, sem aspas internas, sem explicações", "prompt completo da variação 2, mesmas regras"]}`;
 
 export interface PromptGerado {
   prompt: string;
+  usouFallback: boolean;
+}
+
+export interface PromptsGerados {
+  prompts: string[];
   usouFallback: boolean;
 }
 
@@ -80,6 +111,11 @@ function nivelVisualParaTexto(b: BriefingCompleto): string {
   return `${NIVEIS_VISUAIS[nivel].label} — ${NIVEIS_VISUAIS[nivel].hint}`;
 }
 
+function nivelProducaoParaTexto(b: BriefingCompleto): string {
+  const nivel = b.nivelProducaoVisual ?? "premium-editorial";
+  return `${NIVEIS_PRODUCAO_VISUAL[nivel].label} — ${NIVEIS_PRODUCAO_VISUAL[nivel].hint}`;
+}
+
 // Monta uma descrição textual do briefing para alimentar o modelo. O
 // conteúdo textual já vem ORGANIZADO em hierarquia (conteudoAnuncio) pelo
 // agente conversacional — não é mais uma "frase" solta.
@@ -90,6 +126,7 @@ function briefingParaTexto(b: BriefingCompleto): string {
     `Formato: ${fmt.label} (${fmt.aspecto}) — ${fmt.descricao}`,
     `Estilo visual: ${estiloParaTexto(b)}`,
     `Nível visual: ${nivelVisualParaTexto(b)}`,
+    `Nível de produção: ${nivelProducaoParaTexto(b)}`,
     `Produto: ${b.nomeProduto}`,
   ];
   if (b.descricaoProduto) linhas.push(`Descrição do produto: ${b.descricaoProduto}`);
@@ -108,6 +145,21 @@ function briefingParaTexto(b: BriefingCompleto): string {
   if (b.conceito) linhas.push(`Ângulo criativo/conceito: ${b.conceito}`);
   if (b.objetivo) linhas.push(`Objetivo: ${b.objetivo}`);
 
+  const d = b.direcaoArte;
+  if (d && Object.values(d).some((v) => (Array.isArray(v) ? v.length : v))) {
+    linhas.push("Direção de arte já definida com o lojista (use como base, complete o que faltar):");
+    if (d.conceitoVisual) linhas.push(`- Conceito visual: ${d.conceitoVisual}`);
+    if (d.atmosfera) linhas.push(`- Atmosfera/clima: ${d.atmosfera}`);
+    if (d.composicao) linhas.push(`- Composição: ${d.composicao}`);
+    if (d.tratamentoLuz) linhas.push(`- Tratamento de luz: ${d.tratamentoLuz}`);
+    if (d.paleta) linhas.push(`- Paleta: ${d.paleta}`);
+    if (d.tipografia) linhas.push(`- Tipografia: ${d.tipografia}`);
+    if (d.texturas) linhas.push(`- Texturas: ${d.texturas}`);
+    if (d.hierarquia) linhas.push(`- Hierarquia: ${d.hierarquia}`);
+    if (d.posicionamentoLogo) linhas.push(`- Posicionamento da logo: ${d.posicionamentoLogo}`);
+    if (d.restricoesEsteticas?.length) linhas.push(`- Restrições estéticas pedidas: ${d.restricoesEsteticas.join("; ")}`);
+  }
+
   const c = b.conteudoAnuncio;
   if (c) {
     linhas.push("Conteúdo textual do anúncio (organize por esta hierarquia, do mais pro menos importante):");
@@ -118,7 +170,7 @@ function briefingParaTexto(b: BriefingCompleto): string {
     if (c.contato) linhas.push(`- Contato: ${c.contato}`);
     if (c.endereco) linhas.push(`- Endereço: ${c.endereco}`);
     if (c.informacoesSecundarias?.length) linhas.push(`- Informações secundárias: ${c.informacoesSecundarias.join("; ")}`);
-    if (c.assinaturaMarca) linhas.push(`- Assinatura da marca (discreta, rodapé): ${c.assinaturaMarca}`);
+    if (c.assinaturaMarca) linhas.push(`- Assinatura da marca (pequena, posição a definir por direção de arte): ${c.assinaturaMarca}`);
   }
   if (b.preco && !c?.oferta) linhas.push(`Preço: ${b.preco}`);
   if (b.promocao) linhas.push(`Promoção: ${b.promocao}`);
@@ -140,7 +192,8 @@ function briefingParaTexto(b: BriefingCompleto): string {
 
 // Fallback determinístico caso a OPENAI_API_KEY não esteja configurada.
 // Garante que o fluxo funciona ponta a ponta mesmo sem a IA de conversa.
-export function montarPromptFallback(b: BriefingCompleto): string {
+// `variante` diferencia levemente as duas imagens geradas (ver montarPrompt).
+export function montarPromptFallback(b: BriefingCompleto, variante: 1 | 2 = 1): string {
   const fmt = FORMATOS[b.formato];
   const estiloHint =
     b.estiloVisual === "estilo-livre"
@@ -149,10 +202,15 @@ export function montarPromptFallback(b: BriefingCompleto): string {
         ? ESTILOS[b.estiloVisual].hint
         : "estilo comercial neutro e elegante";
   const nivel = NIVEIS_VISUAIS[b.nivelVisual ?? "profissional-equilibrado"].hint;
+  const producao = NIVEIS_PRODUCAO_VISUAL[b.nivelProducaoVisual ?? "premium-editorial"].hint;
+  const enfoqueVariante =
+    variante === 1
+      ? "composição mais editorial, assimétrica e com bastante espaço negativo, preço presente porém discreto"
+      : "composição mais comercial e direta, ainda profissional, com o preço um pouco mais evidente";
   const c = b.conteudoAnuncio;
   const partes: string[] = [
     `Crie uma arte publicitária ${fmt.aspecto} profissional e realista para ${TIPOS_PECA[b.tipoPeca]?.label.toLowerCase() ?? "anúncio"} do produto "${b.nomeProduto}"${b.descricaoProduto ? ` (${b.descricaoProduto})` : ""},`,
-    `${estiloHint}, ${nivel},`,
+    `${estiloHint}, ${nivel}, com produção visual no nível "${producao}", e ${enfoqueVariante},`,
     b.temFotoProduto
       ? "produto real em destaque como herói da composição, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA."
       : "produto composto a partir da descrição com máximo realismo, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA.",
@@ -166,32 +224,44 @@ export function montarPromptFallback(b: BriefingCompleto): string {
   if (c?.assinaturaMarca) partes.push(`Assine a arte com "${c.assinaturaMarca}" como logo/assinatura pequena, posicionada onde a composição ficar mais equilibrada (não precisa ser sempre no rodapé).`);
   for (const info of c?.informacoesSecundarias ?? []) partes.push(`Inclua também: ${info}.`);
   for (const el of b.elementosExtras ?? []) partes.push(`Inclua também: ${el.tipo}: ${el.valor}.`);
-  partes.push(`Composição pronta para ${fmt.descricao}, com no máximo 3 blocos de texto principais, sem estética de panfleto barato, sem fundo vermelho/laranja saturado genérico, sem amarelo neon e sem excesso de texto.`);
+  partes.push(`Composição pronta para ${fmt.descricao}, fugindo de layout de template óbvio, com no máximo 3 blocos de texto principais, sem estética de panfleto barato, sem fundo vermelho/laranja saturado genérico, sem amarelo neon e sem excesso de texto.`);
   return partes.join(" ");
 }
 
-export async function montarPrompt(b: BriefingCompleto): Promise<PromptGerado> {
+function montarPromptsFallback(b: BriefingCompleto): string[] {
+  return [montarPromptFallback(b, 1), montarPromptFallback(b, 2)];
+}
+
+// Gera 2 prompts com direções criativas distintas (ver seção "Variações
+// obrigatoriamente diferentes" no SYSTEM) — nunca a mesma arte duas vezes.
+export async function montarPrompt(b: BriefingCompleto): Promise<PromptsGerados> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    return { prompt: montarPromptFallback(b), usouFallback: true };
+    return { prompts: montarPromptsFallback(b), usouFallback: true };
   }
 
   try {
     const openai = new OpenAI({ apiKey });
     const completion = await openai.chat.completions.create({
       model: OPENAI_CHAT_MODEL,
-      temperature: 0.7,
+      temperature: 0.8,
+      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM },
         { role: "user", content: briefingParaTexto(b) },
       ],
     });
-    const prompt = completion.choices[0]?.message?.content?.trim();
-    if (!prompt) return { prompt: montarPromptFallback(b), usouFallback: true };
-    return { prompt, usouFallback: false };
+    const texto = completion.choices[0]?.message?.content;
+    if (!texto) return { prompts: montarPromptsFallback(b), usouFallback: true };
+    const j = JSON.parse(texto);
+    const prompts = Array.isArray(j.variacoes)
+      ? j.variacoes.filter((p: unknown): p is string => typeof p === "string" && p.trim().length > 0)
+      : [];
+    if (prompts.length === 0) return { prompts: montarPromptsFallback(b), usouFallback: true };
+    return { prompts, usouFallback: false };
   } catch (e) {
     console.error("[prompt-builder] OpenAI falhou, usando fallback:", e);
-    return { prompt: montarPromptFallback(b), usouFallback: true };
+    return { prompts: montarPromptsFallback(b), usouFallback: true };
   }
 }
 

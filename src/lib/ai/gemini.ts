@@ -1,10 +1,13 @@
 import { GoogleGenAI } from "@google/genai";
 import { GEMINI_FLASH_IMAGE } from "./models";
 
-// Imagem gerada retornada pelo Gemini (bytes inline em base64).
+// Imagem gerada retornada pelo Gemini (bytes inline em base64). Carrega o
+// prompt que a originou — necessário porque cada variação agora pode ter
+// uma direção criativa própria (ver PromptsGerados em prompt-builder.ts).
 export interface ImagemGerada {
   base64: string;
   mimeType: string;
+  promptUsado: string;
 }
 
 // Tipo de imagem de entrada — usado para rotular cada imagem no prompt
@@ -29,10 +32,12 @@ const LABELS_ENTRADA: Record<TipoEntradaImagem, string> = {
 };
 
 export interface OpcoesGeracao {
-  prompt: string;
+  // Um prompt POR variação desejada — cada uma pode (e deve, quando vier do
+  // prompt-builder) ter uma direção criativa própria, não o mesmo texto
+  // repetido. length define quantas artes são geradas.
+  prompts: string[];
   imagens?: EntradaImagem[]; // 0+ imagens de entrada (produto/referência/logo/base). Opcional.
   modelo?: string; // default: flash
-  variacoes?: number; // quantas artes gerar (default 2)
 }
 
 function getClient(): GoogleGenAI {
@@ -46,7 +51,7 @@ function getClient(): GoogleGenAI {
 }
 
 // Extrai a primeira imagem inline da resposta do Gemini.
-function extrairImagem(resp: unknown): ImagemGerada | null {
+function extrairImagem(resp: unknown, prompt: string): ImagemGerada | null {
   const r = resp as {
     candidates?: Array<{
       content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> };
@@ -56,7 +61,7 @@ function extrairImagem(resp: unknown): ImagemGerada | null {
   for (const part of parts) {
     const data = part?.inlineData?.data;
     if (data) {
-      return { base64: data, mimeType: part.inlineData?.mimeType ?? "image/png" };
+      return { base64: data, mimeType: part.inlineData?.mimeType ?? "image/png", promptUsado: prompt };
     }
   }
   return null;
@@ -81,18 +86,19 @@ async function gerarUma(
     contents: [{ role: "user", parts }],
   });
 
-  return extrairImagem(resp);
+  return extrairImagem(resp, prompt);
 }
 
-// Gera N variações em paralelo. Falhas individuais não derrubam o lote.
+// Gera uma imagem por prompt em paralelo (cada uma com sua própria direção
+// criativa). Falhas individuais não derrubam o lote.
 export async function gerarVariacoes(opts: OpcoesGeracao): Promise<ImagemGerada[]> {
   const ai = getClient();
   const modelo = opts.modelo ?? GEMINI_FLASH_IMAGE;
-  const n = Math.max(1, Math.min(opts.variacoes ?? 2, 4));
+  const prompts = opts.prompts.slice(0, 4);
   const imagens = opts.imagens ?? [];
 
   const resultados = await Promise.allSettled(
-    Array.from({ length: n }, () => gerarUma(ai, modelo, opts.prompt, imagens)),
+    prompts.map((prompt) => gerarUma(ai, modelo, prompt, imagens)),
   );
 
   const geradas: ImagemGerada[] = [];

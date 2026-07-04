@@ -136,6 +136,62 @@ export const NIVEIS_VISUAIS: Record<NivelVisual, { label: string; descricao: str
   },
 };
 
+// Nível de PRODUÇÃO visual — diferente de NivelVisual (que é sobre "chamativo
+// vs. sofisticado"), este controla a ambição da direção de arte em si:
+// quanto a peça deve se aproximar de uma produção publicitária profissional
+// completa (fotografia, luz, composição editorial) vs. algo mais simples.
+// Padrão é SEMPRE "premium-editorial" — nunca "basico-organizado".
+export type NivelProducaoVisual =
+  | "basico-organizado"
+  | "profissional-comercial"
+  | "premium-editorial"
+  | "campanha-impacto"
+  | "luxo-cinematografico";
+
+export const NIVEIS_PRODUCAO_VISUAL: Record<NivelProducaoVisual, { label: string; descricao: string; hint: string }> = {
+  "basico-organizado": {
+    label: "Básico organizado",
+    descricao: "Simples e direto, sem grandes ambições de produção",
+    hint: "composição simples e organizada, hierarquia clara, ainda assim sem estética de panfleto amador",
+  },
+  "profissional-comercial": {
+    label: "Profissional comercial",
+    descricao: "Comercial confiável, bom acabamento",
+    hint: "acabamento comercial confiável, boa fotografia de produto, composição organizada com algum refinamento",
+  },
+  "premium-editorial": {
+    label: "Premium editorial",
+    descricao: "Direção de arte forte, nível de campanha",
+    hint: "direção de arte completa como uma peça editorial/publicitária real: conceito visual definido, composição sofisticada (não óbvia), fotografia com profundidade e textura, tipografia como parte do design, hierarquia elegante e não previsível",
+  },
+  "campanha-impacto": {
+    label: "Campanha de impacto",
+    descricao: "Comercial forte, ainda sofisticado",
+    hint: "energia de campanha comercial forte e vendedora, mas com acabamento premium editorial — nunca cai para estética de panfleto",
+  },
+  "luxo-cinematografico": {
+    label: "Luxo cinematográfico",
+    descricao: "Máxima sofisticação, clima de filme",
+    hint: "luz cinematográfica, atmosfera imersiva, máxima sofisticação visual, tratamento quase de still de filme publicitário premium",
+  },
+};
+
+// Direção de arte estruturada — o agente conversacional preenche ou sugere
+// isso antes de liberar a geração (pode ficar parcialmente vazio; o
+// prompt-builder completa o que faltar a partir do resto do briefing).
+export interface DirecaoArte {
+  conceitoVisual?: string;
+  atmosfera?: string;
+  composicao?: string;
+  tratamentoLuz?: string;
+  paleta?: string;
+  tipografia?: string;
+  texturas?: string;
+  hierarquia?: string;
+  posicionamentoLogo?: string;
+  restricoesEsteticas?: string[];
+}
+
 // Tipo de peça publicitária.
 export type TipoPeca =
   | "anuncio-produto"
@@ -250,6 +306,8 @@ export interface BriefingCompleto {
   estiloVisual?: EstiloVisual;
   estiloLivre?: string;
   nivelVisual?: NivelVisual;
+  nivelProducaoVisual?: NivelProducaoVisual;
+  direcaoArte?: DirecaoArte;
   publicoTom?: string;
   temFotoProduto: boolean;
   temReferencia?: boolean;
