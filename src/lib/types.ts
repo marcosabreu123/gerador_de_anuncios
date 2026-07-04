@@ -112,6 +112,30 @@ export const ESTILOS: Record<Exclude<EstiloVisual, "estilo-livre">, { label: str
   },
 };
 
+// Nível visual da peça — controla o quão "chamativo" vs. "sofisticado" é o
+// resultado, mas NUNCA autoriza estética de panfleto amador em nenhum dos
+// três (ver regras de direção de arte em prompt-builder.ts). Padrão é
+// "profissional-equilibrado", nunca "popular-chamativo".
+export type NivelVisual = "popular-chamativo" | "profissional-equilibrado" | "premium-sofisticado";
+
+export const NIVEIS_VISUAIS: Record<NivelVisual, { label: string; descricao: string; hint: string }> = {
+  "popular-chamativo": {
+    label: "Popular chamativo",
+    descricao: "Oferta direta, bem vibrante",
+    hint: "mais vibrante e direto, forte apelo de oferta, mas com tipografia limpa e composição organizada — nunca amador ou com estética de panfleto de supermercado",
+  },
+  "profissional-equilibrado": {
+    label: "Profissional equilibrado",
+    descricao: "Comercial, elegante e acessível",
+    hint: "equilíbrio entre apelo comercial e sofisticação, cores comerciais porém elegantes, hierarquia clara, visual confiável de anúncio premium acessível",
+  },
+  "premium-sofisticado": {
+    label: "Premium sofisticado",
+    descricao: "Editorial, upscale, clean",
+    hint: "visual editorial e upscale, bastante espaço negativo, paleta sofisticada, tipografia refinada, tom aspiracional",
+  },
+};
+
 // Tipo de peça publicitária.
 export type TipoPeca =
   | "anuncio-produto"
@@ -225,6 +249,7 @@ export interface BriefingCompleto {
   objetivo?: Objetivo;
   estiloVisual?: EstiloVisual;
   estiloLivre?: string;
+  nivelVisual?: NivelVisual;
   publicoTom?: string;
   temFotoProduto: boolean;
   temReferencia?: boolean;

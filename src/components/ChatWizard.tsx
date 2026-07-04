@@ -13,14 +13,7 @@ import {
 } from "@/lib/types";
 
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
-
-// campoEmColeta usa "foto" (pergunta em linguagem simples) mas o anexo em si
-// é do tipo "produto" (ver ImagemAnexo/TIPOS_IMAGEM_ANEXO em lib/types.ts).
-const CAMPO_PARA_TIPO_IMAGEM: Record<string, TipoImagemAnexo> = {
-  foto: "produto",
-  referencia: "referencia",
-  logotipo: "logotipo",
-};
+const TIPOS_ANEXO: TipoImagemAnexo[] = ["produto", "referencia", "logotipo"];
 
 // Primeira pergunta é fixa (não gasta chamada à IA) — já entra no formato do
 // contrato do agente pra manter o histórico consistente (ver agente-conversa.ts).
@@ -55,16 +48,14 @@ function mensagemEnvio(tipo: TipoImagemAnexo, n: number): string {
   }
 }
 
-function mensagemPular(campo: string): string {
-  if (campo === "foto") return "Não tenho foto agora, pode gerar do zero.";
-  if (campo === "referencia") return "Não tenho imagem de referência, pode pular.";
-  return "Não tenho logotipo, pode pular.";
-}
-
 export default function ChatWizard() {
   const router = useRouter();
   const supabase = createClient();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const fileRefs = useRef<Record<TipoImagemAnexo, HTMLInputElement | null>>({
+    produto: null,
+    referencia: null,
+    logotipo: null,
+  });
   const fimRef = useRef<HTMLDivElement>(null);
 
   const [mensagens, setMensagens] = useState<MensagemChat[]>(() => [
@@ -74,14 +65,13 @@ export default function ChatWizard() {
   const [enviando, setEnviando] = useState(false);
   const [enviandoTipo, setEnviandoTipo] = useState<TipoImagemAnexo | null>(null);
   const [imagens, setImagens] = useState<ImagemAnexo[]>([]);
+  const [painelAberto, setPainelAberto] = useState(false);
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   const ultimaAssistente = [...mensagens].reverse().find((m) => m.role === "assistant");
   const contrato = ultimaAssistente ? parseContrato(ultimaAssistente.content) : null;
-  const tipoImagemAtual = contrato?.campoEmColeta
-    ? CAMPO_PARA_TIPO_IMAGEM[contrato.campoEmColeta]
-    : undefined;
+  const temOpcoes = !!contrato?.opcoes?.length;
 
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -141,8 +131,13 @@ export default function ChatWizard() {
       setErro(err instanceof Error ? err.message : "Falha ao enviar a imagem.");
     } finally {
       setEnviandoTipo(null);
-      if (fileRef.current) fileRef.current.value = "";
+      const ref = fileRefs.current[tipo];
+      if (ref) ref.value = "";
     }
+  }
+
+  function removerImagem(index: number) {
+    setImagens((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function gerar() {
@@ -150,14 +145,19 @@ export default function ChatWizard() {
     setGerando(true);
     setErro(null);
     try {
+      // A verdade sobre quais anexos existem vem do que foi de fato enviado
+      // (painel lateral), não do que a conversa acha que existe — mais
+      // confiável do que depender do modelo acertar esses três booleanos.
+      const briefing: BriefingCompleto = {
+        ...(contrato.briefingParcial as BriefingCompleto),
+        temFotoProduto: imagens.some((i) => i.tipo === "produto"),
+        temReferencia: imagens.some((i) => i.tipo === "referencia"),
+        temLogotipo: imagens.some((i) => i.tipo === "logotipo"),
+      };
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imagens,
-          briefing: contrato.briefingParcial as BriefingCompleto,
-          mensagens,
-        }),
+        body: JSON.stringify({ imagens, briefing, mensagens }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Erro ao gerar.");
@@ -168,11 +168,22 @@ export default function ChatWizard() {
     }
   }
 
-  const aguardandoImagem = !!tipoImagemAtual;
-  const temOpcoes = !!contrato?.opcoes?.length && !aguardandoImagem;
+  const totalAnexos = imagens.length;
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col flex-1 min-h-0 relative">
+      {/* Cabeçalho leve com acesso ao painel de anexos — sempre disponível,
+          nada aqui é obrigatório para gerar. */}
+      <div className="flex items-center justify-end mb-2">
+        <button
+          type="button"
+          onClick={() => setPainelAberto(true)}
+          className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--accent-soft)] px-3 py-1.5 rounded-full"
+        >
+          📎 Anexos {totalAnexos > 0 ? `(${totalAnexos})` : "(opcional)"}
+        </button>
+      </div>
+
       {/* Transcrição */}
       <div className="flex-1 overflow-y-auto flex flex-col gap-3 pb-4">
         {mensagens.map((m, i) => {
@@ -197,21 +208,6 @@ export default function ChatWizard() {
           </div>
         )}
 
-        {imagens.length > 0 && (
-          <div className="self-end flex gap-2 flex-wrap justify-end">
-            {imagens.map((img, i) => (
-              <div
-                key={i}
-                className="w-16 h-16 rounded-lg overflow-hidden border border-[var(--border)] relative"
-                title={TIPOS_IMAGEM_ANEXO[img.tipo].label}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={img.url} alt={img.tipo} className="w-full h-full object-cover" />
-              </div>
-            ))}
-          </div>
-        )}
-
         <div ref={fimRef} />
       </div>
 
@@ -230,78 +226,128 @@ export default function ChatWizard() {
         </button>
       )}
 
-      {/* Área de interação: upload de imagem, botões de resposta rápida, ou texto livre */}
-      {aguardandoImagem && tipoImagemAtual ? (
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={enviandoTipo !== null || enviando}
-            className="btn btn-primary btn-block"
-          >
-            {enviandoTipo === tipoImagemAtual
-              ? "Enviando…"
-              : TIPOS_IMAGEM_ANEXO[tipoImagemAtual].botao}
-          </button>
-          <button
-            type="button"
-            onClick={() => enviarMensagem(mensagemPular(contrato!.campoEmColeta!))}
-            disabled={enviandoTipo !== null || enviando}
-            className="text-sm text-[var(--muted)] underline text-center"
-          >
-            {contrato?.campoEmColeta === "foto" ? "Não tenho foto agora" : "Não tenho / pular"}
-          </button>
+      {/* Área de interação: botões de resposta rápida e/ou texto livre.
+          Anexar imagem nunca bloqueia essa área — fica no painel lateral. */}
+      <div className="flex flex-col gap-2">
+        {temOpcoes && (
+          <div className="flex flex-wrap gap-2">
+            {contrato!.opcoes.map((o) => (
+              <button
+                key={o}
+                type="button"
+                onClick={() => enviarMensagem(o)}
+                disabled={enviando || gerando}
+                className="text-sm font-medium bg-[var(--accent-soft)] px-4 py-2.5 rounded-full disabled:opacity-50"
+              >
+                {o}
+              </button>
+            ))}
+          </div>
+        )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            enviarMensagem(texto);
+          }}
+          className="flex gap-2"
+        >
           <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={(e) => onSelecionarImagens(tipoImagemAtual, e)}
-            className="hidden"
+            className="input flex-1"
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            placeholder={temOpcoes ? "Ou descreva com suas palavras…" : "Digite sua resposta…"}
+            disabled={enviando || gerando}
           />
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {/* Botões de resposta rápida — quando existem, ficam disponíveis
-              JUNTO com o texto livre abaixo (híbrido: ex. estilo aceita
-              preset OU descrição com as próprias palavras). */}
-          {temOpcoes && (
-            <div className="flex flex-wrap gap-2">
-              {contrato!.opcoes.map((o) => (
-                <button
-                  key={o}
-                  type="button"
-                  onClick={() => enviarMensagem(o)}
-                  disabled={enviando || gerando}
-                  className="text-sm font-medium bg-[var(--accent-soft)] px-4 py-2.5 rounded-full disabled:opacity-50"
-                >
-                  {o}
-                </button>
-              ))}
-            </div>
-          )}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              enviarMensagem(texto);
-            }}
-            className="flex gap-2"
+          <button
+            type="submit"
+            disabled={!texto.trim() || enviando || gerando}
+            className="btn btn-primary"
           >
-            <input
-              className="input flex-1"
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder={temOpcoes ? "Ou descreva com suas palavras…" : "Digite sua resposta…"}
-              disabled={enviando || gerando}
-            />
-            <button
-              type="submit"
-              disabled={!texto.trim() || enviando || gerando}
-              className="btn btn-primary"
-            >
-              Enviar
-            </button>
-          </form>
+            Enviar
+          </button>
+        </form>
+      </div>
+
+      {/* Painel lateral de anexos — foto do produto, referência e logotipo.
+          Nenhum é obrigatório para gerar a arte. */}
+      {painelAberto && (
+        <div className="fixed inset-0 z-20 flex justify-end">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setPainelAberto(false)}
+          />
+          <div className="relative w-[85%] max-w-sm h-full bg-[var(--background)] shadow-xl flex flex-col p-4 overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold">Anexos (opcional)</h2>
+              <button
+                type="button"
+                onClick={() => setPainelAberto(false)}
+                className="text-sm text-[var(--muted)]"
+              >
+                Fechar
+              </button>
+            </div>
+            <p className="text-xs text-[var(--muted)] mb-4">
+              Nenhum anexo é obrigatório. Fotos reais do produto ajudam a fidelidade da arte, mas
+              você pode gerar sem nenhum deles.
+            </p>
+
+            <div className="flex flex-col gap-5">
+              {TIPOS_ANEXO.map((tipo) => {
+                const info = TIPOS_IMAGEM_ANEXO[tipo];
+                const anexosDoTipo = imagens
+                  .map((img, index) => ({ img, index }))
+                  .filter(({ img }) => img.tipo === tipo);
+                return (
+                  <div key={tipo} className="card p-3">
+                    <p className="font-semibold text-sm">{info.label}</p>
+                    <p className="text-xs text-[var(--muted)] mt-0.5 mb-2">{info.ajuda}</p>
+
+                    {anexosDoTipo.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {anexosDoTipo.map(({ img, index }) => (
+                          <div
+                            key={index}
+                            className="w-14 h-14 rounded-lg overflow-hidden border border-[var(--border)] relative"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={img.url} alt={tipo} className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => removerImagem(index)}
+                              className="absolute top-0 right-0 bg-black/60 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-bl"
+                              aria-label="Remover"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => fileRefs.current[tipo]?.click()}
+                      disabled={enviandoTipo !== null}
+                      className="btn btn-outline btn-block text-sm py-2 disabled:opacity-50"
+                    >
+                      {enviandoTipo === tipo ? "Enviando…" : info.botao}
+                    </button>
+                    <input
+                      ref={(el) => {
+                        fileRefs.current[tipo] = el;
+                      }}
+                      type="file"
+                      accept="image/*"
+                      multiple={tipo !== "logotipo"}
+                      onChange={(e) => onSelecionarImagens(tipo, e)}
+                      className="hidden"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
     </div>

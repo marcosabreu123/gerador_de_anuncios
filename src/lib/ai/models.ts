@@ -6,7 +6,7 @@ export const GEMINI_PRO_IMAGE = "gemini-3-pro-image"; // Nano Banana Pro
 export const GEMINI_FLASH_IMAGE = "gemini-3.1-flash-image"; // Nano Banana 2
 
 // OpenAI (conversa / montagem de prompt).
-export const OPENAI_CHAT_MODEL = "gpt-4.1-mini";
+export const OPENAI_CHAT_MODEL = "gpt-5.4";
 
 // Qual modelo usar em cada etapa do fluxo.
 // - rascunho (primeiras variações): flash, mais barato.
