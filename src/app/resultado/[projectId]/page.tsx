@@ -4,7 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import AppHeader from "@/components/AppHeader";
 import ResultadoView, { type ArteItem } from "@/components/ResultadoView";
-import { FORMATOS, type Formato } from "@/lib/types";
+import { FORMATOS, resolverFormato } from "@/lib/types";
 
 export default async function ResultadoPage({
   params,
@@ -31,7 +31,8 @@ export default async function ResultadoPage({
     .order("created_at", { ascending: false });
 
   const artes = (imagens ?? []) as ArteItem[];
-  const ratioClass = FORMATOS[(projeto.formato as Formato) ?? "quadrado"]?.ratio ?? "aspect-square";
+  const formatoResolvido = resolverFormato(projeto.formato) ?? "quadrado-1-1";
+  const ratioClass = FORMATOS[formatoResolvido]?.ratio ?? "aspect-square";
 
   return (
     <>

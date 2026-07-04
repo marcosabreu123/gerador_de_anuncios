@@ -44,9 +44,13 @@ function validar(b: BriefingCompleto | undefined): b is BriefingCompleto {
   if (!b.nomeProduto?.trim()) return false;
   if (!(b.tipoPeca in TIPOS_PECA)) return false;
   if (!(b.formato in FORMATOS)) return false;
-  // Estilo é híbrido: precisa de um preset OU uma descrição livre.
-  if (!(b.estilo && b.estilo in ESTILOS) && !b.estiloLivre?.trim()) return false;
-  if (!b.frase?.trim()) return false; // precisa estar resolvida (usuário ou IA aprovada)
+  // Estilo é híbrido: preset válido, OU "estilo-livre" com o texto preenchido.
+  const estiloOk =
+    (b.estiloVisual && b.estiloVisual !== "estilo-livre" && b.estiloVisual in ESTILOS) ||
+    (b.estiloVisual === "estilo-livre" && !!b.estiloLivre?.trim());
+  if (!estiloOk) return false;
+  // Conteúdo precisa estar organizado e ter ao menos a chamada principal.
+  if (!b.conteudoAnuncio?.headline?.trim()) return false;
   return true;
 }
 
@@ -106,7 +110,10 @@ export async function POST(request: NextRequest) {
 
     // 4) Cria o projeto (guarda a transcrição da conversa + anexos para auditoria).
     const formato = body.briefing.formato as Formato;
-    const tipoArte = body.briefing.estilo ? ESTILOS[body.briefing.estilo].label : (body.briefing.estiloLivre ?? "Personalizado");
+    const tipoArte =
+      body.briefing.estiloVisual && body.briefing.estiloVisual !== "estilo-livre"
+        ? ESTILOS[body.briefing.estiloVisual].label
+        : (body.briefing.estiloLivre ?? "Personalizado");
     const urlProduto = imagensAnexadas.find((i) => i.tipo === "produto")?.url ?? null;
     const { data: projeto, error: projErr } = await supabase
       .from("projects")

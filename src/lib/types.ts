@@ -51,21 +51,39 @@ export interface CreditRow {
 // ==== Fluxo guiado ====
 
 // Formatos de saída oferecidos ao lojista.
-export type Formato = "story" | "feed" | "quadrado";
+export type Formato = "story-9-16" | "feed-4-5" | "quadrado-1-1";
 
 export const FORMATOS: Record<
   Formato,
   { label: string; aspecto: string; ratio: string; descricao: string }
 > = {
-  story: { label: "Story", aspecto: "9:16", ratio: "aspect-[9/16]", descricao: "Instagram/WhatsApp Stories" },
-  feed: { label: "Feed", aspecto: "4:5", ratio: "aspect-[4/5]", descricao: "Publicação no feed" },
-  quadrado: { label: "Quadrado", aspecto: "1:1", ratio: "aspect-square", descricao: "Post clássico 1:1" },
+  "story-9-16": { label: "Story", aspecto: "9:16", ratio: "aspect-[9/16]", descricao: "Instagram/WhatsApp Stories" },
+  "feed-4-5": { label: "Feed", aspecto: "4:5", ratio: "aspect-[4/5]", descricao: "Publicação no feed" },
+  "quadrado-1-1": { label: "Quadrado", aspecto: "1:1", ratio: "aspect-square", descricao: "Post clássico 1:1" },
 };
 
-// Estilos visuais pré-definidos (viram parte do briefing enviado à IA).
-export type Estilo = "premium-bege" | "minimalista" | "luxo-escuro" | "clean-branco" | "vibrante";
+// Chaves antigas (usadas antes da v2.2) — mantidas só para não quebrar a
+// exibição de projetos já salvos no banco com o formato antigo.
+const FORMATOS_LEGADO: Record<string, Formato> = {
+  story: "story-9-16",
+  feed: "feed-4-5",
+  quadrado: "quadrado-1-1",
+};
 
-export const ESTILOS: Record<Estilo, { label: string; descricao: string; hint: string }> = {
+// Resolve tanto a chave nova ("story-9-16") quanto a antiga ("story") pro
+// registro de FORMATOS — usado ao exibir projetos antigos.
+export function resolverFormato(valor: string | null | undefined): Formato | undefined {
+  if (!valor) return undefined;
+  if (valor in FORMATOS) return valor as Formato;
+  return FORMATOS_LEGADO[valor];
+}
+
+// Estilos visuais pré-definidos. "estilo-livre" é um valor sentinela: indica
+// que o lojista descreveu o estilo com as próprias palavras em vez de
+// escolher um preset — nesse caso o texto real fica em `estiloLivre`.
+export type EstiloVisual = "premium-bege" | "minimalista" | "luxo-escuro" | "clean-branco" | "vibrante" | "estilo-livre";
+
+export const ESTILOS: Record<Exclude<EstiloVisual, "estilo-livre">, { label: string; descricao: string; hint: string }> = {
   "premium-bege": {
     label: "Premium bege",
     descricao: "Sofisticado, tons bege/dourado",
@@ -93,14 +111,15 @@ export const ESTILOS: Record<Estilo, { label: string; descricao: string; hint: s
   },
 };
 
-// Tipo de peça publicitária — primeira pergunta da conversa guiada.
+// Tipo de peça publicitária.
 export type TipoPeca =
   | "anuncio-produto"
   | "anuncio-servico"
   | "promocao"
   | "lancamento"
   | "data-comemorativa"
-  | "prova-social";
+  | "prova-social"
+  | "catalogo";
 
 export const TIPOS_PECA: Record<TipoPeca, { label: string }> = {
   "anuncio-produto": { label: "Anúncio de produto" },
@@ -109,15 +128,28 @@ export const TIPOS_PECA: Record<TipoPeca, { label: string }> = {
   lancamento: { label: "Lançamento" },
   "data-comemorativa": { label: "Data comemorativa" },
   "prova-social": { label: "Prova social" },
+  catalogo: { label: "Catálogo" },
 };
 
-// De onde vem o conteúdo do anúncio (frase + outros elementos textuais): o
-// próprio lojista especifica, ou a IA propõe e o lojista aprova.
+// Onde a arte vai ser usada.
+export type Objetivo = "instagram" | "whatsapp" | "trafego-pago" | "catalogo" | "loja-fisica" | "outro";
+
+export const OBJETIVOS: Record<Objetivo, { label: string }> = {
+  instagram: { label: "Instagram" },
+  whatsapp: { label: "WhatsApp" },
+  "trafego-pago": { label: "Tráfego pago" },
+  catalogo: { label: "Catálogo" },
+  "loja-fisica": { label: "Loja física" },
+  outro: { label: "Outro" },
+};
+
+// De onde vem o conteúdo do anúncio: o próprio lojista especifica, ou a IA
+// propõe e o lojista aprova.
 export type ModoConteudo = "usuario-especificou" | "ia-sugere-conteudo";
 
 // Elemento textual/informativo do anúncio que não cabe nos campos fixos
-// (endereço, horário, rede social, código promocional, selo de garantia...).
-// Estrutura livre porque varia muito por segmento e tipo de peça.
+// (rede social, código promocional, selo de garantia...). Estrutura livre
+// porque varia muito por segmento e tipo de peça.
 export interface ElementoExtra {
   tipo: string;
   valor: string;
@@ -130,6 +162,22 @@ export interface ElementoExtra {
 export interface PerguntaSegmento {
   pergunta: string;
   resposta: string;
+}
+
+// Conteúdo do anúncio já ORGANIZADO em hierarquia de marketing — é isso que
+// o prompt-builder usa para estruturar o texto na arte (headline em
+// destaque, informações secundárias agrupadas, assinatura discreta etc).
+// Monta-se a partir da resposta aberta "o que você quer que apareça
+// escrito?" — nunca é só uma frase solta.
+export interface ConteudoAnuncio {
+  headline?: string;
+  oferta?: string;
+  beneficio?: string;
+  cta?: string;
+  contato?: string;
+  endereco?: string;
+  informacoesSecundarias?: string[];
+  assinaturaMarca?: string;
 }
 
 // Tipos de imagem que o lojista pode anexar durante a conversa. Cada tipo
@@ -163,19 +211,18 @@ export interface ImagemAnexo {
 }
 
 // Briefing completo e resolvido — exigido para poder gerar a imagem.
-// `frase` precisa estar PREENCHIDA aqui (seja porque o usuário digitou, seja
-// porque uma sugestão da IA foi aprovada) — ver regra de negócio no agente.
-// `estilo` é híbrido: OU um preset (chave abaixo) OU `estiloLivre` (descrição
-// em texto livre que o agente traduz em atributos visuais) — pelo menos um
-// dos dois precisa estar resolvido.
+// `conteudoAnuncio` precisa estar aprovado (ver regra de negócio no agente:
+// nunca inserir texto que o lojista não pediu sem antes confirmar).
+// `estiloVisual` é híbrido: um preset, OU "estilo-livre" com o texto real em
+// `estiloLivre`.
 export interface BriefingCompleto {
   tipoPeca: TipoPeca;
   nomeProduto: string;
   descricaoProduto?: string;
   detalhesVisuaisProduto?: string;
   formato: Formato;
-  objetivo?: string;
-  estilo?: Estilo;
+  objetivo?: Objetivo;
+  estiloVisual?: EstiloVisual;
   estiloLivre?: string;
   publicoTom?: string;
   temFotoProduto: boolean;
@@ -183,10 +230,14 @@ export interface BriefingCompleto {
   temLogotipo?: boolean;
   modoConteudo?: ModoConteudo;
   conceito?: string;
-  frase?: string;
+  conteudoAnuncio?: ConteudoAnuncio;
   preco?: string;
-  beneficio?: string;
+  promocao?: string;
+  beneficioPrincipal?: string;
   chamadaWhatsapp?: string;
+  endereco?: string;
+  horario?: string;
+  entrega?: string;
   elementosExtras?: ElementoExtra[];
   perguntasSegmento?: PerguntaSegmento[];
 }
@@ -202,6 +253,16 @@ export interface MensagemChat {
   content: string;
 }
 
+// Sinal de alto nível sobre o que o front deve fazer nesse turno — usado
+// junto com campoEmColeta/opcoes/prontoParaGerar, não no lugar deles.
+export type AcaoSugerida =
+  | "continuar_conversa"
+  | "pedir_upload"
+  | "confirmar_briefing"
+  | "liberar_geracao"
+  | "ajuste_pontual"
+  | "nova_criacao";
+
 // Contrato de resposta do agente a cada turno (ver system prompt em
 // src/lib/ai/agente-conversa.ts). `opcoes` vazio = pergunta de texto livre.
 export interface ContratoAgente {
@@ -210,4 +271,5 @@ export interface ContratoAgente {
   campoEmColeta: string | null;
   briefingParcial: BriefingParcial;
   prontoParaGerar: boolean;
+  acaoSugerida: AcaoSugerida;
 }

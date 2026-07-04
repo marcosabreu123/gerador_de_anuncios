@@ -1,7 +1,7 @@
-import { ESTILOS, FORMATOS, TIPOS_PECA, type BriefingParcial } from "@/lib/types";
+import { ESTILOS, FORMATOS, OBJETIVOS, TIPOS_PECA, type BriefingParcial, type EstiloVisual } from "@/lib/types";
 
 // O agente conversacional às vezes devolve o LABEL em português (ex: "Story",
-// "Luxo escuro") em vez da chave interna ("story", "luxo-escuro") nesses três
+// "Luxo escuro") em vez da chave interna ("story-9-16", "luxo-escuro") nesses
 // campos, mesmo sendo instruído a usar a chave. Em vez de confiar cegamente
 // no LLM, normalizamos aqui: se já for uma chave válida, mantém; senão,
 // tenta casar por label (case-insensitive, ignorando acentos/pontuação).
@@ -34,11 +34,20 @@ function resolverChave<T extends string>(
   });
 }
 
+// estiloVisual tem o valor sentinela "estilo-livre" (fora do dicionário
+// ESTILOS) — passa direto sem tentar casar por label.
+function resolverEstilo(valor: EstiloVisual | undefined): EstiloVisual | undefined {
+  if (!valor) return undefined;
+  if (valor === "estilo-livre") return valor;
+  return resolverChave(valor, ESTILOS) ?? valor;
+}
+
 export function normalizarBriefing(b: BriefingParcial): BriefingParcial {
   return {
     ...b,
     tipoPeca: resolverChave(b.tipoPeca, TIPOS_PECA) ?? b.tipoPeca,
     formato: resolverChave(b.formato, FORMATOS) ?? b.formato,
-    estilo: resolverChave(b.estilo, ESTILOS) ?? b.estilo,
+    objetivo: resolverChave(b.objetivo, OBJETIVOS) ?? b.objetivo,
+    estiloVisual: resolverEstilo(b.estiloVisual),
   };
 }

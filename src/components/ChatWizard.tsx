@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   TIPOS_IMAGEM_ANEXO,
-  TIPOS_PECA,
   type BriefingCompleto,
   type ContratoAgente,
   type ImagemAnexo,
@@ -25,14 +24,15 @@ const CAMPO_PARA_TIPO_IMAGEM: Record<string, TipoImagemAnexo> = {
 
 // Primeira pergunta é fixa (não gasta chamada à IA) — já entra no formato do
 // contrato do agente pra manter o histórico consistente (ver agente-conversa.ts).
+// A conversa começa entendendo o produto (aberto), não escolhendo categoria.
 function contratoInicial(): ContratoAgente {
   return {
-    mensagem:
-      "Oi! Vou te ajudar a montar sua arte. Pra começar: que tipo de peça você quer criar hoje?",
-    opcoes: (Object.keys(TIPOS_PECA) as (keyof typeof TIPOS_PECA)[]).map((t) => TIPOS_PECA[t].label),
-    campoEmColeta: "tipoPeca",
+    mensagem: "Oi! Vou te ajudar a montar sua arte. Pra começar: o que você quer anunciar hoje?",
+    opcoes: [],
+    campoEmColeta: "descricaoProduto",
     briefingParcial: {},
     prontoParaGerar: false,
+    acaoSugerida: "continuar_conversa",
   };
 }
 

@@ -7,24 +7,31 @@ import { ESTILOS, FORMATOS, TIPOS_PECA, type BriefingCompleto } from "@/lib/type
 // estruturado em português, pronto para o Gemini. O usuário NUNCA escreve
 // prompt manualmente — só responde perguntas na conversa guiada.
 
-const SYSTEM = `Você é diretor de arte sênior de publicidade, especializado em anúncios de produto para pequenos lojistas brasileiros (Instagram, WhatsApp, tráfego pago). Sua tarefa: a partir do briefing, escrever UM prompt de geração de imagem, em português, descrevendo uma arte publicitária profissional, realista e vendedora.
+const SYSTEM = `Você é diretor de arte sênior de publicidade, especializado em anúncios de produto para pequenos lojistas brasileiros. A partir do briefing recebido, escreva um prompt de geração de imagem em português, descrevendo uma arte publicitária profissional, realista, organizada e vendedora.
 
-Trate cada elemento:
-- PRODUTO HERÓI: se houver foto do produto, ela é o protagonista — preserve características reais (formato, cor, rótulo, proporção); nunca invente outro produto nem altere a marca. Se não houver foto, componha o produto do zero a partir da descrição, com o máximo de coerência e realismo possível.
-- COMPOSIÇÃO POR OBJETIVO: adapte a composição ao tipo de peça:
-  - anúncio de produto / promoção → hero shot dinâmico do produto, hierarquia visual forte, senso de urgência quando for promoção
-  - lançamento / prova social → composição editorial, espaço negativo elegante, sensação premium
-  - data comemorativa → atmosfera festiva, tipografia em destaque, alto contraste
-  - anúncio de serviço → composição limpa, confiável, centrada no resultado/benefício
-  Enquadramento e regra de terços coerentes com o formato (9:16 vertical, 4:5, 1:1). Respiro adequado; produto com peso visual.
-- ILUMINAÇÃO: luz realista de estúdio/produto, sombras coerentes, reflexos naturais. Nada de aparência artificial ou "cara de IA".
-- PALETA E ESTILO: se houver um estilo preset, siga-o de forma consistente. Se houver uma descrição livre de estilo, traduza-a em atributos visuais concretos antes de compor o prompt — ex: "parece luxo" → paleta dourada/escura, acabamento premium; "colorido/alegre" → paleta vibrante, composição descontraída; "simples/direto" → layout minimalista, bastante espaço em branco; "mais impacto" → alto contraste, tipografia ousada.
-- IDENTIDADE VISUAL: se houver logotipo ou imagem de referência anexados, extraia mentalmente as cores predominantes e o estilo tipográfico percebido, e mantenha consistência com essa identidade ao longo da arte. Posicione o logotipo (se houver) num canto discreto, sem competir com o produto. Se houver referência de estilo, use-a só como inspiração de composição/paleta/clima — nunca copie texto, marca ou logotipo de terceiros que apareçam nela.
-- TIPOGRAFIA E HIERARQUIA: organize a hierarquia de todos os elementos textuais presentes no briefing (headline, preço, contato, endereço, horário, promoção, ou qualquer outro item informado), do mais importante pro menos importante. Tipografia elegante, alto contraste e legibilidade. Texto curto, correto e em português. Nem todo anúncio precisa de todos os elementos — inclua só o que estiver no briefing.
-- RESTRIÇÕES: sem marcas d'água, sem texto quebrado ou ilegível, sem elementos distorcidos, sem aparência amadora, sem "cara de banco de imagens", sem fundo branco genérico, sem composição entediante, sem logos inventadas (a não ser a anexada).
-- VARIAÇÃO ENTRE AS ARTES: este prompt pode ser usado para gerar mais de uma variação da mesma arte — garanta que a descrição permita variações visivelmente diferentes entre si em composição, ângulo ou iluminação (não a mesma arte só com a cor trocada).
+O produto deve ser tratado como protagonista visual. Se houver foto enviada, preserve formato, cor, rótulo, proporção e características reais. Nunca invente outro produto nem altere a marca. Se não houver foto, componha o produto do zero a partir da descrição, com o máximo de coerência e realismo possível.
 
-Saída: apenas o prompt final, em um parágrafo corrido. Sem títulos, sem aspas, sem explicações.`;
+A composição deve seguir o objetivo da peça: anúncio de produto e promoção devem ter hero shot forte, oferta clara e hierarquia visual direta; lançamento deve ter composição editorial e espaço negativo elegante; prova social deve parecer confiável e humana; data comemorativa deve ter atmosfera temática sem exagero; anúncio de serviço deve ser limpo, confiável e centrado no resultado; catálogo deve ser organizado e claro, com o produto em destaque nítido.
+
+Organize os elementos textuais por hierarquia: headline, oferta ou benefício principal, CTA, contato, endereço, horário e assinatura da marca. Não coloque todos os textos juntos. Separe informações principais e secundárias em blocos visuais diferentes. O texto deve ser curto, correto, legível em celular e com tipografia coerente com o estilo visual. Nem todo anúncio precisa de todos os elementos — inclua só o que estiver no briefing.
+
+A logo (quando houver) deve ficar discreta no rodapé ou em canto inferior, como assinatura, sem competir com produto, preço ou headline. Se houver imagem de referência anexada, use-a só como inspiração de composição/paleta/clima — nunca copie texto, marca ou logotipo de terceiros que apareçam nela.
+
+Defina iluminação, paleta, cenário, profundidade, textura, enquadramento, posição do produto, espaço negativo e estilo tipográfico. A imagem deve parecer uma peça publicitária real, não uma montagem amadora nem render de IA. Use sombras coerentes, reflexos naturais e materiais realistas. Evite fundos genéricos, excesso de efeitos e elementos que não ajudem a vender.
+
+Se houver preset visual, traduza assim:
+- premium-bege: fundo bege sofisticado, luz suave, estética limpa e elegante.
+- minimalista: poucos elementos, muito espaço negativo, composição limpa.
+- luxo-escuro: fundo preto ou grafite, luz cinematográfica, contraste premium.
+- clean-branco: fundo claro, limpo, moderno, com sensação de confiança.
+- vibrante: cores fortes, alto impacto, energia comercial, sem poluir.
+- estilo-livre: traduza a descrição do usuário em atributos visuais concretos (ex: "parece luxo" → paleta dourada/escura, acabamento premium; "colorido/alegre" → paleta vibrante; "simples/direto" → minimalista, bastante espaço em branco; "mais impacto" → alto contraste, tipografia ousada).
+
+Inclua também restrições negativas: sem texto quebrado, sem letras ilegíveis, sem produto deformado, sem logo inventada, sem marca d'água, sem composição poluída, sem aparência amadora, sem brilho plástico, sem fundo branco genérico quando não solicitado, sem distorções e sem elementos aleatórios.
+
+Ao gerar variações, elas devem ser realmente diferentes entre si em composição, ângulo, iluminação ou disposição dos elementos. Não gerar apenas a mesma arte com cor diferente.
+
+A saída deve ser apenas o prompt final da imagem, em um parágrafo corrido, sem títulos, sem aspas e sem explicações.`;
 
 export interface PromptGerado {
   prompt: string;
@@ -32,12 +39,16 @@ export interface PromptGerado {
 }
 
 function estiloParaTexto(b: BriefingCompleto): string {
-  if (b.estilo) return `${ESTILOS[b.estilo].label} — ${ESTILOS[b.estilo].hint}`;
-  if (b.estiloLivre) return `descrito pelo lojista em suas palavras: "${b.estiloLivre}" (traduza em atributos visuais concretos)`;
+  if (b.estiloVisual === "estilo-livre") {
+    return `descrito pelo lojista em suas palavras: "${b.estiloLivre ?? ""}" (traduza em atributos visuais concretos)`;
+  }
+  if (b.estiloVisual) return `${ESTILOS[b.estiloVisual].label} — ${ESTILOS[b.estiloVisual].hint}`;
   return "não especificado — use um estilo comercial neutro e elegante";
 }
 
-// Monta uma descrição textual do briefing para alimentar o modelo.
+// Monta uma descrição textual do briefing para alimentar o modelo. O
+// conteúdo textual já vem ORGANIZADO em hierarquia (conteudoAnuncio) pelo
+// agente conversacional — não é mais uma "frase" solta.
 function briefingParaTexto(b: BriefingCompleto): string {
   const fmt = FORMATOS[b.formato];
   const linhas = [
@@ -57,11 +68,27 @@ function briefingParaTexto(b: BriefingCompleto): string {
   if (b.temLogotipo) linhas.push("Há um logotipo anexado — inclua-o discretamente na arte.");
   if (b.publicoTom) linhas.push(`Público/tom: ${b.publicoTom}`);
   if (b.conceito) linhas.push(`Ângulo criativo/conceito: ${b.conceito}`);
-  if (b.preco) linhas.push(`Preço: ${b.preco}`);
-  if (b.frase) linhas.push(`Frase/headline: ${b.frase}`);
-  if (b.beneficio) linhas.push(`Benefício principal: ${b.beneficio}`);
-  if (b.chamadaWhatsapp) linhas.push(`Chamada de ação (WhatsApp): ${b.chamadaWhatsapp}`);
   if (b.objetivo) linhas.push(`Objetivo: ${b.objetivo}`);
+
+  const c = b.conteudoAnuncio;
+  if (c) {
+    linhas.push("Conteúdo textual do anúncio (organize por esta hierarquia, do mais pro menos importante):");
+    if (c.headline) linhas.push(`- Headline (principal): ${c.headline}`);
+    if (c.oferta) linhas.push(`- Oferta/preço: ${c.oferta}`);
+    if (c.beneficio) linhas.push(`- Benefício: ${c.beneficio}`);
+    if (c.cta) linhas.push(`- Chamada para ação (CTA): ${c.cta}`);
+    if (c.contato) linhas.push(`- Contato: ${c.contato}`);
+    if (c.endereco) linhas.push(`- Endereço: ${c.endereco}`);
+    if (c.informacoesSecundarias?.length) linhas.push(`- Informações secundárias: ${c.informacoesSecundarias.join("; ")}`);
+    if (c.assinaturaMarca) linhas.push(`- Assinatura da marca (discreta, rodapé): ${c.assinaturaMarca}`);
+  }
+  if (b.preco && !c?.oferta) linhas.push(`Preço: ${b.preco}`);
+  if (b.promocao) linhas.push(`Promoção: ${b.promocao}`);
+  if (b.beneficioPrincipal && !c?.beneficio) linhas.push(`Benefício principal: ${b.beneficioPrincipal}`);
+  if (b.chamadaWhatsapp && !c?.cta) linhas.push(`Chamada de ação (WhatsApp): ${b.chamadaWhatsapp}`);
+  if (b.endereco && !c?.endereco) linhas.push(`Endereço: ${b.endereco}`);
+  if (b.horario) linhas.push(`Horário: ${b.horario}`);
+  if (b.entrega) linhas.push(`Entrega: ${b.entrega}`);
   if (b.elementosExtras?.length) {
     linhas.push("Elementos adicionais do anúncio:");
     for (const el of b.elementosExtras) linhas.push(`- ${el.tipo}: ${el.valor}`);
@@ -77,7 +104,13 @@ function briefingParaTexto(b: BriefingCompleto): string {
 // Garante que o fluxo funciona ponta a ponta mesmo sem a IA de conversa.
 export function montarPromptFallback(b: BriefingCompleto): string {
   const fmt = FORMATOS[b.formato];
-  const estiloHint = b.estilo ? ESTILOS[b.estilo].hint : (b.estiloLivre ?? "estilo comercial neutro e elegante");
+  const estiloHint =
+    b.estiloVisual === "estilo-livre"
+      ? (b.estiloLivre ?? "estilo comercial neutro e elegante")
+      : b.estiloVisual
+        ? ESTILOS[b.estiloVisual].hint
+        : "estilo comercial neutro e elegante";
+  const c = b.conteudoAnuncio;
   const partes: string[] = [
     `Crie uma arte publicitária ${fmt.aspecto} profissional e realista para ${TIPOS_PECA[b.tipoPeca]?.label.toLowerCase() ?? "anúncio"} do produto "${b.nomeProduto}"${b.descricaoProduto ? ` (${b.descricaoProduto})` : ""},`,
     `${estiloHint},`,
@@ -85,10 +118,14 @@ export function montarPromptFallback(b: BriefingCompleto): string {
       ? "produto real em destaque como herói da composição, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA."
       : "produto composto a partir da descrição com máximo realismo, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA.",
   ];
-  if (b.frase) partes.push(`Inclua a frase "${b.frase}" com tipografia elegante e legível.`);
-  if (b.beneficio) partes.push(`Reforce o benefício: ${b.beneficio}.`);
-  if (b.preco) partes.push(`Mostre o preço ${b.preco} de forma clara e legível na parte inferior.`);
-  if (b.chamadaWhatsapp) partes.push(`Inclua a chamada comercial: "${b.chamadaWhatsapp}".`);
+  if (c?.headline) partes.push(`Inclua a headline "${c.headline}" em destaque, com tipografia elegante e legível.`);
+  if (c?.oferta ?? b.preco) partes.push(`Mostre a oferta/preço "${c?.oferta ?? b.preco}" de forma clara e legível.`);
+  if (c?.beneficio ?? b.beneficioPrincipal) partes.push(`Reforce o benefício: ${c?.beneficio ?? b.beneficioPrincipal}.`);
+  if (c?.cta ?? b.chamadaWhatsapp) partes.push(`Inclua a chamada de ação: "${c?.cta ?? b.chamadaWhatsapp}".`);
+  if (c?.contato) partes.push(`Inclua o contato "${c.contato}" de forma discreta.`);
+  if (c?.endereco ?? b.endereco) partes.push(`Inclua o endereço "${c?.endereco ?? b.endereco}" de forma discreta.`);
+  if (c?.assinaturaMarca) partes.push(`Assine a arte discretamente com "${c.assinaturaMarca}" no rodapé.`);
+  for (const info of c?.informacoesSecundarias ?? []) partes.push(`Inclua também: ${info}.`);
   for (const el of b.elementosExtras ?? []) partes.push(`Inclua também: ${el.tipo}: ${el.valor}.`);
   partes.push(`Composição pronta para ${fmt.descricao}.`);
   return partes.join(" ");
