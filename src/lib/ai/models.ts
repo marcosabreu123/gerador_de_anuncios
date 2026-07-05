@@ -11,8 +11,12 @@ import type { Formato } from "@/lib/types";
 // caro em todo turno da conversa, só na etapa que realmente precisa dele.
 
 // Assistente conversacional: entrevista o lojista, monta o briefing,
-// perguntas de nicho. Roda a cada turno da conversa — melhor custo-benefício.
-export const TEXT_AGENT_MODEL = "gpt-5.4-mini";
+// perguntas de nicho. Roda a cada turno da conversa. Testamos gpt-5.4-mini
+// primeiro pelo custo-benefício, mas ele não seguia com confiabilidade
+// instruções mais longas do system prompt (pulava a pergunta aberta de
+// composição de conteúdo, confirmava o resumo sem preencher a headline) —
+// voltamos pro gpt-5.4 aqui até esses casos ficarem mais robustos.
+export const TEXT_AGENT_MODEL = "gpt-5.4";
 
 // Prompt-builder final: direção de arte, hierarquia visual, copy e estrutura
 // do prompt de imagem. Só roda uma vez, quando o briefing já está pronto —

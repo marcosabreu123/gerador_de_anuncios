@@ -121,8 +121,8 @@ Guarde cada pergunta+resposta em "perguntasSegmento" (array de {pergunta, respos
 ## Comportamento quando o lojista for vago
 Se o lojista for vago (ex: "quero uma arte bonita pra minha loja", ou só "quero vender picanha" sem mais detalhes), NÃO tente gerar de imediato. Aja como estrategista: pergunte o que falta (o que vai anunciar, objetivo, formato, estilo, conteúdo) e, quando fizer sentido, sugira caminhos concretos em vez de perguntas genéricas. Exemplo: para "quero uma arte pra vender picanha", sugira um caminho visual (close da carne, madeira escura, luz quente, clima de churrasco) e pergunte se prefere pegada premium/churrasco ou popular/oferta. Para um perfume vago, ofereça 2-3 caminhos nomeados (ex: "Desejo e presença", "Luxo e sofisticação", "Oferta direta") como opções.
 
-## Composição de conteúdo do anúncio (não é só uma frase)
-NUNCA pergunte apenas "qual frase você quer colocar?". Pergunte de forma ABERTA: "O que você quer que apareça escrito nessa arte? Pode ser frase principal, preço, promoção, endereço, WhatsApp, horário, entrega, chamada para ação ou qualquer outra informação importante." (campoEmColeta="conteudo").
+## Composição de conteúdo do anúncio (não é só uma frase) — OBRIGATÓRIO, NÃO PULE
+Esta pergunta é obrigatória e não pode ser substituída por perguntas fechadas isoladas (ex: só "vai ter preço? qual valor?"). Mesmo que você já tenha perguntado sobre preço/chamada separadamente ao longo da conversa, você AINDA precisa fazer esta pergunta ABERTA pelo menos uma vez antes de montar o resumo final, pra garantir que nada (endereço, WhatsApp, horário, entrega) fique de fora: "O que você quer que apareça escrito nessa arte? Pode ser frase principal, preço, promoção, endereço, WhatsApp, horário, entrega, chamada para ação ou qualquer outra informação importante." (campoEmColeta="conteudo"). NUNCA pergunte apenas "qual frase você quer colocar?" nem pule direto para o resumo sem ter feito essa pergunta aberta.
 A partir da resposta, ORGANIZE o conteúdo em "conteudoAnuncio", com esta estrutura:
 { "headline": "...", "oferta": "...", "beneficio": "...", "cta": "...", "contato": "...", "endereco": "...", "informacoesSecundarias": ["..."], "assinaturaMarca": "..." }
 Exemplo: se o lojista disser "Picanha R$54,99/kg, Travessa São Mateus em frente ao H Variedades, WhatsApp 94 99191-2976", organize: headline="Picanha macia e suculenta", oferta="R$54,99/kg", endereco="Travessa São Mateus, em frente ao H Variedades", contato="WhatsApp 94 99191-2976", assinaturaMarca=nome da loja se souber. Depois de organizar, CONFIRME a estruturação em "mensagem" antes de seguir, ex: "Vou estruturar a arte com a chamada principal no topo, preço em destaque, [produto] como produto principal e endereço/WhatsApp no rodapé. Posso seguir assim?" com opções ["Pode seguir", "Quero mudar algo"].
@@ -245,6 +245,19 @@ function forcarLiberacaoSeConfirmadoETravado(
   }
 }
 
+// Defesa contra "Dados do briefing incompletos" no momento de gerar: se por
+// qualquer motivo prontoParaGerar acabar true sem conteudoAnuncio.headline
+// preenchido (o campo que /api/generate exige), usa o nomeProduto como
+// headline mínima em vez de travar o lojista sem conseguir gerar depois de
+// já ter confirmado o resumo.
+function garantirHeadlineMinima(briefingParcial: Record<string, unknown>): Record<string, unknown> {
+  const c = (briefingParcial.conteudoAnuncio as Record<string, unknown> | undefined) ?? {};
+  if (typeof c.headline === "string" && c.headline.trim()) return briefingParcial;
+  const nomeProduto = typeof briefingParcial.nomeProduto === "string" ? briefingParcial.nomeProduto.trim() : "";
+  if (!nomeProduto) return briefingParcial;
+  return { ...briefingParcial, conteudoAnuncio: { ...c, headline: nomeProduto } };
+}
+
 function parseContrato(texto: string, mensagens: MensagemChat[]): ContratoAgente {
   try {
     const j = JSON.parse(texto);
@@ -257,7 +270,11 @@ function parseContrato(texto: string, mensagens: MensagemChat[]): ContratoAgente
       prontoParaGerar: j.prontoParaGerar === true,
       acaoSugerida: ACOES_VALIDAS.includes(j.acaoSugerida) ? j.acaoSugerida : "continuar_conversa",
     };
-    return forcarLiberacaoSeConfirmadoETravado(contrato, mensagens);
+    const final = forcarLiberacaoSeConfirmadoETravado(contrato, mensagens);
+    if (final.prontoParaGerar) {
+      return { ...final, briefingParcial: garantirHeadlineMinima(final.briefingParcial) };
+    }
+    return final;
   } catch (e) {
     console.error("[agente-conversa] falha ao parsear JSON do modelo:", e, texto);
     return respostaFallback(mensagens);
