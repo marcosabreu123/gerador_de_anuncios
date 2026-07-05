@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { classificarPedidoAjuste } from "@/lib/ai/prompt-builder";
 
 export const runtime = "nodejs";
-export const maxDuration = 20;
+// 35 (não 20): pior caso é 2 tentativas de 15s (retry automático de
+// classificarPedidoAjuste, ver src/lib/ai/completions.ts) = 30s, com folga.
+export const maxDuration = 35;
 
 // Classifica um pedido em linguagem natural sobre uma arte já gerada: ajuste
 // pontual (chamar /api/adjust) ou mudança grande / nova criação disfarçada.

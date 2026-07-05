@@ -34,23 +34,22 @@ export const TEXT_ROUTER_MODEL = "gpt-5.4-nano";
 export const TEXT_PREMIUM_MODEL = "gpt-5.5";
 
 // ---------- Imagem (OpenAI) ----------
+// Usada só pra COMPOR uma arte do zero (ou a partir de uma foto de produto
+// crua): geração inicial e "gerar outra variação". Edição de arte já pronta
+// usa FAL (ver FAL_EDIT_MODEL abaixo) — ver histórico da constante.
 export const IMAGE_MODEL = "gpt-image-2";
 export const IMAGE_PREMIUM_MODEL = "gpt-image-2";
 
 // Qual qualidade usar em cada etapa do fluxo de imagem. gpt-image-2 é bem
-// mais lento que o Gemini usado antes (chegou a 71s numa geração de teste
-// em "medium"), e a function tem um teto de 60s (maxDuration, também o
-// limite rígido do plano Vercel atual) — por isso rascunho usa "low" e só
-// gera 1 variação, pra reduzir o risco de timeout (que além de falhar
+// mais lento que o Gemini usado antes, e a function tem um teto de 60s
+// (maxDuration, também o limite rígido do plano Vercel atual) — por isso
+// TODA etapa usa "low", pra reduzir o risco de timeout (que além de falhar
 // derruba o crédito sem estorno, já que a plataforma mata o processo antes
 // do catch rodar).
-// - rascunho (geração inicial, 1 variação): low — mais rápido.
-// - final (ajuste pontual / edição direta, sempre 1 imagem): medium —
-//   um pouco mais de qualidade, ainda com boa margem dentro do timeout.
 export type Etapa = "rascunho" | "final";
 
-export function qualidadeParaEtapa(etapa: Etapa): "low" | "medium" {
-  return etapa === "final" ? "medium" : "low";
+export function qualidadeParaEtapa(_etapa: Etapa): "low" {
+  return "low";
 }
 
 // Tamanho (WIDTHxHEIGHT) por formato — gpt-image-2 aceita resoluções
@@ -60,6 +59,14 @@ export const TAMANHO_POR_FORMATO: Record<Formato, string> = {
   "feed-4-5": "1024x1280",
   "quadrado-1-1": "1024x1024",
 };
+
+// ---------- Edição de imagem (FAL) ----------
+// Ajuste pontual e edição direta de design (/api/adjust, /api/edit-design)
+// editam uma arte JÁ PRONTA (texto+logo+foto) — medido ao vivo: a mesma
+// edição via gpt-image-2 levava 79-93s mesmo em qualidade baixa (arriscando
+// estourar o teto de 60s da function); Flux Kontext Pro faz a mesma edição
+// por instrução em ~13s, com boa fidelidade aos elementos não pedidos.
+export const FAL_EDIT_MODEL = "fal-ai/flux-pro/kontext";
 
 // ---------- Legado (Gemini, sem uso por padrão) ----------
 // Mantidos só pra src/lib/ai/gemini.ts continuar compilando caso precise

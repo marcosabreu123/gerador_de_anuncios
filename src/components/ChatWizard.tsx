@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { lerRespostaJSON } from "@/lib/fetch-json";
 import {
   TIPOS_IMAGEM_ANEXO,
   type BriefingCompleto,
@@ -90,7 +91,7 @@ export default function ChatWizard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mensagens: novas }),
       });
-      const json = (await res.json()) as ContratoAgente | { error: string };
+      const json = await lerRespostaJSON<ContratoAgente | { error: string }>(res);
       if (!res.ok || "error" in json) {
         throw new Error("error" in json ? json.error : "Erro na conversa.");
       }
@@ -159,8 +160,8 @@ export default function ChatWizard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imagens, briefing, mensagens }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Erro ao gerar.");
+      const json = await lerRespostaJSON<{ error?: string; projectId?: string }>(res);
+      if (!res.ok || !json.projectId) throw new Error(json.error ?? "Erro ao gerar.");
       router.push(`/resultado/${json.projectId}`);
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Erro ao gerar a arte.");

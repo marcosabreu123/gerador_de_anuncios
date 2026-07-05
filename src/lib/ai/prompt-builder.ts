@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { criarCompletionComRetry } from "./completions";
 import { TEXT_PROMPT_BUILDER_MODEL, TEXT_ROUTER_MODEL } from "./models";
 import {
   ESTILOS,
@@ -235,7 +236,11 @@ export async function montarPrompt(b: BriefingCompleto): Promise<PromptsGerados>
   }
 
   try {
-    const openai = new OpenAI({ apiKey });
+    // Timeout explícito (o padrão do SDK é 10min) — sem isso, uma chamada
+    // lenta pode travar bem além do maxDuration da function serverless, que
+    // aí mata o processo e devolve uma página de erro (não-JSON) pro
+    // cliente. Falhar rápido aqui é o que permite cair no fallback a tempo.
+    const openai = new OpenAI({ apiKey, timeout: 25_000 });
     const completion = await openai.chat.completions.create({
       model: TEXT_PROMPT_BUILDER_MODEL,
       temperature: 0.8,
@@ -259,27 +264,63 @@ export async function montarPrompt(b: BriefingCompleto): Promise<PromptsGerados>
   }
 }
 
-// Reinterpreta um pedido de ajuste em linguagem natural sobre uma arte já gerada,
-// combinando com o prompt anterior para gerar um novo prompt de edição.
-// Curto e direto por design: ajustes devem mudar só o que foi pedido.
+// Lista de elementos protegidos por padrão em qualquer ajuste pontual — usada
+// nos prompts de sistema e nos templates de fallback (sem API disponível).
+// A lógica é sempre a mesma: só muda o que foi pedido, o resto fica intocado,
+// com a logo tratada como elemento sensível por padrão (nunca muda cor,
+// forma, proporção, nitidez ou posição da logo sem pedido explícito).
+const ELEMENTOS_PROTEGIDOS_PADRAO =
+  "composição, produto, fundo, iluminação, paleta, textos, preço, contato, endereço, tipografia, logo, cores da logo, proporção da logo, posição da logo e identidade visual";
+
+function fallbackAjusteCirurgico(pedidoUsuario: string): string {
+  return `Aplique somente esta alteração: ${pedidoUsuario}. Preserve exatamente todo o restante da arte original, incluindo ${ELEMENTOS_PROTEGIDOS_PADRAO}. Não recrie a arte, não altere a marca e não mude nenhum elemento que não tenha sido explicitamente pedido.`;
+}
+
+// Reinterpreta um pedido de ajuste em linguagem natural sobre uma arte já
+// gerada, combinando com o prompt anterior para gerar um novo prompt de
+// edição CIRÚRGICA: só o elemento pedido muda, tudo o mais (incluindo logo e
+// cores da marca) é preservado explicitamente — "mantenha o resto igual" de
+// forma genérica não é suficiente, o modelo de imagem precisa da lista
+// explícita do que proteger pra não alterar logo/cores/produto por conta própria.
 export async function montarPromptAjuste(
   promptAnterior: string,
   pedidoUsuario: string,
 ): Promise<PromptGerado> {
   const apiKey = process.env.OPENAI_API_KEY;
-  const fallback = `${promptAnterior}\n\nAJUSTE SOLICITADO: ${pedidoUsuario}. Mantenha o produto e a identidade da arte, aplicando apenas o ajuste pedido.`;
+  const fallback = fallbackAjusteCirurgico(pedidoUsuario);
   if (!apiKey) return { prompt: fallback, usouFallback: true };
 
+  // Timeout curto por tentativa: com 1 retry (ver completions.ts), o pior
+  // caso fica bem limitado — importante aqui porque /api/adjust já gasta a
+  // maior parte do seu orçamento de tempo na geração da imagem em si.
+  const openai = new OpenAI({ apiKey, timeout: 15_000 });
+  let texto: string | null | undefined;
   try {
-    const openai = new OpenAI({ apiKey });
-    const completion = await openai.chat.completions.create({
+    const completion = await criarCompletionComRetry(openai, {
       model: TEXT_ROUTER_MODEL,
       temperature: 0.4,
       messages: [
         {
           role: "system",
-          content:
-            'Você reescreve prompts de arte publicitária para aplicar um ajuste pontual. Receba o prompt anterior e um pedido de ajuste do lojista (linguagem simples). Devolva UM novo prompt em português, curto e direto (no máximo 2 frases), no formato: "Altere [elemento específico] para [novo valor]. Mantenha todo o restante exatamente igual." Nunca mude elementos que o lojista não pediu. Apenas o prompt final, sem aspas.',
+          content: `Você escreve instruções de edição cirúrgica para uma arte publicitária já gerada. Receba o prompt anterior e o pedido de ajuste do lojista. Sua tarefa é gerar UM prompt de ajuste em português, claro, direto e fiel ao pedido.
+
+Regra principal: altere somente o elemento solicitado pelo usuário. Não recrie a arte. Não reinterprete o briefing. Não melhore por conta própria. Não mude nenhum elemento que o usuário não pediu.
+
+O prompt de ajuste deve ser curto, direto e específico, mas deve incluir preservação explícita dos elementos protegidos. Não limite a resposta a no máximo 2 frases se isso prejudicar a clareza ou a fidelidade do ajuste.
+
+Sempre escreva o ajuste seguindo esta lógica:
+"Altere somente [elemento alvo] para [novo valor solicitado]. Preserve exatamente todo o restante da arte original, incluindo composição, produto, fundo, iluminação, cores, textos, preço, telefone, endereço, tipografia, logo, cores da logo, proporção da logo, posição da logo e identidade visual, exceto se algum desses elementos tiver sido explicitamente citado pelo usuário como alvo da mudança."
+
+Se o ajuste for na logo, preserve tudo da logo que não foi pedido:
+- se pedir para diminuir a logo, não alterar cor, formato ou estilo;
+- se pedir para mudar posição da logo, não alterar cor, tamanho ou formato;
+- se pedir para trocar a cor da logo, não alterar tamanho, posição ou formato.
+
+Se o ajuste for em cor de fundo, luz, contraste ou paleta, deixe explícito que a logo e os textos devem manter suas cores originais.
+
+Se o ajuste for em texto, preserve exatamente os demais textos e números. Nunca invente, corrija ou substitua informações que o usuário não pediu.
+
+A saída deve ser apenas o prompt final de ajuste, sem aspas e sem explicações.`,
         },
         {
           role: "user",
@@ -287,45 +328,63 @@ export async function montarPromptAjuste(
         },
       ],
     });
-    const prompt = completion.choices[0]?.message?.content?.trim();
-    if (!prompt) return { prompt: fallback, usouFallback: true };
-    return { prompt, usouFallback: false };
+    texto = completion.choices[0]?.message?.content?.trim();
   } catch (e) {
     console.error("[prompt-builder] ajuste OpenAI falhou, usando fallback:", e);
     return { prompt: fallback, usouFallback: true };
   }
+  if (!texto) return { prompt: fallback, usouFallback: true };
+  return { prompt: texto, usouFallback: false };
 }
 
 // Fluxo de edição direta (/editar): o lojista sobe um design PRONTO (feito
 // fora do app, sem briefing/prompt anterior nosso) e pede uma mudança em
 // linguagem natural. Diferente de montarPromptAjuste, aqui não existe
-// "prompt anterior" — só a imagem em si e o pedido.
+// "prompt anterior" — só a imagem em si e o pedido. Mesma exigência de
+// edição cirúrgica: preservar produto, textos, contato e identidade visual
+// (incluindo logo) por padrão.
 export async function montarPromptEdicaoDireta(pedidoUsuario: string): Promise<PromptGerado> {
   const apiKey = process.env.OPENAI_API_KEY;
-  const fallback = `Edite a imagem enviada aplicando exatamente este pedido: ${pedidoUsuario}. Preserve o restante do design (produto, textos, composição, marca) tal como está, mudando apenas o que foi pedido. Mantenha alta qualidade e realismo.`;
+  const fallback = fallbackAjusteCirurgico(pedidoUsuario);
   if (!apiKey) return { prompt: fallback, usouFallback: true };
 
+  const openai = new OpenAI({ apiKey, timeout: 15_000 });
+  let texto: string | null | undefined;
   try {
-    const openai = new OpenAI({ apiKey });
-    const completion = await openai.chat.completions.create({
+    const completion = await criarCompletionComRetry(openai, {
       model: TEXT_ROUTER_MODEL,
       temperature: 0.5,
       messages: [
         {
           role: "system",
-          content:
-            "Você escreve instruções de edição de imagem para um modelo de geração. O lojista enviou um design pronto (uma arte publicitária já existente) e pediu uma mudança em linguagem simples. Escreva UM prompt de edição em português, claro e específico, que aplica exatamente o pedido e instrui a preservar tudo o mais (produto, textos, composição, marca) como está na imagem original. Apenas o prompt final, sem aspas, sem explicações.",
+          content: `Você escreve instruções de edição de imagem para um modelo de geração. O lojista enviou um design pronto, feito fora do app, e pediu uma mudança em linguagem simples. Sua tarefa é aplicar exatamente a mudança pedida e preservar todo o restante da imagem original.
+
+A edição deve ser cirúrgica:
+- alterar somente o elemento solicitado;
+- preservar composição original;
+- preservar produto;
+- preservar todos os textos não citados;
+- preservar preço, telefone, endereço e CTA;
+- preservar logo, cores da logo, forma da logo, proporção da logo, posição da logo e legibilidade da logo;
+- preservar tipografia, cores, iluminação, fundo, estilo e identidade visual, salvo se o usuário pedir explicitamente mudar algum desses itens.
+
+Não redesenhe a arte inteira. Não recrie o layout. Não troque a identidade visual. Não mude a marca. Não altere a cor da logo por consequência de ajustes no fundo, contraste, luz ou paleta.
+
+Formato da resposta:
+"Aplique somente esta alteração: [pedido específico]. Preserve exatamente todo o restante do design original, incluindo produto, textos, preço, contato, endereço, composição, fundo, iluminação, tipografia, logo, cores da logo, proporção da logo, posição da logo e identidade visual."
+
+A saída deve ser apenas o prompt final, sem aspas e sem explicações.`,
         },
         { role: "user", content: `PEDIDO DE EDIÇÃO:\n${pedidoUsuario}` },
       ],
     });
-    const prompt = completion.choices[0]?.message?.content?.trim();
-    if (!prompt) return { prompt: fallback, usouFallback: true };
-    return { prompt, usouFallback: false };
+    texto = completion.choices[0]?.message?.content?.trim();
   } catch (e) {
     console.error("[prompt-builder] edição direta OpenAI falhou, usando fallback:", e);
     return { prompt: fallback, usouFallback: true };
   }
+  if (!texto) return { prompt: fallback, usouFallback: true };
+  return { prompt: texto, usouFallback: false };
 }
 
 export type TipoPedidoAjuste = "ajuste" | "nova-criacao" | "ambiguo";
@@ -333,7 +392,18 @@ export type TipoPedidoAjuste = "ajuste" | "nova-criacao" | "ambiguo";
 export interface ClassificacaoAjuste {
   tipo: TipoPedidoAjuste;
   resumo: string; // frase curta descrevendo o que vai mudar, para confirmação
+  elementosAlvo: string[]; // o que o usuário realmente pediu para mudar
+  elementosProtegidos: string[]; // tudo que deve permanecer igual
+  riscoDeAlterarMarca: boolean; // pedido envolve logo, cores da marca ou identidade visual
+  precisaConfirmacao: boolean; // ambíguo ou com risco de mexer na marca sem pedido explícito
 }
+
+// Elementos sempre protegidos por padrão numa classificação — a logo entra
+// aqui mesmo sem o lojista mencionar, porque ela nunca deve mudar "de
+// carona" num ajuste de outra coisa.
+const ELEMENTOS_PROTEGIDOS_BASE = ["logo", "cores da logo", "proporção da logo", "posição da logo", "produto", "textos existentes", "preço", "contato"];
+const PALAVRAS_RISCO_MARCA = /\b(logo|logotipo|marca|identidade visual|paleta)\b/i;
+const PALAVRAS_NOVA_CRIACAO = /\b(refaz|refazer|refeito|n[aã]o gostei|cria outra|completamente diferente|come[cç]a de novo|do zero)\b/i;
 
 // Decide se um pedido em linguagem natural sobre uma arte já gerada é um
 // AJUSTE pontual (chamar /api/adjust) ou parece uma NOVA CRIAÇÃO disfarçada
@@ -341,39 +411,83 @@ export interface ClassificacaoAjuste {
 export async function classificarPedidoAjuste(pedido: string): Promise<ClassificacaoAjuste> {
   const apiKey = process.env.OPENAI_API_KEY;
   // Fallback heurístico simples caso a IA não esteja configurada/disponível.
-  const heuristicaNovaCríacao = /\b(refaz|refazer|refeito|n[aã]o gostei|cria outra|completamente diferente|come[cç]a de novo|do zero)\b/i;
   if (!apiKey) {
-    return heuristicaNovaCríacao.test(pedido)
-      ? { tipo: "nova-criacao", resumo: pedido }
-      : { tipo: "ajuste", resumo: pedido };
+    const riscoDeAlterarMarca = PALAVRAS_RISCO_MARCA.test(pedido);
+    return {
+      tipo: PALAVRAS_NOVA_CRIACAO.test(pedido) ? "nova-criacao" : "ajuste",
+      resumo: pedido,
+      elementosAlvo: [pedido],
+      elementosProtegidos: ELEMENTOS_PROTEGIDOS_BASE,
+      riscoDeAlterarMarca,
+      precisaConfirmacao: riscoDeAlterarMarca,
+    };
   }
 
+  const openai = new OpenAI({ apiKey, timeout: 15_000 });
+  let texto: string | null | undefined;
   try {
-    const openai = new OpenAI({ apiKey });
-    const completion = await openai.chat.completions.create({
+    const completion = await criarCompletionComRetry(openai, {
       model: TEXT_ROUTER_MODEL,
       temperature: 0.2,
       response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
-          content:
-            'Classifique um pedido de mudança sobre uma arte publicitária já gerada. Responda em JSON: {"tipo": "ajuste" | "nova-criacao" | "ambiguo", "resumo": "frase curta e específica descrevendo exatamente o que vai mudar, em português"}. ' +
-            '"ajuste" = mudança pontual e específica (ex: trocar preço, cor de fundo, tamanho de texto). ' +
-            '"nova-criacao" = o lojista quer recomeçar ou não gostou do resultado (ex: "refaz tudo", "não gostei", "cria outra completamente diferente"). ' +
-            '"ambiguo" = o pedido muda vários elementos ao mesmo tempo (produto, formato E estilo, por exemplo) e pode ser tanto um ajuste grande quanto uma nova criação.',
+          content: `Você classifica pedidos de alteração feitos sobre uma arte publicitária já gerada. Sua função é decidir se o pedido é um ajuste pontual, uma nova criação disfarçada ou ambíguo. Responda somente em JSON válido.
+
+Use:
+- ajuste: quando o usuário pedir mudança pequena e específica, como trocar preço, mudar cor de fundo, aumentar texto, remover um elemento, diminuir logo ou ajustar posição.
+- nova-criacao: quando o usuário quiser recomeçar, mudar o conceito inteiro, trocar produto principal, mudar formato e estilo ao mesmo tempo, ou disser que não gostou e quer outra arte.
+- ambiguo: quando o pedido não deixar claro qual elemento deve mudar, ou quando puder afetar elementos importantes como logo, cores da marca, produto, textos principais ou composição inteira.
+
+Sempre identifique os elementosAlvo, ou seja, aquilo que o usuário realmente pediu para mudar. Sempre identifique elementosProtegidos, ou seja, tudo que deve permanecer igual. Considere a logo e seus atributos como protegidos por padrão: cor, forma, proporção, posição, legibilidade e estilo. Marque riscoDeAlterarMarca como true quando o pedido envolver logo, cores da marca, identidade visual, paleta geral ou algo que possa afetar a marca. Marque precisaConfirmacao como true quando houver ambiguidade ou risco de alterar a marca sem pedido explícito.
+
+Se o pedido for ambíguo sobre QUAL elemento deve mudar (ex: "troque a cor para vermelho" sem dizer de quê), escreva em "resumo" uma pergunta direta pro lojista escolher o elemento, em vez de supor.
+
+Responda em JSON: {"tipo": "ajuste"|"nova-criacao"|"ambiguo", "resumo": "frase curta e específica, ou a pergunta de esclarecimento quando ambíguo", "elementosAlvo": ["..."], "elementosProtegidos": ["..."], "riscoDeAlterarMarca": true|false, "precisaConfirmacao": true|false}`,
         },
         { role: "user", content: pedido },
       ],
     });
-    const texto = completion.choices[0]?.message?.content;
-    if (!texto) return { tipo: "ajuste", resumo: pedido };
+    texto = completion.choices[0]?.message?.content;
+  } catch (e) {
+    console.error("[prompt-builder] classificação de ajuste falhou:", e);
+    return {
+      tipo: "ajuste",
+      resumo: pedido,
+      elementosAlvo: [pedido],
+      elementosProtegidos: ELEMENTOS_PROTEGIDOS_BASE,
+      riscoDeAlterarMarca: false,
+      precisaConfirmacao: false,
+    };
+  }
+
+  const fallbackClassificacao: ClassificacaoAjuste = {
+    tipo: "ajuste",
+    resumo: pedido,
+    elementosAlvo: [pedido],
+    elementosProtegidos: ELEMENTOS_PROTEGIDOS_BASE,
+    riscoDeAlterarMarca: false,
+    precisaConfirmacao: false,
+  };
+  if (!texto) return fallbackClassificacao;
+  try {
     const j = JSON.parse(texto);
     const tipo: TipoPedidoAjuste = ["ajuste", "nova-criacao", "ambiguo"].includes(j.tipo) ? j.tipo : "ajuste";
     const resumo = typeof j.resumo === "string" && j.resumo.trim() ? j.resumo.trim() : pedido;
-    return { tipo, resumo };
+    const elementosAlvo = Array.isArray(j.elementosAlvo)
+      ? j.elementosAlvo.filter((x: unknown) => typeof x === "string")
+      : [pedido];
+    const elementosProtegidos = Array.isArray(j.elementosProtegidos)
+      ? j.elementosProtegidos.filter((x: unknown) => typeof x === "string")
+      : ELEMENTOS_PROTEGIDOS_BASE;
+    const riscoDeAlterarMarca = j.riscoDeAlterarMarca === true;
+    const precisaConfirmacao = j.precisaConfirmacao === true || tipo === "ambiguo" || riscoDeAlterarMarca;
+    return { tipo, resumo, elementosAlvo, elementosProtegidos, riscoDeAlterarMarca, precisaConfirmacao };
   } catch (e) {
-    console.error("[prompt-builder] classificação de ajuste falhou:", e);
-    return { tipo: "ajuste", resumo: pedido };
+    // Falha de PARSE (conteúdo não é JSON válido) é um erro diferente de
+    // falha de API — nunca deixa o texto cru do modelo vazar pro chamador.
+    console.error("[prompt-builder] resposta de classificação não é JSON válido:", e, texto);
+    return fallbackClassificacao;
   }
 }

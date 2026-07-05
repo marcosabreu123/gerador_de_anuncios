@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { lerRespostaJSON } from "@/lib/fetch-json";
 
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
 
@@ -58,8 +59,8 @@ export default function EditarWizard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ originalUrl, pedido }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Erro ao editar.");
+      const json = await lerRespostaJSON<{ error?: string; projectId?: string }>(res);
+      if (!res.ok || !json.projectId) throw new Error(json.error ?? "Erro ao editar.");
       router.push(`/resultado/${json.projectId}`);
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Erro ao editar o design.");

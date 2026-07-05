@@ -4,7 +4,11 @@ import { conversar } from "@/lib/ai/agente-conversa";
 import type { MensagemChat } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+// 55 (não 30): pior caso é 2 tentativas de 20s (retry automático de
+// conversar(), ver src/lib/ai/completions.ts) = 40s, com folga até o teto
+// rígido de 60s do plano Vercel — nunca deixa o retry ser a causa de um
+// timeout que a própria função não teve chance de tratar.
+export const maxDuration = 55;
 
 interface Body {
   mensagens: MensagemChat[];

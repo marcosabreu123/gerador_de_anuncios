@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { baixarArte } from "@/lib/download";
+import { lerRespostaJSON } from "@/lib/fetch-json";
 
 export interface ArteItem {
   id: string;
@@ -32,6 +33,7 @@ export default function ResultadoView({
   const [pedido, setPedido] = useState("");
   const [fase, setFase] = useState<Fase>("digitando");
   const [resumo, setResumo] = useState("");
+  const [riscoMarca, setRiscoMarca] = useState(false);
   const [ajustando, setAjustando] = useState(false);
   const [gerandoVariacao, setGerandoVariacao] = useState(false);
   const [erroVariacao, setErroVariacao] = useState<string | null>(null);
@@ -49,9 +51,15 @@ export default function ResultadoView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pedido }),
       });
-      const json = await res.json();
+      const json = await lerRespostaJSON<{
+        error?: string;
+        tipo?: string;
+        resumo?: string;
+        riscoDeAlterarMarca?: boolean;
+      }>(res);
       if (!res.ok) throw new Error(json.error ?? "Erro ao entender o pedido.");
       setResumo(json.resumo ?? pedido);
+      setRiscoMarca(json.riscoDeAlterarMarca === true);
       setFase(json.tipo === "ajuste" ? "confirmando-ajuste" : "confirmando-grande");
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Erro ao entender o pedido.");
@@ -62,6 +70,7 @@ export default function ResultadoView({
   function cancelar() {
     setFase("digitando");
     setResumo("");
+    setRiscoMarca(false);
   }
 
   async function aplicarAjuste() {
@@ -74,13 +83,14 @@ export default function ResultadoView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageId: arteAtual.id, pedido }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Erro ao ajustar.");
+      const json = await lerRespostaJSON<{ error?: string; imagem?: ArteItem }>(res);
+      if (!res.ok || !json.imagem) throw new Error(json.error ?? "Erro ao ajustar.");
       const nova: ArteItem = { ...json.imagem, status: "ajustada" };
       setArtes((prev) => [nova, ...prev]);
       setSelecionada(nova.id);
       setPedido("");
       setFase("digitando");
+      setRiscoMarca(false);
       router.refresh(); // atualiza o saldo no header
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Erro ao ajustar.");
@@ -98,8 +108,8 @@ export default function ResultadoView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Erro ao gerar nova variação.");
+      const json = await lerRespostaJSON<{ error?: string; imagem?: ArteItem }>(res);
+      if (!res.ok || !json.imagem) throw new Error(json.error ?? "Erro ao gerar nova variação.");
       const nova: ArteItem = { ...json.imagem, status: "gerada" };
       setArtes((prev) => [nova, ...prev]);
       setSelecionada(nova.id);
@@ -179,7 +189,8 @@ export default function ResultadoView({
         {fase === "confirmando-ajuste" ? (
           <div className="mt-3">
             <p className="text-sm">
-              Vou alterar: <strong>{resumo}</strong>. Mantendo todo o resto igual.
+              Vou alterar: <strong>{resumo}</strong>. Mantendo todo o resto igual
+              {riscoMarca ? ", incluindo a logo e as cores da marca" : ""}.
             </p>
             {erro && <p className="text-sm text-[var(--danger)] mt-2">{erro}</p>}
             <div className="flex gap-2 mt-3">

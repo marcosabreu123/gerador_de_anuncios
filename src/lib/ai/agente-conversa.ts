@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { criarCompletionComRetry } from "./completions";
 import { TEXT_AGENT_MODEL } from "./models";
 import {
   ESTILOS,
@@ -295,9 +296,20 @@ export async function conversar(mensagens: MensagemChat[]): Promise<ContratoAgen
     };
   }
 
+  // Chamada à API isolada do parse do JSON: uma falha de rede/timeout (com
+  // 1 retry automático) nunca deve ser confundida com "o modelo respondeu
+  // algo que não é JSON válido" — cada uma cai num catch e num fallback
+  // amigável próprios, sem nunca expor erro técnico cru pro lojista.
+  let texto: string | null | undefined;
   try {
-    const openai = new OpenAI({ apiKey });
-    const completion = await openai.chat.completions.create({
+    // Timeout explícito por tentativa: o padrão do SDK é 10min, tempo
+    // suficiente pra estourar o maxDuration da function bem antes de cair
+    // no catch — o que faz a Vercel matar o processo e devolver uma página
+    // de erro não-JSON pro cliente (a causa real do "Unexpected token"
+    // exposto cru na tela). Falhar rápido aqui é o que garante o fallback
+    // amigável a tempo.
+    const openai = new OpenAI({ apiKey, timeout: 20_000 });
+    const completion = await criarCompletionComRetry(openai, {
       model: TEXT_AGENT_MODEL,
       temperature: 0.7,
       response_format: { type: "json_object" },
@@ -306,11 +318,11 @@ export async function conversar(mensagens: MensagemChat[]): Promise<ContratoAgen
         ...mensagens.map((m) => ({ role: m.role, content: m.content })),
       ],
     });
-    const texto = completion.choices[0]?.message?.content;
-    if (!texto) return respostaFallback(mensagens);
-    return parseContrato(texto, mensagens);
+    texto = completion.choices[0]?.message?.content;
   } catch (e) {
     console.error("[agente-conversa] chamada à OpenAI falhou:", e);
     return respostaFallback(mensagens);
   }
+  if (!texto) return respostaFallback(mensagens);
+  return parseContrato(texto, mensagens);
 }

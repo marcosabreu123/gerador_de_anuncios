@@ -2,24 +2,18 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { debitarCredito, estornarCredito } from "@/lib/credits";
 import { montarPromptAjuste } from "@/lib/ai/prompt-builder";
-import { gerarVariacoes } from "@/lib/ai/openai-image";
+import { editarComFalKontext } from "@/lib/ai/fal-edit";
 import { uploadImagem } from "@/lib/storage";
-import { IMAGE_MODEL, qualidadeParaEtapa } from "@/lib/ai/models";
+import { FAL_EDIT_MODEL } from "@/lib/ai/models";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// FAL Kontext Pro edita em ~13-20s (vs. 79-93s do gpt-image-2 pra essa mesma
+// classe de edição) — 30s dá boa folga sem chegar perto do teto de 60s.
+export const maxDuration = 30;
 
 interface Body {
   imageId: string; // imagem de origem a ajustar
   pedido: string; // ajuste em linguagem natural
-}
-
-async function baixarBase64(url: string): Promise<{ base64: string; mimeType: string; tipo: "base" }> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Não foi possível ler a imagem base.");
-  const mimeType = res.headers.get("content-type") ?? "image/png";
-  const buf = Buffer.from(await res.arrayBuffer());
-  return { base64: buf.toString("base64"), mimeType, tipo: "base" };
 }
 
 export async function POST(request: NextRequest) {
@@ -59,17 +53,11 @@ export async function POST(request: NextRequest) {
     // Reinterpreta o pedido combinando com o prompt anterior.
     const { prompt } = await montarPromptAjuste(origem.prompt_usado ?? "", body.pedido);
 
-    // Ajuste parte da ARTE já gerada (edição), preservando identidade.
-    const base = await baixarBase64(origem.imagem_gerada_url);
-    const qualidade = qualidadeParaEtapa("final"); // final = high (melhor legibilidade de texto, só 1 imagem)
+    // Ajuste parte da ARTE já gerada (edição), preservando identidade — FAL
+    // aceita a URL da imagem diretamente, sem precisar baixar/converter.
+    const imagem = await editarComFalKontext(origem.imagem_gerada_url, prompt);
 
-    const imagens = await gerarVariacoes({
-      prompts: [prompt],
-      imagens: [base],
-      qualidade,
-    });
-
-    const urlGerada = await uploadImagem(user.id, imagens[0], "geradas");
+    const urlGerada = await uploadImagem(user.id, imagem, "geradas");
     const { data: row } = await supabase
       .from("images")
       .insert({
@@ -78,7 +66,7 @@ export async function POST(request: NextRequest) {
         imagem_original_url: origem.imagem_original_url,
         imagem_gerada_url: urlGerada,
         prompt_usado: prompt,
-        modelo_usado: IMAGE_MODEL,
+        modelo_usado: FAL_EDIT_MODEL,
         status: "ajustada",
       })
       .select("id, imagem_gerada_url")
