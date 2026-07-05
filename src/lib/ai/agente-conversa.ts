@@ -147,6 +147,8 @@ com opções ["Pode gerar", "Quero mudar algo"] (acaoSugerida="confirmar_briefin
 Só marque prontoParaGerar=true DEPOIS que o lojista confirmar esse resumo explicitamente (ex: "Pode gerar", "Sim", "Tá bom"). Se ele pedir mudança, ajuste e mostre o resumo atualizado de novo antes de liberar.
 Depois que prontoParaGerar vira true, se o lojista pedir mais mudanças, atualize o briefingParcial e mantenha prontoParaGerar true (a menos que a mudança invalide algo obrigatório) — não precisa pedir confirmação de novo pra pequenos ajustes.
 
+REGRA CRÍTICA contra loop de confirmação: se a ÚLTIMA mensagem do lojista for EXATAMENTE uma das opções de confirmação que você mesmo ofereceu no turno anterior (ex: você perguntou "Posso gerar nessa direção?" com opções ["Pode gerar", "Quero mudar algo"], e ele respondeu "Pode gerar"), isso é confirmação definitiva — você DEVE, nesse turno, marcar prontoParaGerar=true e acaoSugerida="liberar_geracao", com uma mensagem curta tipo "Perfeito, gerando sua arte!". NUNCA repita o mesmo resumo ou a mesma pergunta de confirmação de novo nesse caso — isso trava o lojista num loop e é um erro grave. Só volte a mostrar o resumo se o lojista pedir mudança (ex: "Quero mudar algo") ou disser algo novo que precise ser incorporado.
+
 ## Regras gerais de saída
 - Sempre devolva em "briefingParcial" o objeto ACUMULADO (todos os campos já coletados até agora, não só os novos), incluindo arrays/objetos acumulados (elementosExtras, perguntasSegmento, conteudoAnuncio) — nunca sobrescreva com só o item novo.
 - "opcoes": respostas rápidas pra renderizar como botões. Vazio ([]) quando a pergunta for só de texto livre.
@@ -206,11 +208,48 @@ const ACOES_VALIDAS = [
   "nova_criacao",
 ];
 
+// Defesa contra o modelo "travar" num loop repetindo a mesma pergunta de
+// confirmação do resumo (visto ao vivo: lojista clica "Pode gerar" e o
+// modelo devolve o resumo de novo, sem nunca marcar prontoParaGerar=true).
+// Se o turno assistente ANTERIOR ofereceu opções de confirmação
+// (acaoSugerida="confirmar_briefing") e a resposta do lojista foi
+// EXATAMENTE uma dessas opções que não é a de pedir mudança, a confirmação
+// é inequívoca — força a liberação mesmo que o modelo não tenha marcado.
+function forcarLiberacaoSeConfirmadoETravado(
+  contrato: ContratoAgente,
+  mensagens: MensagemChat[],
+): ContratoAgente {
+  if (contrato.prontoParaGerar) return contrato;
+
+  const invertidas = [...mensagens].reverse();
+  const ultimaUser = invertidas.find((m) => m.role === "user");
+  const ultimaAssistenteAnterior = invertidas.find((m) => m.role === "assistant");
+  if (!ultimaUser || !ultimaAssistenteAnterior) return contrato;
+
+  try {
+    const anterior = JSON.parse(ultimaAssistenteAnterior.content) as ContratoAgente;
+    if (anterior.acaoSugerida !== "confirmar_briefing") return contrato;
+
+    const opcaoConfirmar = anterior.opcoes?.find((o) => !/mudar|ajustar|alterar/i.test(o));
+    if (!opcaoConfirmar) return contrato;
+    if (ultimaUser.content.trim().toLowerCase() !== opcaoConfirmar.trim().toLowerCase()) return contrato;
+
+    return {
+      ...contrato,
+      prontoParaGerar: true,
+      acaoSugerida: "liberar_geracao",
+      mensagem: contrato.mensagem || "Perfeito, gerando sua arte!",
+    };
+  } catch {
+    return contrato;
+  }
+}
+
 function parseContrato(texto: string, mensagens: MensagemChat[]): ContratoAgente {
   try {
     const j = JSON.parse(texto);
     const briefingNovo = typeof j.briefingParcial === "object" && j.briefingParcial ? j.briefingParcial : {};
-    return {
+    const contrato: ContratoAgente = {
       mensagem: typeof j.mensagem === "string" ? j.mensagem : "",
       opcoes: Array.isArray(j.opcoes) ? j.opcoes.filter((o: unknown) => typeof o === "string") : [],
       campoEmColeta: typeof j.campoEmColeta === "string" ? j.campoEmColeta : null,
@@ -218,6 +257,7 @@ function parseContrato(texto: string, mensagens: MensagemChat[]): ContratoAgente
       prontoParaGerar: j.prontoParaGerar === true,
       acaoSugerida: ACOES_VALIDAS.includes(j.acaoSugerida) ? j.acaoSugerida : "continuar_conversa",
     };
+    return forcarLiberacaoSeConfirmadoETravado(contrato, mensagens);
   } catch (e) {
     console.error("[agente-conversa] falha ao parsear JSON do modelo:", e, texto);
     return respostaFallback(mensagens);
