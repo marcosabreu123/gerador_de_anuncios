@@ -33,6 +33,8 @@ export default function ResultadoView({
   const [fase, setFase] = useState<Fase>("digitando");
   const [resumo, setResumo] = useState("");
   const [ajustando, setAjustando] = useState(false);
+  const [gerandoVariacao, setGerandoVariacao] = useState(false);
+  const [erroVariacao, setErroVariacao] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   const arteAtual = artes.find((a) => a.id === selecionada) ?? artes[0];
@@ -87,6 +89,28 @@ export default function ResultadoView({
     }
   }
 
+  async function gerarNovaVariacao() {
+    setGerandoVariacao(true);
+    setErroVariacao(null);
+    try {
+      const res = await fetch("/api/generate-variation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Erro ao gerar nova variação.");
+      const nova: ArteItem = { ...json.imagem, status: "gerada" };
+      setArtes((prev) => [nova, ...prev]);
+      setSelecionada(nova.id);
+      router.refresh(); // atualiza o saldo no header
+    } catch (err) {
+      setErroVariacao(err instanceof Error ? err.message : "Erro ao gerar nova variação.");
+    } finally {
+      setGerandoVariacao(false);
+    }
+  }
+
   const sugestoes = [
     "Deixe mais premium",
     "Aumente o produto",
@@ -137,6 +161,16 @@ export default function ResultadoView({
       >
         ⬇ Baixar esta arte
       </button>
+
+      {/* Nova variação a partir do mesmo briefing */}
+      <button
+        onClick={gerarNovaVariacao}
+        disabled={gerandoVariacao || ajustando}
+        className="btn btn-outline btn-block"
+      >
+        {gerandoVariacao ? "Gerando nova variação…" : "🔁 Gerar outra variação (1 crédito)"}
+      </button>
+      {erroVariacao && <p className="text-sm text-[var(--danger)]">{erroVariacao}</p>}
 
       {/* Ajuste em linguagem natural */}
       <div className="card p-4">
