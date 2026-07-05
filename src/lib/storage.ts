@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { ImagemGerada } from "@/lib/ai/gemini";
+import type { ImagemGerada } from "@/lib/ai/openai-image";
 
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
 

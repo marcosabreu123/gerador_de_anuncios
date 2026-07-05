@@ -2,9 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { debitarCredito, estornarCredito } from "@/lib/credits";
 import { montarPrompt } from "@/lib/ai/prompt-builder";
-import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/gemini";
+import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { uploadImagem } from "@/lib/storage";
-import { modeloParaEtapa } from "@/lib/ai/models";
+import { IMAGE_MODEL, qualidadeParaEtapa, TAMANHO_POR_FORMATO } from "@/lib/ai/models";
 import { normalizarBriefing } from "@/lib/ai/normalizar-briefing";
 import {
   ESTILOS,
@@ -25,7 +25,7 @@ interface Body {
   mensagens?: MensagemChat[]; // transcrição da conversa, para auditoria/depuração
 }
 
-// Baixa uma imagem anexada e converte para base64 (para enviar ao Gemini).
+// Baixa uma imagem anexada e converte para base64 (para enviar ao modelo de imagem).
 async function baixarBase64(img: ImagemAnexo): Promise<EntradaImagem> {
   const res = await fetch(img.url);
   if (!res.ok) throw new Error(`Não foi possível ler a imagem (${img.tipo}).`);
@@ -93,20 +93,21 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // 2) Prepara insumos. Foto é opcional — sem ela, o Gemini compõe do zero.
+    // 2) Prepara insumos. Foto é opcional — sem ela, o modelo compõe do zero.
     const entradas = await Promise.all(imagensAnexadas.map(baixarBase64));
     const { prompts } = await montarPrompt(body.briefing);
-    const modelo = modeloParaEtapa("rascunho"); // rascunho = flash (barato/rápido)
+    const formato = body.briefing.formato as Formato;
+    const qualidade = qualidadeParaEtapa("rascunho"); // rascunho = medium (mais rápido, 2 variações em paralelo)
 
-    // 3) Gera as variações no Gemini — uma por direção criativa distinta.
+    // 3) Gera as variações — uma por direção criativa distinta.
     const imagens = await gerarVariacoes({
       prompts,
       imagens: entradas,
-      modelo,
+      tamanho: TAMANHO_POR_FORMATO[formato],
+      qualidade,
     });
 
     // 4) Cria o projeto (guarda a transcrição da conversa + anexos para auditoria).
-    const formato = body.briefing.formato as Formato;
     const tipoArte =
       body.briefing.estiloVisual && body.briefing.estiloVisual !== "estilo-livre"
         ? ESTILOS[body.briefing.estiloVisual].label
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
           imagem_original_url: urlProduto,
           imagem_gerada_url: urlGerada,
           prompt_usado: img.promptUsado,
-          modelo_usado: modelo,
+          modelo_usado: IMAGE_MODEL,
           status: "gerada",
         })
         .select("id, imagem_gerada_url")

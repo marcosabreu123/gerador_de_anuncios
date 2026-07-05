@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { OPENAI_CHAT_MODEL } from "./models";
+import { TEXT_PROMPT_BUILDER_MODEL, TEXT_ROUTER_MODEL } from "./models";
 import {
   ESTILOS,
   FORMATOS,
@@ -79,14 +79,11 @@ O nível de produção do prompt final deve mirar algo comparável a uma arte pu
 
 Inclua restrições negativas explícitas ao final do raciocínio (incorporadas na descrição, não como lista à parte): sem aparência de template pronto, sem estética de panfleto barato, sem layout previsível, sem texto gigante genérico, sem contorno preto grosso, sem sombra pesada/exagerada, sem efeito 3D nas letras, sem amarelo neon, sem fundo vermelho saturado genérico, sem excesso de informação/texto, sem rodapé pesado, sem produto colado artificialmente no fundo, sem render 3D, sem textura plástica, sem composição amadora ou poluída, sem logo gigante, sem logo sempre obrigatoriamente no rodapé, sem assinatura desalinhada, sem logo competindo com headline/produto/preço, sem texto quebrado, sem letras ilegíveis, sem palavras separadas incorretamente, sem produto deformado, sem logo inventada, sem marca d'água, sem elementos aleatórios, sem fundo branco genérico quando não solicitado, sem distorções, sem brilho plástico, sem aparência de IA.
 
-## Variações obrigatoriamente diferentes
-Gere sempre 2 direções criativas realmente distintas para a mesma peça — nunca a mesma arte com cor trocada:
-- Variação 1: mais editorial/premium — composição mais assimétrica, mais espaço negativo, tratamento mais sofisticado e conceitual, preço presente mas discreto.
-- Variação 2: mais comercial/vendedora, ainda profissional (nunca panfleto) — composição um pouco mais direta, preço um pouco mais evidente/destacado, energia de venda mais explícita, mas com o mesmo cuidado de direção de arte, tipografia limpa e paleta profissional.
-As duas variações podem diferir em ângulo, enquadramento, posição do produto, tratamento de luz e posicionamento da logo — mas ambas devem seguir TODAS as regras acima (nunca aparência de panfleto/template em nenhuma das duas).
+## Uma única direção criativa, bem equilibrada
+Gere UMA peça só, mas pensada com cuidado: equilibre sofisticação editorial (composição elegante, espaço negativo, tratamento conceitual) com clareza comercial (produto e oferta legíveis rapidamente, preço bem visível). Não é pra escolher um extremo — é pra acertar o meio-termo profissional que vende sem parecer panfleto.
 
 ## Formato de saída — APENAS JSON, sem markdown, sem texto fora do JSON:
-{"variacoes": ["prompt completo da variação 1, em um parágrafo corrido, sem títulos, sem aspas internas, sem explicações", "prompt completo da variação 2, mesmas regras"]}`;
+{"variacoes": ["prompt completo da peça final, em um parágrafo corrido, sem títulos, sem aspas internas, sem explicações"]}`;
 
 export interface PromptGerado {
   prompt: string;
@@ -192,8 +189,7 @@ function briefingParaTexto(b: BriefingCompleto): string {
 
 // Fallback determinístico caso a OPENAI_API_KEY não esteja configurada.
 // Garante que o fluxo funciona ponta a ponta mesmo sem a IA de conversa.
-// `variante` diferencia levemente as duas imagens geradas (ver montarPrompt).
-export function montarPromptFallback(b: BriefingCompleto, variante: 1 | 2 = 1): string {
+export function montarPromptFallback(b: BriefingCompleto): string {
   const fmt = FORMATOS[b.formato];
   const estiloHint =
     b.estiloVisual === "estilo-livre"
@@ -203,14 +199,10 @@ export function montarPromptFallback(b: BriefingCompleto, variante: 1 | 2 = 1): 
         : "estilo comercial neutro e elegante";
   const nivel = NIVEIS_VISUAIS[b.nivelVisual ?? "profissional-equilibrado"].hint;
   const producao = NIVEIS_PRODUCAO_VISUAL[b.nivelProducaoVisual ?? "premium-editorial"].hint;
-  const enfoqueVariante =
-    variante === 1
-      ? "composição mais editorial, assimétrica e com bastante espaço negativo, preço presente porém discreto"
-      : "composição mais comercial e direta, ainda profissional, com o preço um pouco mais evidente";
   const c = b.conteudoAnuncio;
   const partes: string[] = [
     `Crie uma arte publicitária ${fmt.aspecto} profissional e realista para ${TIPOS_PECA[b.tipoPeca]?.label.toLowerCase() ?? "anúncio"} do produto "${b.nomeProduto}"${b.descricaoProduto ? ` (${b.descricaoProduto})` : ""},`,
-    `${estiloHint}, ${nivel}, com produção visual no nível "${producao}", e ${enfoqueVariante},`,
+    `${estiloHint}, ${nivel}, com produção visual no nível "${producao}", equilibrando sofisticação editorial com clareza comercial,`,
     b.temFotoProduto
       ? "produto real em destaque como herói da composição, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA."
       : "produto composto a partir da descrição com máximo realismo, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA.",
@@ -229,11 +221,13 @@ export function montarPromptFallback(b: BriefingCompleto, variante: 1 | 2 = 1): 
 }
 
 function montarPromptsFallback(b: BriefingCompleto): string[] {
-  return [montarPromptFallback(b, 1), montarPromptFallback(b, 2)];
+  return [montarPromptFallback(b)];
 }
 
-// Gera 2 prompts com direções criativas distintas (ver seção "Variações
-// obrigatoriamente diferentes" no SYSTEM) — nunca a mesma arte duas vezes.
+// Gera 1 prompt final, equilibrando direção editorial e clareza comercial
+// (ver seção "Uma única direção criativa" no SYSTEM). Só 1 variação por
+// geração — mantém a geração de imagem dentro do tempo de resposta da
+// function (gpt-image-2 é mais lento que o Gemini usado antes).
 export async function montarPrompt(b: BriefingCompleto): Promise<PromptsGerados> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -243,7 +237,7 @@ export async function montarPrompt(b: BriefingCompleto): Promise<PromptsGerados>
   try {
     const openai = new OpenAI({ apiKey });
     const completion = await openai.chat.completions.create({
-      model: OPENAI_CHAT_MODEL,
+      model: TEXT_PROMPT_BUILDER_MODEL,
       temperature: 0.8,
       response_format: { type: "json_object" },
       messages: [
@@ -279,7 +273,7 @@ export async function montarPromptAjuste(
   try {
     const openai = new OpenAI({ apiKey });
     const completion = await openai.chat.completions.create({
-      model: OPENAI_CHAT_MODEL,
+      model: TEXT_ROUTER_MODEL,
       temperature: 0.4,
       messages: [
         {
@@ -314,7 +308,7 @@ export async function montarPromptEdicaoDireta(pedidoUsuario: string): Promise<P
   try {
     const openai = new OpenAI({ apiKey });
     const completion = await openai.chat.completions.create({
-      model: OPENAI_CHAT_MODEL,
+      model: TEXT_ROUTER_MODEL,
       temperature: 0.5,
       messages: [
         {
@@ -357,7 +351,7 @@ export async function classificarPedidoAjuste(pedido: string): Promise<Classific
   try {
     const openai = new OpenAI({ apiKey });
     const completion = await openai.chat.completions.create({
-      model: OPENAI_CHAT_MODEL,
+      model: TEXT_ROUTER_MODEL,
       temperature: 0.2,
       response_format: { type: "json_object" },
       messages: [

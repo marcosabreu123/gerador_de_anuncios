@@ -2,9 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { debitarCredito, estornarCredito } from "@/lib/credits";
 import { montarPromptAjuste } from "@/lib/ai/prompt-builder";
-import { gerarVariacoes } from "@/lib/ai/gemini";
+import { gerarVariacoes } from "@/lib/ai/openai-image";
 import { uploadImagem } from "@/lib/storage";
-import { modeloParaEtapa } from "@/lib/ai/models";
+import { IMAGE_MODEL, qualidadeParaEtapa } from "@/lib/ai/models";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -61,12 +61,12 @@ export async function POST(request: NextRequest) {
 
     // Ajuste parte da ARTE já gerada (edição), preservando identidade.
     const base = await baixarBase64(origem.imagem_gerada_url);
-    const modelo = modeloParaEtapa("final"); // final = pro (melhor legibilidade de texto)
+    const qualidade = qualidadeParaEtapa("final"); // final = high (melhor legibilidade de texto, só 1 imagem)
 
     const imagens = await gerarVariacoes({
       prompts: [prompt],
       imagens: [base],
-      modelo,
+      qualidade,
     });
 
     const urlGerada = await uploadImagem(user.id, imagens[0], "geradas");
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         imagem_original_url: origem.imagem_original_url,
         imagem_gerada_url: urlGerada,
         prompt_usado: prompt,
-        modelo_usado: modelo,
+        modelo_usado: IMAGE_MODEL,
         status: "ajustada",
       })
       .select("id, imagem_gerada_url")

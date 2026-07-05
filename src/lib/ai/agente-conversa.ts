@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { OPENAI_CHAT_MODEL } from "./models";
+import { TEXT_AGENT_MODEL } from "./models";
 import {
   ESTILOS,
   FORMATOS,
@@ -22,7 +22,7 @@ import {
 // NOTA sobre response_format: preferimos o modo mais compatível `json_object`
 // (JSON mode) + parse defensivo com fallback, em vez de depender de um
 // schema estrito (`json_schema`) que pode retornar erro 400 dependendo do
-// modelo configurado em OPENAI_CHAT_MODEL.
+// modelo configurado em TEXT_AGENT_MODEL.
 
 const FORMATOS_TXT = (Object.keys(FORMATOS) as (keyof typeof FORMATOS)[])
   .map((f) => `"${FORMATOS[f].label}" (${FORMATOS[f].aspecto}) — chave: "${f}"`)
@@ -241,7 +241,7 @@ export async function conversar(mensagens: MensagemChat[]): Promise<ContratoAgen
   try {
     const openai = new OpenAI({ apiKey });
     const completion = await openai.chat.completions.create({
-      model: OPENAI_CHAT_MODEL,
+      model: TEXT_AGENT_MODEL,
       temperature: 0.7,
       response_format: { type: "json_object" },
       messages: [

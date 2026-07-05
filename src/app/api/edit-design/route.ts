@@ -2,9 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { debitarCredito, estornarCredito } from "@/lib/credits";
 import { montarPromptEdicaoDireta } from "@/lib/ai/prompt-builder";
-import { gerarVariacoes } from "@/lib/ai/gemini";
+import { gerarVariacoes } from "@/lib/ai/openai-image";
 import { uploadImagem } from "@/lib/storage";
-import { modeloParaEtapa } from "@/lib/ai/models";
+import { IMAGE_MODEL, qualidadeParaEtapa } from "@/lib/ai/models";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -51,12 +51,12 @@ export async function POST(request: NextRequest) {
   try {
     const { prompt } = await montarPromptEdicaoDireta(body.pedido);
     const base = await baixarBase64(body.originalUrl);
-    const modelo = modeloParaEtapa("final"); // pro — melhor legibilidade ao preservar texto existente
+    const qualidade = qualidadeParaEtapa("final"); // high — melhor legibilidade ao preservar texto existente
 
     const imagens = await gerarVariacoes({
       prompts: [prompt],
       imagens: [base],
-      modelo,
+      qualidade,
     });
 
     const { data: projeto, error: projErr } = await supabase
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
         imagem_original_url: body.originalUrl,
         imagem_gerada_url: urlGerada,
         prompt_usado: prompt,
-        modelo_usado: modelo,
+        modelo_usado: IMAGE_MODEL,
         status: "gerada",
       })
       .select("id, imagem_gerada_url")
