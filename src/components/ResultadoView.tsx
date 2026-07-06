@@ -34,6 +34,7 @@ export default function ResultadoView({
   const [fase, setFase] = useState<Fase>("digitando");
   const [resumo, setResumo] = useState("");
   const [riscoMarca, setRiscoMarca] = useState(false);
+  const [sugerirOverlay, setSugerirOverlay] = useState(false);
   const [ajustando, setAjustando] = useState(false);
   const [gerandoVariacao, setGerandoVariacao] = useState(false);
   const [erroVariacao, setErroVariacao] = useState<string | null>(null);
@@ -56,10 +57,12 @@ export default function ResultadoView({
         tipo?: string;
         resumo?: string;
         riscoDeAlterarMarca?: boolean;
+        sugerirOverlay?: boolean;
       }>(res);
       if (!res.ok) throw new Error(json.error ?? "Erro ao entender o pedido.");
       setResumo(json.resumo ?? pedido);
       setRiscoMarca(json.riscoDeAlterarMarca === true);
+      setSugerirOverlay(json.sugerirOverlay === true);
       setFase(json.tipo === "ajuste" ? "confirmando-ajuste" : "confirmando-grande");
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Erro ao entender o pedido.");
@@ -71,6 +74,7 @@ export default function ResultadoView({
     setFase("digitando");
     setResumo("");
     setRiscoMarca(false);
+    setSugerirOverlay(false);
   }
 
   async function aplicarAjuste() {
@@ -91,6 +95,7 @@ export default function ResultadoView({
       setPedido("");
       setFase("digitando");
       setRiscoMarca(false);
+      setSugerirOverlay(false);
       router.refresh(); // atualiza o saldo no header
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Erro ao ajustar.");
@@ -192,6 +197,12 @@ export default function ResultadoView({
               Vou alterar: <strong>{resumo}</strong>. Mantendo todo o resto igual
               {riscoMarca ? ", incluindo a logo e as cores da marca" : ""}.
             </p>
+            {sugerirOverlay && (
+              <p className="text-xs text-[var(--muted)] mt-2">
+                💡 Ajustes de texto, preço, contato ou logo às vezes saem mais fiéis com edição
+                direta do que com IA — por enquanto seguimos com IA aqui.
+              </p>
+            )}
             {erro && <p className="text-sm text-[var(--danger)] mt-2">{erro}</p>}
             <div className="flex gap-2 mt-3">
               <button onClick={cancelar} disabled={ajustando} className="btn btn-outline flex-1">

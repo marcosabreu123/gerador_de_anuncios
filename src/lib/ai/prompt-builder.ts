@@ -264,24 +264,21 @@ export async function montarPrompt(b: BriefingCompleto): Promise<PromptsGerados>
   }
 }
 
-// Lista de elementos protegidos por padrão em qualquer ajuste pontual — usada
-// nos prompts de sistema e nos templates de fallback (sem API disponível).
-// A lógica é sempre a mesma: só muda o que foi pedido, o resto fica intocado,
-// com a logo tratada como elemento sensível por padrão (nunca muda cor,
-// forma, proporção, nitidez ou posição da logo sem pedido explícito).
-const ELEMENTOS_PROTEGIDOS_PADRAO =
-  "composição, produto, fundo, iluminação, paleta, textos, preço, contato, endereço, tipografia, logo, cores da logo, proporção da logo, posição da logo e identidade visual";
-
+// Prompt de edição destinado ao FAL Flux Kontext — em INGLÊS (o modelo segue
+// instruções em inglês com muito mais fidelidade; em português ele às vezes
+// recriava a arte inteira, mudava textos/logo ou inventava palavras). Texto
+// que deve aparecer na arte fica entre aspas, sempre no idioma original do
+// usuário (nunca traduzido) — só a INSTRUÇÃO de edição em si é em inglês.
 function fallbackAjusteCirurgico(pedidoUsuario: string): string {
-  return `Aplique somente esta alteração: ${pedidoUsuario}. Preserve exatamente todo o restante da arte original, incluindo ${ELEMENTOS_PROTEGIDOS_PADRAO}. Não recrie a arte, não altere a marca e não mude nenhum elemento que não tenha sido explicitamente pedido.`;
+  return `Make a precise local edit only. Apply exactly this change: "${pedidoUsuario}". Any text that must appear in the image must stay exactly as written above, in its original language — do not translate, rewrite, or correct it. Preserve the original artwork exactly, including composition, product, background, lighting, color palette, existing text, price, phone number, address, typography, logo, logo colors, logo proportions, logo position and brand identity, unless explicitly requested otherwise. Do not redraw the artwork and do not change any element that was not explicitly requested.`;
 }
 
 // Reinterpreta um pedido de ajuste em linguagem natural sobre uma arte já
 // gerada, combinando com o prompt anterior para gerar um novo prompt de
-// edição CIRÚRGICA: só o elemento pedido muda, tudo o mais (incluindo logo e
-// cores da marca) é preservado explicitamente — "mantenha o resto igual" de
-// forma genérica não é suficiente, o modelo de imagem precisa da lista
-// explícita do que proteger pra não alterar logo/cores/produto por conta própria.
+// edição CIRÚRGICA em INGLÊS pro Flux Kontext: só o elemento pedido muda,
+// tudo o mais (incluindo logo e cores da marca) é preservado explicitamente
+// — "mantenha o resto igual" de forma genérica não é suficiente, o modelo
+// de imagem precisa da lista explícita do que proteger.
 export async function montarPromptAjuste(
   promptAnterior: string,
   pedidoUsuario: string,
@@ -302,25 +299,21 @@ export async function montarPromptAjuste(
       messages: [
         {
           role: "system",
-          content: `Você escreve instruções de edição cirúrgica para uma arte publicitária já gerada. Receba o prompt anterior e o pedido de ajuste do lojista. Sua tarefa é gerar UM prompt de ajuste em português, claro, direto e fiel ao pedido.
+          content: `You write precise image editing instructions for Flux Kontext, an image-to-image editing model. The user (a Brazilian shopkeeper) writes in Portuguese, but your editing instructions must be written in English, because the image model follows English instructions more reliably.
 
-Regra principal: altere somente o elemento solicitado pelo usuário. Não recrie a arte. Não reinterprete o briefing. Não melhore por conta própria. Não mude nenhum elemento que o usuário não pediu.
+You will receive the ORIGINAL image prompt (in Portuguese, describing what already exists in the artwork) and the user's adjustment request (in Portuguese). Use the original prompt only as context, translated into English, to describe what already exists in the artwork — you are not regenerating it.
 
-O prompt de ajuste deve ser curto, direto e específico, mas deve incluir preservação explícita dos elementos protegidos. Não limite a resposta a no máximo 2 frases se isso prejudicar a clareza ou a fidelidade do ajuste.
+Your task is to create a surgical edit prompt. Change only what the user explicitly asked for. Do not redesign, reinterpret, improve, or recreate the artwork.
 
-Sempre escreva o ajuste seguindo esta lógica:
-"Altere somente [elemento alvo] para [novo valor solicitado]. Preserve exatamente todo o restante da arte original, incluindo composição, produto, fundo, iluminação, cores, textos, preço, telefone, endereço, tipografia, logo, cores da logo, proporção da logo, posição da logo e identidade visual, exceto se algum desses elementos tiver sido explicitamente citado pelo usuário como alvo da mudança."
+Any text that must appear in the image must remain exactly in the original language and spelling the user provided, inside quotation marks (for example: add the text exactly as written: "BRASIL x NORUEGA"). Do not translate, rewrite, correct, summarize, or modify text that appears in the artwork, existing or new.
 
-Se o ajuste for na logo, preserve tudo da logo que não foi pedido:
-- se pedir para diminuir a logo, não alterar cor, formato ou estilo;
-- se pedir para mudar posição da logo, não alterar cor, tamanho ou formato;
-- se pedir para trocar a cor da logo, não alterar tamanho, posição ou formato.
+Always preserve the original artwork exactly, including composition, background, lighting, colors, typography, product, logo, logo colors, logo proportions, logo position, brand identity, price, phone number, address, and all existing text, unless the user explicitly requested changing one of those elements.
 
-Se o ajuste for em cor de fundo, luz, contraste ou paleta, deixe explícito que a logo e os textos devem manter suas cores originais.
+When adding a new element, specify exact position, scale, and visual priority using concrete words: small, discreet, secondary, aligned, below, above, left, right, centered, corner.
 
-Se o ajuste for em texto, preserve exatamente os demais textos e números. Nunca invente, corrija ou substitua informações que o usuário não pediu.
+Avoid vague creative language such as "abstract", "sophisticated elements", "adapt the composition", "integrate into the universe", or "redesign". Prefer concrete editing instructions.
 
-A saída deve ser apenas o prompt final de ajuste, sem aspas e sem explicações.`,
+Return only the final edit prompt in English (with any visual text kept in its original language inside quotes). No explanations, no surrounding quotes around the whole output.`,
         },
         {
           role: "user",
@@ -341,8 +334,8 @@ A saída deve ser apenas o prompt final de ajuste, sem aspas e sem explicações
 // fora do app, sem briefing/prompt anterior nosso) e pede uma mudança em
 // linguagem natural. Diferente de montarPromptAjuste, aqui não existe
 // "prompt anterior" — só a imagem em si e o pedido. Mesma exigência de
-// edição cirúrgica: preservar produto, textos, contato e identidade visual
-// (incluindo logo) por padrão.
+// edição cirúrgica em INGLÊS pro Flux Kontext: preservar produto, textos,
+// contato e identidade visual (incluindo logo) por padrão.
 export async function montarPromptEdicaoDireta(pedidoUsuario: string): Promise<PromptGerado> {
   const apiKey = process.env.OPENAI_API_KEY;
   const fallback = fallbackAjusteCirurgico(pedidoUsuario);
@@ -357,23 +350,26 @@ export async function montarPromptEdicaoDireta(pedidoUsuario: string): Promise<P
       messages: [
         {
           role: "system",
-          content: `Você escreve instruções de edição de imagem para um modelo de geração. O lojista enviou um design pronto, feito fora do app, e pediu uma mudança em linguagem simples. Sua tarefa é aplicar exatamente a mudança pedida e preservar todo o restante da imagem original.
+          content: `You write precise image editing instructions for Flux Kontext, an image-to-image editing model. A shopkeeper uploaded a ready-made design (made outside this app) and wrote a change request in Portuguese. Your editing instructions must be written in English, because the image model follows English instructions more reliably.
 
-A edição deve ser cirúrgica:
-- alterar somente o elemento solicitado;
-- preservar composição original;
-- preservar produto;
-- preservar todos os textos não citados;
-- preservar preço, telefone, endereço e CTA;
-- preservar logo, cores da logo, forma da logo, proporção da logo, posição da logo e legibilidade da logo;
-- preservar tipografia, cores, iluminação, fundo, estilo e identidade visual, salvo se o usuário pedir explicitamente mudar algum desses itens.
+Your task is to create a surgical edit prompt. Apply exactly the change requested. Do not redesign, reinterpret, improve, or recreate the artwork.
 
-Não redesenhe a arte inteira. Não recrie o layout. Não troque a identidade visual. Não mude a marca. Não altere a cor da logo por consequência de ajustes no fundo, contraste, luz ou paleta.
+Any text that must appear in the image must remain exactly in the original language and spelling the user provided, inside quotation marks. Do not translate, rewrite, correct, summarize, or modify text that appears in the artwork, existing or new.
 
-Formato da resposta:
-"Aplique somente esta alteração: [pedido específico]. Preserve exatamente todo o restante do design original, incluindo produto, textos, preço, contato, endereço, composição, fundo, iluminação, tipografia, logo, cores da logo, proporção da logo, posição da logo e identidade visual."
+The edit must be surgical:
+- change only the requested element;
+- preserve the original composition;
+- preserve the product;
+- preserve all text that was not mentioned;
+- preserve price, phone number, address and CTA;
+- preserve the logo, logo colors, logo shape, logo proportions, logo position and logo legibility;
+- preserve typography, colors, lighting, background, style and brand identity, unless the user explicitly asked to change one of those.
 
-A saída deve ser apenas o prompt final, sem aspas e sem explicações.`,
+Do not redraw the whole artwork. Do not recreate the layout. Do not change the brand identity. Do not change the logo color as a side effect of background, contrast, light or palette adjustments.
+
+When adding a new element, specify exact position, scale and visual priority using concrete words: small, discreet, secondary, aligned, below, above, left, right, centered, corner.
+
+Return only the final edit prompt in English (with any visual text kept in its original language inside quotes). No explanations.`,
         },
         { role: "user", content: `PEDIDO DE EDIÇÃO:\n${pedidoUsuario}` },
       ],
@@ -396,6 +392,11 @@ export interface ClassificacaoAjuste {
   elementosProtegidos: string[]; // tudo que deve permanecer igual
   riscoDeAlterarMarca: boolean; // pedido envolve logo, cores da marca ou identidade visual
   precisaConfirmacao: boolean; // ambíguo ou com risco de mexer na marca sem pedido explícito
+  // Pedidos de texto exato/preço/contato/bandeira/ícone/logo tendem a ficar
+  // mais precisos com um overlay do app (HTML/CSS/SVG) do que com edição
+  // generativa, que pode reinterpretar ou distorcer esses elementos. Por
+  // enquanto é só um sinal — não existe overlay implementado ainda.
+  sugerirOverlay: boolean;
 }
 
 // Elementos sempre protegidos por padrão numa classificação — a logo entra
@@ -404,6 +405,12 @@ export interface ClassificacaoAjuste {
 const ELEMENTOS_PROTEGIDOS_BASE = ["logo", "cores da logo", "proporção da logo", "posição da logo", "produto", "textos existentes", "preço", "contato"];
 const PALAVRAS_RISCO_MARCA = /\b(logo|logotipo|marca|identidade visual|paleta)\b/i;
 const PALAVRAS_NOVA_CRIACAO = /\b(refaz|refazer|refeito|n[aã]o gostei|cria outra|completamente diferente|come[cç]a de novo|do zero)\b/i;
+// Texto exato, preço, contato, bandeiras/ícones e logo são elementos onde um
+// overlay do app (HTML/CSS/SVG) tende a ser mais preciso que edição
+// generativa — que pode reinterpretar, redesenhar ou distorcer esse tipo de
+// elemento em vez de só posicioná-lo.
+const PALAVRAS_OVERLAY =
+  /\b(texto|frase|palavra|escrit[ao]|pre[cç]o|telefone|whatsapp|endere[cç]o|contato|bandeira|[ií]cone|logo|logotipo)\b/i;
 
 // Decide se um pedido em linguagem natural sobre uma arte já gerada é um
 // AJUSTE pontual (chamar /api/adjust) ou parece uma NOVA CRIAÇÃO disfarçada
@@ -420,6 +427,7 @@ export async function classificarPedidoAjuste(pedido: string): Promise<Classific
       elementosProtegidos: ELEMENTOS_PROTEGIDOS_BASE,
       riscoDeAlterarMarca,
       precisaConfirmacao: riscoDeAlterarMarca,
+      sugerirOverlay: PALAVRAS_OVERLAY.test(pedido),
     };
   }
 
@@ -459,6 +467,7 @@ Responda em JSON: {"tipo": "ajuste"|"nova-criacao"|"ambiguo", "resumo": "frase c
       elementosProtegidos: ELEMENTOS_PROTEGIDOS_BASE,
       riscoDeAlterarMarca: false,
       precisaConfirmacao: false,
+      sugerirOverlay: PALAVRAS_OVERLAY.test(pedido),
     };
   }
 
@@ -469,6 +478,7 @@ Responda em JSON: {"tipo": "ajuste"|"nova-criacao"|"ambiguo", "resumo": "frase c
     elementosProtegidos: ELEMENTOS_PROTEGIDOS_BASE,
     riscoDeAlterarMarca: false,
     precisaConfirmacao: false,
+    sugerirOverlay: PALAVRAS_OVERLAY.test(pedido),
   };
   if (!texto) return fallbackClassificacao;
   try {
@@ -483,7 +493,8 @@ Responda em JSON: {"tipo": "ajuste"|"nova-criacao"|"ambiguo", "resumo": "frase c
       : ELEMENTOS_PROTEGIDOS_BASE;
     const riscoDeAlterarMarca = j.riscoDeAlterarMarca === true;
     const precisaConfirmacao = j.precisaConfirmacao === true || tipo === "ambiguo" || riscoDeAlterarMarca;
-    return { tipo, resumo, elementosAlvo, elementosProtegidos, riscoDeAlterarMarca, precisaConfirmacao };
+    const sugerirOverlay = PALAVRAS_OVERLAY.test(pedido);
+    return { tipo, resumo, elementosAlvo, elementosProtegidos, riscoDeAlterarMarca, precisaConfirmacao, sugerirOverlay };
   } catch (e) {
     // Falha de PARSE (conteúdo não é JSON válido) é um erro diferente de
     // falha de API — nunca deixa o texto cru do modelo vazar pro chamador.
