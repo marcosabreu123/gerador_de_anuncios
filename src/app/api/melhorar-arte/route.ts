@@ -5,7 +5,7 @@ import { montarPromptMelhorarArteExistente } from "@/lib/ai/prompt-builder";
 import { gerarVariacoes } from "@/lib/ai/openai-image";
 import { uploadImagem } from "@/lib/storage";
 import { IMAGE_MODEL, qualidadeParaEtapa } from "@/lib/ai/models";
-import type { EstiloDesejadoArteExistente, IntencaoArteExistente } from "@/lib/types";
+import type { DirecaoTransformacao, ModoTransformacao } from "@/lib/types";
 
 export const runtime = "nodejs";
 // Gera com gpt-image-2 a partir de 1 imagem de entrada (a arte enviada) —
@@ -14,16 +14,17 @@ export const runtime = "nodejs";
 // cirúrgico, então não depende de ENABLE_FLUX_EDIT).
 export const maxDuration = 90;
 
-// Fluxo rápido "melhorar arte existente" / "criar nova variação": o lojista
-// já tem uma arte pronta (feita aqui ou fora do app) e só quer uma versão
-// nova/melhorada dela, sem passar pelo briefing completo. Diferente do
-// ajuste cirúrgico (/api/adjust): aqui o objetivo é uma peça nova inspirada
-// na enviada, não uma mudança pontual preservando quase tudo.
+// Fluxo rápido "transformar arte existente" (melhorar OU criar nova
+// versão): o lojista já tem uma arte pronta (feita aqui ou fora do app) e
+// só quer uma versão nova/melhorada dela, sem passar pelo briefing
+// completo. Diferente do ajuste cirúrgico (/api/adjust, que já cobre
+// trocar um detalhe específico): aqui o objetivo é uma peça nova ou
+// melhorada inspirada na enviada, nunca uma mudança pontual.
 
 interface Body {
   imagemOriginal: string;
-  intencao: IntencaoArteExistente;
-  estiloDesejado?: EstiloDesejadoArteExistente;
+  modoTransformacao: ModoTransformacao;
+  direcao?: DirecaoTransformacao;
   instrucaoUsuario?: string;
 }
 
@@ -48,22 +49,22 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
   }
-  if (!body.imagemOriginal || !body.intencao) {
+  if (!body.imagemOriginal || !body.modoTransformacao) {
     return NextResponse.json({ error: "Envie a arte e escolha o que quer fazer com ela." }, { status: 400 });
   }
 
-  const saldo = await debitarCredito(
-    user.id,
-    body.intencao === "melhorar_arte" ? "Melhoria de arte existente" : "Nova variação de arte",
-  );
+  const nomeProjeto =
+    body.modoTransformacao === "melhoria_conservadora" ? "Melhoria de arte existente" : "Nova versão de arte";
+
+  const saldo = await debitarCredito(user.id, nomeProjeto);
   if (saldo < 0) {
     return NextResponse.json({ error: "Você está sem créditos.", semCredito: true }, { status: 402 });
   }
 
   try {
     const { prompt } = await montarPromptMelhorarArteExistente({
-      intencao: body.intencao,
-      estiloDesejado: body.estiloDesejado,
+      modoTransformacao: body.modoTransformacao,
+      direcao: body.direcao,
       instrucaoUsuario: body.instrucaoUsuario,
     });
     const base = await baixarBase64(body.imagemOriginal);
@@ -73,8 +74,6 @@ export async function POST(request: NextRequest) {
       qualidade: qualidadeParaEtapa("rascunho"),
     });
 
-    const tipoFluxo = body.intencao === "melhorar_arte" ? "melhorar_arte_existente" : "nova_variacao_existente";
-    const nomeProjeto = body.intencao === "melhorar_arte" ? "Melhoria de arte existente" : "Nova variação de arte";
     const { data: projeto, error: projErr } = await supabase
       .from("projects")
       .insert({
@@ -83,10 +82,10 @@ export async function POST(request: NextRequest) {
         tipo_arte: nomeProjeto,
         status: "concluido",
         conversa: {
-          tipoFluxo,
+          tipoFluxo: "transformar_arte_existente",
           imagemOriginal: body.imagemOriginal,
-          intencao: body.intencao,
-          estiloDesejado: body.estiloDesejado ?? null,
+          modoTransformacao: body.modoTransformacao,
+          direcao: body.direcao ?? null,
           instrucaoUsuario: body.instrucaoUsuario ?? null,
         },
       })
@@ -112,7 +111,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ projectId: projeto.id, saldo });
   } catch (e) {
-    await estornarCredito(user.id, "Estorno: falha ao melhorar/variar arte");
+    await estornarCredito(user.id, "Estorno: falha ao transformar arte");
     const msg = e instanceof Error ? e.message : "Erro ao gerar a nova versão.";
     console.error("[/api/melhorar-arte]", e);
     return NextResponse.json({ error: msg }, { status: 500 });

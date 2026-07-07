@@ -330,32 +330,39 @@ export interface BriefingCompleto {
 // sinalizar `prontoParaGerar: true`.
 export type BriefingParcial = Partial<BriefingCompleto>;
 
-// ==== Melhorar/variar uma arte existente (fluxo rápido, sem briefing) ====
+// ==== Transformar uma arte existente (fluxo rápido, sem briefing) ====
 // Diferente do fluxo de criação completa (/novo) e do ajuste cirúrgico
-// pós-geração (/api/adjust): aqui o lojista já tem uma arte pronta (feita
-// aqui ou fora do app) e só quer uma versão nova/melhorada dela, sem
-// responder o briefing inteiro de novo.
-export type TipoFluxo =
-  | "criacao_completa"
-  | "ajuste_pontual"
-  | "melhorar_arte_existente"
-  | "nova_variacao_existente";
+// pós-geração (/api/adjust, já existente pra trocar um detalhe específico):
+// aqui o lojista já tem uma arte pronta (feita aqui ou fora do app) e quer
+// uma versão nova/melhorada dela, sem responder o briefing inteiro de novo
+// e sem duplicar o fluxo de ajuste pontual (que continua sendo o lugar
+// certo pra "só trocar o preço", "só mudar o texto", etc.).
+export type TipoFluxo = "criacao_completa" | "ajuste_pontual" | "transformar_arte_existente";
 
-export type IntencaoArteExistente = "melhorar_arte" | "nova_variacao";
+// melhoria_conservadora: mantém layout/estrutura, só refina acabamento.
+// nova_versao_criativa: mantém as informações, mas recria o design do zero.
+export type ModoTransformacao = "melhoria_conservadora" | "nova_versao_criativa";
 
-export type EstiloDesejadoArteExistente =
-  | "mesma_ideia_melhorada"
-  | "premium"
+export type GrauLiberdadeCriativa = "baixo" | "alto";
+
+// Direções rápidas oferecidas após escolher o modo — o mesmo tipo cobre as
+// duas telas (cada uma mostra um subconjunto diferente de opções).
+export type DirecaoTransformacao =
+  | "profissional"
   | "clean"
+  | "premium"
   | "chamativa"
-  | "minimalista"
-  | "luxo"
+  | "moderna"
+  | "divertida"
+  | "legibilidade"
+  | "reduzir_poluicao"
+  | "ia_decide"
   | "personalizado";
 
 export interface ArteExistenteRequest {
   imagemOriginal: string;
-  intencao: IntencaoArteExistente;
-  estiloDesejado?: EstiloDesejadoArteExistente;
+  modoTransformacao: ModoTransformacao;
+  direcao?: DirecaoTransformacao;
   instrucaoUsuario?: string;
   preservarTextos?: boolean;
   preservarLogo?: boolean;

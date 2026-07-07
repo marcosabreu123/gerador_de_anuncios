@@ -4,67 +4,62 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { lerRespostaJSON } from "@/lib/fetch-json";
-import type { EstiloDesejadoArteExistente, IntencaoArteExistente } from "@/lib/types";
+import type { DirecaoTransformacao, ModoTransformacao } from "@/lib/types";
 
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
 
 // Fluxo rápido: o lojista já tem uma arte pronta (feita aqui ou fora do
-// app) e só quer uma versão nova/melhorada dela — sem passar pelo
-// briefing completo do fluxo de criação. Diferente do ajuste pontual
-// pós-geração: aqui a IA cria uma peça nova inspirada na enviada.
-type Fase = "upload" | "intencao" | "instrucao" | "confirmando" | "gerando";
+// app) e só quer uma versão melhorada OU uma versão nova dela — sem passar
+// pelo briefing completo do fluxo de criação. Editar um detalhe específico
+// (preço, texto, logo, fundo...) já tem seu próprio fluxo na Home — não
+// duplicamos essa opção aqui.
+type Fase = "upload" | "modo" | "direcao" | "instrucao" | "confirmando";
 
-interface Opcao {
+interface OpcaoDirecao {
   label: string;
-  intencao: IntencaoArteExistente;
-  estiloDesejado?: EstiloDesejadoArteExistente;
-  pedeInstrucao?: boolean;
-  placeholderInstrucao?: string;
+  valor: DirecaoTransformacao;
 }
 
-const OPCOES: Opcao[] = [
-  { label: "Melhorar mantendo a mesma ideia", intencao: "melhorar_arte", estiloDesejado: "mesma_ideia_melhorada" },
-  { label: "Criar uma nova variação parecida", intencao: "nova_variacao" },
-  { label: "Deixar mais premium", intencao: "melhorar_arte", estiloDesejado: "premium" },
-  { label: "Deixar mais clean", intencao: "melhorar_arte", estiloDesejado: "clean" },
-  { label: "Deixar mais chamativa", intencao: "melhorar_arte", estiloDesejado: "chamativa" },
-  {
-    label: "Trocar o estilo visual",
-    intencao: "melhorar_arte",
-    estiloDesejado: "personalizado",
-    pedeInstrucao: true,
-    placeholderInstrucao: "Que estilo você imagina para essa arte? (ex: mais luxuoso, mais colorido, minimalista...)",
-  },
-  {
-    label: "Ajuste personalizado",
-    intencao: "melhorar_arte",
-    estiloDesejado: "personalizado",
-    pedeInstrucao: true,
-    placeholderInstrucao: "O que você quer mudar ou melhorar nessa arte?",
-  },
+const DIRECOES_MELHORAR: OpcaoDirecao[] = [
+  { label: "Mais profissional", valor: "profissional" },
+  { label: "Mais clean", valor: "clean" },
+  { label: "Mais premium", valor: "premium" },
+  { label: "Melhorar legibilidade", valor: "legibilidade" },
+  { label: "Reduzir poluição visual", valor: "reduzir_poluicao" },
+  { label: "Deixar a IA decidir", valor: "ia_decide" },
 ];
 
-// Aviso leve (não bloqueia) quando o pedido escrito parece na verdade um
-// ajuste pontual — esse fluxo cria uma peça nova, não edita um elemento só.
+const DIRECOES_NOVA_VERSAO: OpcaoDirecao[] = [
+  { label: "Mais premium", valor: "premium" },
+  { label: "Mais clean", valor: "clean" },
+  { label: "Mais chamativa", valor: "chamativa" },
+  { label: "Mais moderna", valor: "moderna" },
+  { label: "Mais divertida", valor: "divertida" },
+  { label: "Deixar a IA decidir", valor: "ia_decide" },
+  { label: "Personalizado", valor: "personalizado" },
+];
+
+// Aviso leve quando o pedido escrito parece na verdade um ajuste pontual —
+// esse fluxo cria uma peça nova/melhorada, não edita um elemento só (isso
+// já existe no fluxo de "Editar um detalhe de uma arte").
 const PALAVRAS_AJUSTE_PONTUAL =
   /\b(s[oó]\s+(troca|muda|altera|remove|tira|ajusta|diminui|aumenta|coloca|adiciona)|diminui(r)?\s+a\s+logo|aumenta(r)?\s+a\s+logo|remove(r)?\s+(esse|este|o|a)\s+(texto|selo|elemento)|troca(r)?\s+(o|a)\s+(pre[cç]o|texto|cor|telefone|endere[cç]o|whatsapp))\b/i;
 
-function resumoConfirmacao(opcao: Opcao, instrucao: string): string {
-  if (opcao.pedeInstrucao) {
-    return `Vou criar uma nova versão baseada nessa arte aplicando: "${instrucao.trim()}". Mantendo produto, marca, textos principais e informações comerciais. Posso gerar?`;
+function resumoConfirmacao(modo: ModoTransformacao, direcao: DirecaoTransformacao | null, instrucao: string): string {
+  if (direcao === "personalizado") {
+    return `Vou criar uma nova versão baseada nessa arte aplicando: "${instrucao.trim()}". Mantendo produto, marca, preços e informações comerciais. Posso gerar?`;
   }
-  switch (opcao.estiloDesejado) {
-    case "premium":
-      return "Vou criar uma nova versão mais premium baseada nessa arte, mantendo as informações principais. Posso gerar?";
-    case "clean":
-      return "Vou criar uma nova versão mais clean baseada nessa arte, mantendo as informações principais. Posso gerar?";
-    case "chamativa":
-      return "Vou criar uma nova versão mais chamativa baseada nessa arte, mantendo as informações principais. Posso gerar?";
-    case "mesma_ideia_melhorada":
-      return "Vou criar uma nova versão baseada nessa arte, mantendo produto, marca, textos principais e informações comerciais, mas melhorando composição, visual e acabamento. Posso gerar?";
-    default:
-      return "Vou criar uma nova variação parecida com essa arte, mantendo produto, marca e informações principais, mas com composição e estilo diferentes. Posso gerar?";
+  const rotulo =
+    DIRECOES_MELHORAR.find((d) => d.valor === direcao)?.label.toLowerCase() ??
+    DIRECOES_NOVA_VERSAO.find((d) => d.valor === direcao)?.label.toLowerCase();
+  if (modo === "melhoria_conservadora") {
+    return rotulo && direcao !== "ia_decide"
+      ? `Vou melhorar essa arte deixando-a ${rotulo}, mantendo a mesma estrutura, produto, marca, textos e informações comerciais. Posso gerar?`
+      : "Vou melhorar essa arte mantendo a mesma estrutura, produto, marca, textos e informações comerciais, mas com acabamento mais profissional. Posso gerar?";
   }
+  return rotulo && direcao !== "ia_decide"
+    ? `Vou criar uma nova versão ${rotulo} dessa arte — mesmas informações, mas um design diferente. Posso gerar?`
+    : "Vou criar uma nova versão dessa arte com um design diferente, mantendo as mesmas informações. Posso gerar?";
 }
 
 export default function MelhorarArteWizard() {
@@ -76,7 +71,8 @@ export default function MelhorarArteWizard() {
   const [preview, setPreview] = useState<string | null>(null);
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [enviandoFoto, setEnviandoFoto] = useState(false);
-  const [opcaoEscolhida, setOpcaoEscolhida] = useState<Opcao | null>(null);
+  const [modo, setModo] = useState<ModoTransformacao | null>(null);
+  const [direcao, setDirecao] = useState<DirecaoTransformacao | null>(null);
   const [instrucao, setInstrucao] = useState("");
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -103,7 +99,7 @@ export default function MelhorarArteWizard() {
 
       const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
       setOriginalUrl(data.publicUrl);
-      setFase("intencao");
+      setFase("modo");
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Falha ao enviar a arte.");
       setPreview(null);
@@ -112,10 +108,21 @@ export default function MelhorarArteWizard() {
     }
   }
 
-  function escolherOpcao(opcao: Opcao) {
-    setOpcaoEscolhida(opcao);
+  function escolherModo(escolhido: ModoTransformacao) {
+    setModo(escolhido);
+    setDirecao(null);
+    setInstrucao("");
     setErro(null);
-    setFase(opcao.pedeInstrucao ? "instrucao" : "confirmando");
+    setFase("direcao");
+  }
+
+  function escolherDirecao(opcao: OpcaoDirecao) {
+    setDirecao(opcao.valor);
+    if (opcao.valor === "personalizado") {
+      setFase("instrucao");
+    } else {
+      setFase("confirmando");
+    }
   }
 
   function confirmarInstrucao() {
@@ -124,7 +131,7 @@ export default function MelhorarArteWizard() {
   }
 
   async function gerar() {
-    if (!originalUrl || !opcaoEscolhida) return;
+    if (!originalUrl || !modo) return;
     setGerando(true);
     setErro(null);
     try {
@@ -133,12 +140,12 @@ export default function MelhorarArteWizard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           imagemOriginal: originalUrl,
-          intencao: opcaoEscolhida.intencao,
-          estiloDesejado: opcaoEscolhida.estiloDesejado,
-          instrucaoUsuario: opcaoEscolhida.pedeInstrucao ? instrucao.trim() : undefined,
+          modoTransformacao: modo,
+          direcao: direcao ?? undefined,
+          instrucaoUsuario: direcao === "personalizado" ? instrucao.trim() : undefined,
         }),
       });
-      const json = await lerRespostaJSON<{ error?: string; projectId?: string; semCredito?: boolean }>(res);
+      const json = await lerRespostaJSON<{ error?: string; projectId?: string }>(res);
       if (!res.ok || !json.projectId) throw new Error(json.error ?? "Erro ao gerar a nova versão.");
       router.push(`/resultado/${json.projectId}`);
     } catch (err) {
@@ -147,22 +154,22 @@ export default function MelhorarArteWizard() {
     }
   }
 
-  const pareceAjustePontual = opcaoEscolhida?.pedeInstrucao && PALAVRAS_AJUSTE_PONTUAL.test(instrucao);
+  const pareceAjustePontual = direcao === "personalizado" && PALAVRAS_AJUSTE_PONTUAL.test(instrucao);
 
   return (
     <div className="flex flex-col flex-1 gap-5">
       <div>
-        <h2 className="text-lg font-bold">Melhorar uma arte pronta</h2>
+        <h2 className="text-lg font-bold">Melhorar ou recriar uma arte</h2>
         <p className="text-sm text-[var(--muted)] mt-1">
-          Envie uma arte que você já tem e crie uma versão mais profissional, refinada ou com novo
-          estilo — sem passar pelo fluxo completo de criação.
+          Envie uma arte pronta para melhorar o visual ou criar uma nova versão com as mesmas
+          informações — sem passar pelo fluxo completo de criação.
         </p>
       </div>
 
       <button
         type="button"
         onClick={() => fileRef.current?.click()}
-        disabled={fase === "gerando"}
+        disabled={gerando}
         className="card w-full aspect-square flex flex-col items-center justify-center gap-2 border-dashed overflow-hidden"
       >
         {preview ? (
@@ -179,44 +186,77 @@ export default function MelhorarArteWizard() {
       {originalUrl && !enviandoFoto && <p className="text-sm text-green-700">Arte enviada ✓</p>}
       <input ref={fileRef} type="file" accept="image/*" onChange={onSelecionarArte} className="hidden" />
 
-      {fase === "intencao" && (
-        <div className="card p-4">
+      {fase === "modo" && (
+        <div className="card p-4 flex flex-col gap-3">
           <h3 className="font-semibold text-sm">O que você quer fazer com essa arte?</h3>
+
+          <button
+            type="button"
+            onClick={() => escolherModo("melhoria_conservadora")}
+            className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl"
+          >
+            <p className="font-semibold text-sm">Melhorar esta arte</p>
+            <p className="text-xs text-[var(--muted)] mt-0.5">
+              Deixar mais profissional mantendo a mesma ideia e estrutura.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => escolherModo("nova_versao_criativa")}
+            className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl"
+          >
+            <p className="font-semibold text-sm">Criar uma nova versão</p>
+            <p className="text-xs text-[var(--muted)] mt-0.5">
+              Usar as mesmas informações, mas criar um novo design.
+            </p>
+          </button>
+        </div>
+      )}
+
+      {fase === "direcao" && modo && (
+        <div className="card p-4">
+          <h3 className="font-semibold text-sm">
+            {modo === "melhoria_conservadora" ? "Quer melhorar em qual direção?" : "Qual direção você quer para essa nova versão?"}
+          </h3>
           <div className="flex flex-col gap-2 mt-3">
-            {OPCOES.map((opcao) => (
+            {(modo === "melhoria_conservadora" ? DIRECOES_MELHORAR : DIRECOES_NOVA_VERSAO).map((opcao) => (
               <button
-                key={opcao.label}
+                key={opcao.valor}
                 type="button"
-                onClick={() => escolherOpcao(opcao)}
+                onClick={() => escolherDirecao(opcao)}
                 className="text-sm font-medium bg-[var(--accent-soft)] px-4 py-2.5 rounded-full text-left"
               >
                 {opcao.label}
               </button>
             ))}
           </div>
+          <button type="button" onClick={() => setFase("modo")} className="text-xs text-[var(--muted)] underline mt-3">
+            Voltar
+          </button>
         </div>
       )}
 
-      {fase === "instrucao" && opcaoEscolhida && (
+      {fase === "instrucao" && (
         <div className="card p-4">
-          <h3 className="font-semibold text-sm">{opcaoEscolhida.label}</h3>
+          <h3 className="font-semibold text-sm">Descreva a nova direção que você imagina</h3>
           <textarea
             className="input min-h-[80px] resize-none mt-3"
             value={instrucao}
             onChange={(e) => setInstrucao(e.target.value)}
-            placeholder={opcaoEscolhida.placeholderInstrucao}
+            placeholder="Ex: um visual mais colorido e divertido, com fundo ilustrado"
           />
           {pareceAjustePontual && (
             <p className="text-xs text-[var(--muted)] mt-2">
-              💡 Isso parece um ajuste pontual (mudar só um ponto específico). Se for isso, o{" "}
+              💡 Isso parece um ajuste pontual (mudar só um ponto específico). O{" "}
               <a href="/editar" className="underline">
-                fluxo de edição de design
+                fluxo de editar um detalhe da arte
               </a>{" "}
-              costuma ficar mais preciso. Mas se quiser mesmo uma versão nova, pode continuar.
+              costuma ficar mais preciso pra isso. Mas se quiser mesmo uma versão nova, pode continuar.
             </p>
           )}
           <div className="flex gap-2 mt-3">
-            <button type="button" onClick={() => setFase("intencao")} className="btn btn-outline flex-1">
+            <button type="button" onClick={() => setFase("direcao")} className="btn btn-outline flex-1">
               Voltar
             </button>
             <button
@@ -231,14 +271,14 @@ export default function MelhorarArteWizard() {
         </div>
       )}
 
-      {fase === "confirmando" && opcaoEscolhida && (
+      {fase === "confirmando" && modo && (
         <div className="card p-4">
-          <p className="text-sm">{resumoConfirmacao(opcaoEscolhida, instrucao)}</p>
+          <p className="text-sm">{resumoConfirmacao(modo, direcao, instrucao)}</p>
           {erro && <p className="text-sm text-[var(--danger)] mt-2">{erro}</p>}
           <div className="flex gap-2 mt-3">
             <button
               type="button"
-              onClick={() => setFase(opcaoEscolhida.pedeInstrucao ? "instrucao" : "intencao")}
+              onClick={() => setFase(direcao === "personalizado" ? "instrucao" : "direcao")}
               disabled={gerando}
               className="btn btn-outline flex-1"
             >

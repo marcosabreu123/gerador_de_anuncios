@@ -7,10 +7,10 @@ import { uploadImagem } from "@/lib/storage";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
 import type {
   BriefingCompleto,
-  EstiloDesejadoArteExistente,
+  DirecaoTransformacao,
   Formato,
   ImagemAnexo,
-  IntencaoArteExistente,
+  ModoTransformacao,
   TipoFluxo,
 } from "@/lib/types";
 
@@ -70,18 +70,17 @@ export async function POST(request: NextRequest) {
     briefing?: BriefingCompleto;
     imagens?: ImagemAnexo[];
     imagemOriginal?: string;
-    intencao?: IntencaoArteExistente;
-    estiloDesejado?: EstiloDesejadoArteExistente;
+    modoTransformacao?: ModoTransformacao;
+    direcao?: DirecaoTransformacao;
     instrucaoUsuario?: string;
   };
 
-  // Fluxo "melhorar/nova variação de arte existente" não tem briefing —
-  // reaplica o mesmo prompt-builder sobre a mesma arte original enviada.
-  const ehArteExistente =
-    conversa.tipoFluxo === "melhorar_arte_existente" || conversa.tipoFluxo === "nova_variacao_existente";
+  // Fluxo "transformar arte existente" não tem briefing — reaplica o mesmo
+  // prompt-builder sobre a mesma arte original enviada.
+  const ehArteExistente = conversa.tipoFluxo === "transformar_arte_existente";
 
   if (ehArteExistente) {
-    if (!conversa.imagemOriginal || !conversa.intencao) {
+    if (!conversa.imagemOriginal || !conversa.modoTransformacao) {
       return NextResponse.json({ error: "Arte original não encontrada." }, { status: 400 });
     }
     const saldo = await debitarCredito(user.id, "Nova variação");
@@ -90,8 +89,8 @@ export async function POST(request: NextRequest) {
     }
     try {
       const { prompt } = await montarPromptMelhorarArteExistente({
-        intencao: conversa.intencao,
-        estiloDesejado: conversa.estiloDesejado,
+        modoTransformacao: conversa.modoTransformacao,
+        direcao: conversa.direcao,
         instrucaoUsuario: conversa.instrucaoUsuario,
       });
       const base = await baixarBase64({ tipo: "produto", url: conversa.imagemOriginal });

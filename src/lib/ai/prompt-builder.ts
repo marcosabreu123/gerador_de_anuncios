@@ -9,6 +9,7 @@ import {
   TIPOS_PECA,
   type ArteExistenteRequest,
   type BriefingCompleto,
+  type DirecaoTransformacao,
 } from "@/lib/types";
 
 // A "IA de conversa" transforma o briefing coletado pelo agente
@@ -691,65 +692,109 @@ Responda em JSON: {"tipo": "ajuste"|"nova-criacao"|"ambiguo", "resumo": "frase c
   }
 }
 
-// ==== Melhorar/variar uma arte existente (fluxo rápido, sem briefing) ====
-// Diferente do ajuste cirúrgico (montarPromptAjuste*): aqui a intenção é
-// criar uma NOVA versão melhorada da arte enviada, preservando a ideia
-// central, produto, marca e informações comerciais — não travar em um único
-// elemento pontual. Pedidos claramente pontuais são sinalizados à parte
-// (ver pareceAjustePontual) pra sugerir o fluxo de ajuste em vez deste.
+// ==== Transformar uma arte existente (fluxo rápido, sem briefing) ====
+// Diferente do ajuste cirúrgico (montarPromptAjuste*, já existente pra
+// trocar um detalhe específico como preço/texto/logo): aqui a intenção é
+// criar uma versão MELHORADA (mesma estrutura, mais polida) ou uma versão
+// NOVA (mesmas informações, design diferente) da arte enviada. Pedidos
+// claramente pontuais são sinalizados à parte (ver pareceAjustePontual)
+// pra redirecionar pro fluxo de edição de detalhe em vez deste.
 const PALAVRAS_AJUSTE_PONTUAL =
   /\b(s[oó]\s+(troca|muda|altera|remove|tira|ajusta|diminui|aumenta|coloca|adiciona)|diminui(r)?\s+a\s+logo|aumenta(r)?\s+a\s+logo|move(r)?\s+a\s+logo|remove(r)?\s+(esse|este|o|a)\s+(texto|selo|elemento)|troca(r)?\s+(o|a)\s+(pre[cç]o|texto|cor|telefone|endere[cç]o|whatsapp))\b/i;
 
-// Heurística leve (não bloqueante) pra avisar o lojista quando o pedido no
-// fluxo de "melhorar/nova variação" parece na verdade um ajuste pontual —
-// esse fluxo gera uma peça nova a partir da referência, não faz edição
-// cirúrgica de um elemento só.
+// Heurística leve (não bloqueante) pra avisar/redirecionar o lojista quando
+// o pedido nesse fluxo parece na verdade um ajuste pontual — esse fluxo
+// gera uma peça nova/melhorada a partir da referência, não faz edição
+// cirúrgica de um elemento só (isso já existe no fluxo de editar detalhe).
 export function pareceAjustePontual(texto: string): boolean {
   return PALAVRAS_AJUSTE_PONTUAL.test(texto);
 }
 
-const DESCRICAO_ESTILO_ARTE_EXISTENTE: Record<Exclude<ArteExistenteRequest["estiloDesejado"], undefined>, string> = {
-  "mesma_ideia_melhorada": "melhorar mantendo a mesma ideia — versão mais profissional e refinada, sem mudar o conceito",
-  "premium": "deixar mais premium — reduzir aparência de panfleto, paleta mais sofisticada, tipografia mais elegante",
-  "clean": "deixar mais clean — simplificar composição, reduzir ruído visual, mais espaço negativo",
-  "chamativa": "deixar mais chamativa — mais impacto comercial e contraste, sem ficar amador ou poluído",
-  "minimalista": "deixar mais minimalista — poucos elementos, bastante respiro, composição limpa",
-  "luxo": "aplicar estética de luxo — acabamento sofisticado, paleta e tipografia premium",
-  "personalizado": "aplicar o pedido específico descrito pelo lojista abaixo",
+const DESCRICAO_DIRECAO: Record<Exclude<DirecaoTransformacao, "personalizado">, string> = {
+  profissional: "mais profissional",
+  clean: "mais clean",
+  premium: "mais premium",
+  chamativa: "mais chamativa",
+  moderna: "mais moderna",
+  divertida: "mais divertida",
+  legibilidade: "melhorar a legibilidade",
+  reduzir_poluicao: "reduzir a poluição visual",
+  ia_decide: "deixar a IA decidir a melhor direção",
 };
 
 function descreverPedidoArteExistente(
-  req: Pick<ArteExistenteRequest, "intencao" | "estiloDesejado" | "instrucaoUsuario">,
+  req: Pick<ArteExistenteRequest, "modoTransformacao" | "direcao" | "instrucaoUsuario">,
 ): string {
-  const linhas: string[] = [];
-  if (req.estiloDesejado) {
-    linhas.push(`O lojista escolheu: ${DESCRICAO_ESTILO_ARTE_EXISTENTE[req.estiloDesejado]}.`);
-  } else if (req.intencao === "nova_variacao") {
-    linhas.push("O lojista quer criar uma nova variação parecida, mantendo a mesma ideia e informações principais, mas com composição/fundo/estilo diferentes.");
-  } else {
-    linhas.push("O lojista quer melhorar a arte mantendo a mesma ideia.");
+  const linhas: string[] = [
+    req.modoTransformacao === "melhoria_conservadora"
+      ? "O lojista quer MELHORAR a arte existente, mantendo a mesma estrutura, layout e ideia original."
+      : "O lojista quer CRIAR UMA NOVA VERSÃO da arte existente: mesmas informações, mas um design visivelmente diferente.",
+  ];
+  if (req.direcao && req.direcao !== "personalizado") {
+    linhas.push(`Direção desejada: ${DESCRICAO_DIRECAO[req.direcao]}.`);
   }
   if (req.instrucaoUsuario?.trim()) {
-    linhas.push(`Instrução adicional do lojista: ${req.instrucaoUsuario.trim()}`);
+    linhas.push(`Instrução específica do lojista: ${req.instrucaoUsuario.trim()}`);
   }
   return linhas.join("\n");
 }
 
-function fallbackMelhorarArteExistente(req: Pick<ArteExistenteRequest, "instrucaoUsuario">): string {
+const PROMPT_BASE_MELHORIA_CONSERVADORA =
+  "Use the uploaded artwork as the main reference and create a more professional improved version of the same design. Preserve the original layout structure, commercial information, products, logo, brand identity, prices, contact information and main message. Improve only the visual quality: refine hierarchy, spacing, typography, contrast, lighting, polish, balance and readability. Keep the same idea and overall composition, but make it look more professional and less amateur. Do not change the offer, product names, prices, phone number, address or logo.";
+
+const PROMPT_BASE_NOVA_VERSAO =
+  "Use the uploaded artwork as a content and brand reference, not as a layout template. Create a completely new advertising design using the same commercial information, products, logo, prices, contact details and main offer. Do not copy the original layout. Do not keep the same structure unless absolutely necessary. Reimagine the composition with a new visual concept, new hierarchy, new background, new arrangement of products, new price card style and a fresh advertising direction. The result must look clearly different from the original while preserving the same information and sales intent. Keep all product names, prices, phone number, address, logo and brand identity accurate. Do not invent new commercial information.";
+
+function fallbackTransformarArteExistente(
+  req: Pick<ArteExistenteRequest, "modoTransformacao" | "instrucaoUsuario">,
+): string {
+  const base =
+    req.modoTransformacao === "melhoria_conservadora" ? PROMPT_BASE_MELHORIA_CONSERVADORA : PROMPT_BASE_NOVA_VERSAO;
   const instrucao = req.instrucaoUsuario?.trim();
-  return `Use the uploaded artwork as the main visual reference and create a new improved variation of this advertising design. Preserve the main product, brand, logo, key texts, price, contact information, commercial message and overall intent. Do not invent or change commercial information. Improve the design quality with better composition, clearer hierarchy, more professional typography, refined lighting, better spacing, stronger product focus and a more polished advertising look. Keep the same core idea, but make the artwork look more professional, balanced and ready for social media.${instrucao ? ` ${instrucao}.` : ""} Avoid amateur template look, cluttered layout, distorted logo, wrong text, changed price, changed phone number, unreadable typography, excessive effects and generic AI-looking design.`;
+  return instrucao ? `${base} ${instrucao}.` : base;
 }
 
+const SYSTEM_MELHORIA_CONSERVADORA = `Você escreve prompts para o GPT Image melhorar uma arte publicitária existente SEM mudar sua estrutura. Grau de liberdade criativa: BAIXO.
+
+A imagem enviada é a referência principal — mantenha o layout geral, a distribuição dos blocos, a ideia original, produtos, textos principais, preços, marca, logo, telefone, endereço, CTA e identidade visual exatamente como estão.
+
+Você PODE melhorar: acabamento, alinhamento, espaçamento, contraste, legibilidade, hierarquia, tipografia, iluminação, nitidez, organização e aparência profissional.
+
+Não mude o conceito, não recrie a composição, não invente informações comerciais novas, não altere preço, telefone, endereço, nome de produto ou logo.
+
+Prompt-base (adapte ao pedido, não copie literalmente): "${PROMPT_BASE_MELHORIA_CONSERVADORA}"
+
+Se o lojista pedir uma direção específica (mais profissional, mais clean, mais premium, melhorar legibilidade, reduzir poluição visual, ou deixar a IA decidir), incorpore isso mantendo sempre o grau de liberdade BAIXO — a estrutura nunca muda.
+
+A saída deve ser apenas o prompt final em INGLÊS (o modelo de imagem segue instrução de direção de arte com mais consistência em inglês), sem explicações, sem comentários e sem aspas ao redor de tudo.`;
+
+const SYSTEM_NOVA_VERSAO_CRIATIVA = `Você escreve prompts para o GPT Image criar uma NOVA versão de uma arte publicitária existente, usando a arte enviada só como referência de conteúdo e marca. Grau de liberdade criativa: ALTO.
+
+Preserve apenas: produtos anunciados, nomes dos produtos, preços, volumes, marca, logo, telefone, endereço, CTA, mensagem comercial principal e informações comerciais importantes.
+
+NÃO preserve obrigatoriamente: layout original, estrutura dos blocos, posição dos produtos, fundo, estilo dos cards, posição da logo, composição, hierarquia visual, tratamento dos preços ou linguagem gráfica.
+
+Regra obrigatória: o prompt final precisa deixar EXPLÍCITO que o modelo não deve copiar o layout original. Inclua sempre, adaptado ao contexto: "Do not copy the original layout.", "Use the uploaded artwork only as a content and brand reference, not as a layout template.", "Create a substantially different composition.", "Preserve the information, not the structure."
+
+Prompt-base (adapte ao pedido, não copie literalmente): "${PROMPT_BASE_NOVA_VERSAO}"
+
+Se o lojista pedir uma direção específica (mais premium, mais clean, mais chamativa, mais moderna, mais divertida, ou deixar a IA decidir), incorpore isso na nova direção criativa, sempre com grau de liberdade ALTO — o resultado precisa parecer visivelmente diferente do original.
+
+A saída deve ser apenas o prompt final em INGLÊS, sem explicações, sem comentários e sem aspas ao redor de tudo.`;
+
 // Gera o prompt final (em INGLÊS — gpt-image-2 segue esse tipo de instrução
-// de direção de arte com mais consistência) pro fluxo de melhorar/variar
-// uma arte existente enviada pelo lojista. Diferente do ajuste cirúrgico:
-// aqui o objetivo é uma NOVA versão melhor, não uma mudança pontual.
+// de direção de arte com mais consistência) pro fluxo de transformar uma
+// arte existente enviada pelo lojista. modoTransformacao decide o grau de
+// liberdade criativa (baixo = melhoria conservadora, alto = nova versão).
 export async function montarPromptMelhorarArteExistente(
-  req: Pick<ArteExistenteRequest, "intencao" | "estiloDesejado" | "instrucaoUsuario">,
+  req: Pick<ArteExistenteRequest, "modoTransformacao" | "direcao" | "instrucaoUsuario">,
 ): Promise<PromptGerado> {
   const apiKey = process.env.OPENAI_API_KEY;
-  const fallback = fallbackMelhorarArteExistente(req);
+  const fallback = fallbackTransformarArteExistente(req);
   if (!apiKey) return { prompt: fallback, usouFallback: true };
+
+  const systemPrompt =
+    req.modoTransformacao === "melhoria_conservadora" ? SYSTEM_MELHORIA_CONSERVADORA : SYSTEM_NOVA_VERSAO_CRIATIVA;
 
   const openai = new OpenAI({ apiKey, timeout: 25_000 });
   let texto: string | null | undefined;
@@ -758,32 +803,13 @@ export async function montarPromptMelhorarArteExistente(
       model: TEXT_PROMPT_BUILDER_MODEL,
       temperature: 0.7,
       messages: [
-        {
-          role: "system",
-          content: `Você escreve prompts para gerar uma nova versão de uma arte publicitária existente usando GPT Image. A imagem enviada pelo usuário é a referência principal de conceito, conteúdo e identidade visual.
-
-Sua função não é fazer um ajuste pontual. Sua função é criar uma nova variação melhorada da arte, preservando a ideia central, produto, marca, informações comerciais e intenção de venda.
-
-Melhore a qualidade visual da peça como um diretor de arte: refine composição, hierarquia, iluminação, contraste, tipografia, espaçamento, acabamento, cenário e integração dos elementos. Corrija aparência amadora, excesso de poluição visual, fundo fraco, má distribuição de textos, baixa legibilidade e falta de impacto comercial.
-
-Preserve por padrão: produto principal, nome da marca, logo, cores principais da identidade, textos importantes, preço, telefone/WhatsApp, endereço, CTA, proposta da arte e formato geral.
-
-Não invente novas informações comerciais. Não altere preço, telefone, endereço, nome da marca ou produto. Não mude a logo. Não remova textos importantes, a menos que o usuário peça. Não transforme a arte em outro conceito completamente diferente.
-
-Se o usuário pedir "melhorar mantendo a mesma ideia", crie uma versão mais profissional, organizada e visualmente refinada, mas mantendo o conceito original.
-Se o usuário pedir "nova variação parecida", mantenha a mesma intenção de venda e informações principais, mas varie composição, fundo, iluminação e estilo visual.
-Se o usuário pedir "mais premium", reduza aparência de panfleto, refine a paleta, use melhor respiro, tipografia mais elegante, iluminação mais sofisticada e composição mais limpa.
-Se o usuário pedir "mais clean", simplifique a composição, reduza ruído visual, melhore espaço negativo e mantenha leitura clara.
-Se o usuário pedir "mais chamativa", aumente impacto comercial com contraste, destaque de oferta e energia visual, mas sem deixar amador ou poluído.
-
-A saída deve ser apenas o prompt final para geração da nova imagem, em INGLÊS (o modelo de imagem segue esse tipo de instrução de direção de arte com mais consistência em inglês), sem explicações, sem comentários e sem aspas ao redor de tudo.`,
-        },
+        { role: "system", content: systemPrompt },
         { role: "user", content: descreverPedidoArteExistente(req) },
       ],
     });
     texto = completion.choices[0]?.message?.content?.trim();
   } catch (e) {
-    console.error("[prompt-builder] melhorar arte existente falhou, usando fallback:", e);
+    console.error("[prompt-builder] transformar arte existente falhou, usando fallback:", e);
     return { prompt: fallback, usouFallback: true };
   }
   if (!texto) return { prompt: fallback, usouFallback: true };
