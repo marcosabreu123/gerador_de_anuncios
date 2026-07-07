@@ -330,6 +330,39 @@ export interface BriefingCompleto {
 // sinalizar `prontoParaGerar: true`.
 export type BriefingParcial = Partial<BriefingCompleto>;
 
+// ==== Melhorar/variar uma arte existente (fluxo rápido, sem briefing) ====
+// Diferente do fluxo de criação completa (/novo) e do ajuste cirúrgico
+// pós-geração (/api/adjust): aqui o lojista já tem uma arte pronta (feita
+// aqui ou fora do app) e só quer uma versão nova/melhorada dela, sem
+// responder o briefing inteiro de novo.
+export type TipoFluxo =
+  | "criacao_completa"
+  | "ajuste_pontual"
+  | "melhorar_arte_existente"
+  | "nova_variacao_existente";
+
+export type IntencaoArteExistente = "melhorar_arte" | "nova_variacao";
+
+export type EstiloDesejadoArteExistente =
+  | "mesma_ideia_melhorada"
+  | "premium"
+  | "clean"
+  | "chamativa"
+  | "minimalista"
+  | "luxo"
+  | "personalizado";
+
+export interface ArteExistenteRequest {
+  imagemOriginal: string;
+  intencao: IntencaoArteExistente;
+  estiloDesejado?: EstiloDesejadoArteExistente;
+  instrucaoUsuario?: string;
+  preservarTextos?: boolean;
+  preservarLogo?: boolean;
+  preservarProduto?: boolean;
+  preservarIdentidade?: boolean;
+}
+
 // ==== Agente conversacional ====
 
 export interface MensagemChat {

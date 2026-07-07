@@ -7,6 +7,7 @@ import {
   NIVEIS_PRODUCAO_VISUAL,
   NIVEIS_VISUAIS,
   TIPOS_PECA,
+  type ArteExistenteRequest,
   type BriefingCompleto,
 } from "@/lib/types";
 
@@ -688,4 +689,103 @@ Responda em JSON: {"tipo": "ajuste"|"nova-criacao"|"ambiguo", "resumo": "frase c
     console.error("[prompt-builder] resposta de classificação não é JSON válido:", e, texto);
     return fallbackClassificacao;
   }
+}
+
+// ==== Melhorar/variar uma arte existente (fluxo rápido, sem briefing) ====
+// Diferente do ajuste cirúrgico (montarPromptAjuste*): aqui a intenção é
+// criar uma NOVA versão melhorada da arte enviada, preservando a ideia
+// central, produto, marca e informações comerciais — não travar em um único
+// elemento pontual. Pedidos claramente pontuais são sinalizados à parte
+// (ver pareceAjustePontual) pra sugerir o fluxo de ajuste em vez deste.
+const PALAVRAS_AJUSTE_PONTUAL =
+  /\b(s[oó]\s+(troca|muda|altera|remove|tira|ajusta|diminui|aumenta|coloca|adiciona)|diminui(r)?\s+a\s+logo|aumenta(r)?\s+a\s+logo|move(r)?\s+a\s+logo|remove(r)?\s+(esse|este|o|a)\s+(texto|selo|elemento)|troca(r)?\s+(o|a)\s+(pre[cç]o|texto|cor|telefone|endere[cç]o|whatsapp))\b/i;
+
+// Heurística leve (não bloqueante) pra avisar o lojista quando o pedido no
+// fluxo de "melhorar/nova variação" parece na verdade um ajuste pontual —
+// esse fluxo gera uma peça nova a partir da referência, não faz edição
+// cirúrgica de um elemento só.
+export function pareceAjustePontual(texto: string): boolean {
+  return PALAVRAS_AJUSTE_PONTUAL.test(texto);
+}
+
+const DESCRICAO_ESTILO_ARTE_EXISTENTE: Record<Exclude<ArteExistenteRequest["estiloDesejado"], undefined>, string> = {
+  "mesma_ideia_melhorada": "melhorar mantendo a mesma ideia — versão mais profissional e refinada, sem mudar o conceito",
+  "premium": "deixar mais premium — reduzir aparência de panfleto, paleta mais sofisticada, tipografia mais elegante",
+  "clean": "deixar mais clean — simplificar composição, reduzir ruído visual, mais espaço negativo",
+  "chamativa": "deixar mais chamativa — mais impacto comercial e contraste, sem ficar amador ou poluído",
+  "minimalista": "deixar mais minimalista — poucos elementos, bastante respiro, composição limpa",
+  "luxo": "aplicar estética de luxo — acabamento sofisticado, paleta e tipografia premium",
+  "personalizado": "aplicar o pedido específico descrito pelo lojista abaixo",
+};
+
+function descreverPedidoArteExistente(
+  req: Pick<ArteExistenteRequest, "intencao" | "estiloDesejado" | "instrucaoUsuario">,
+): string {
+  const linhas: string[] = [];
+  if (req.estiloDesejado) {
+    linhas.push(`O lojista escolheu: ${DESCRICAO_ESTILO_ARTE_EXISTENTE[req.estiloDesejado]}.`);
+  } else if (req.intencao === "nova_variacao") {
+    linhas.push("O lojista quer criar uma nova variação parecida, mantendo a mesma ideia e informações principais, mas com composição/fundo/estilo diferentes.");
+  } else {
+    linhas.push("O lojista quer melhorar a arte mantendo a mesma ideia.");
+  }
+  if (req.instrucaoUsuario?.trim()) {
+    linhas.push(`Instrução adicional do lojista: ${req.instrucaoUsuario.trim()}`);
+  }
+  return linhas.join("\n");
+}
+
+function fallbackMelhorarArteExistente(req: Pick<ArteExistenteRequest, "instrucaoUsuario">): string {
+  const instrucao = req.instrucaoUsuario?.trim();
+  return `Use the uploaded artwork as the main visual reference and create a new improved variation of this advertising design. Preserve the main product, brand, logo, key texts, price, contact information, commercial message and overall intent. Do not invent or change commercial information. Improve the design quality with better composition, clearer hierarchy, more professional typography, refined lighting, better spacing, stronger product focus and a more polished advertising look. Keep the same core idea, but make the artwork look more professional, balanced and ready for social media.${instrucao ? ` ${instrucao}.` : ""} Avoid amateur template look, cluttered layout, distorted logo, wrong text, changed price, changed phone number, unreadable typography, excessive effects and generic AI-looking design.`;
+}
+
+// Gera o prompt final (em INGLÊS — gpt-image-2 segue esse tipo de instrução
+// de direção de arte com mais consistência) pro fluxo de melhorar/variar
+// uma arte existente enviada pelo lojista. Diferente do ajuste cirúrgico:
+// aqui o objetivo é uma NOVA versão melhor, não uma mudança pontual.
+export async function montarPromptMelhorarArteExistente(
+  req: Pick<ArteExistenteRequest, "intencao" | "estiloDesejado" | "instrucaoUsuario">,
+): Promise<PromptGerado> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const fallback = fallbackMelhorarArteExistente(req);
+  if (!apiKey) return { prompt: fallback, usouFallback: true };
+
+  const openai = new OpenAI({ apiKey, timeout: 25_000 });
+  let texto: string | null | undefined;
+  try {
+    const completion = await criarCompletionComRetry(openai, {
+      model: TEXT_PROMPT_BUILDER_MODEL,
+      temperature: 0.7,
+      messages: [
+        {
+          role: "system",
+          content: `Você escreve prompts para gerar uma nova versão de uma arte publicitária existente usando GPT Image. A imagem enviada pelo usuário é a referência principal de conceito, conteúdo e identidade visual.
+
+Sua função não é fazer um ajuste pontual. Sua função é criar uma nova variação melhorada da arte, preservando a ideia central, produto, marca, informações comerciais e intenção de venda.
+
+Melhore a qualidade visual da peça como um diretor de arte: refine composição, hierarquia, iluminação, contraste, tipografia, espaçamento, acabamento, cenário e integração dos elementos. Corrija aparência amadora, excesso de poluição visual, fundo fraco, má distribuição de textos, baixa legibilidade e falta de impacto comercial.
+
+Preserve por padrão: produto principal, nome da marca, logo, cores principais da identidade, textos importantes, preço, telefone/WhatsApp, endereço, CTA, proposta da arte e formato geral.
+
+Não invente novas informações comerciais. Não altere preço, telefone, endereço, nome da marca ou produto. Não mude a logo. Não remova textos importantes, a menos que o usuário peça. Não transforme a arte em outro conceito completamente diferente.
+
+Se o usuário pedir "melhorar mantendo a mesma ideia", crie uma versão mais profissional, organizada e visualmente refinada, mas mantendo o conceito original.
+Se o usuário pedir "nova variação parecida", mantenha a mesma intenção de venda e informações principais, mas varie composição, fundo, iluminação e estilo visual.
+Se o usuário pedir "mais premium", reduza aparência de panfleto, refine a paleta, use melhor respiro, tipografia mais elegante, iluminação mais sofisticada e composição mais limpa.
+Se o usuário pedir "mais clean", simplifique a composição, reduza ruído visual, melhore espaço negativo e mantenha leitura clara.
+Se o usuário pedir "mais chamativa", aumente impacto comercial com contraste, destaque de oferta e energia visual, mas sem deixar amador ou poluído.
+
+A saída deve ser apenas o prompt final para geração da nova imagem, em INGLÊS (o modelo de imagem segue esse tipo de instrução de direção de arte com mais consistência em inglês), sem explicações, sem comentários e sem aspas ao redor de tudo.`,
+        },
+        { role: "user", content: descreverPedidoArteExistente(req) },
+      ],
+    });
+    texto = completion.choices[0]?.message?.content?.trim();
+  } catch (e) {
+    console.error("[prompt-builder] melhorar arte existente falhou, usando fallback:", e);
+    return { prompt: fallback, usouFallback: true };
+  }
+  if (!texto) return { prompt: fallback, usouFallback: true };
+  return { prompt: texto, usouFallback: false };
 }

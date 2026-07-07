@@ -1,11 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { debitarCredito, estornarCredito } from "@/lib/credits";
-import { montarPrompt } from "@/lib/ai/prompt-builder";
+import { montarPrompt, montarPromptMelhorarArteExistente } from "@/lib/ai/prompt-builder";
 import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { uploadImagem } from "@/lib/storage";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
-import type { BriefingCompleto, Formato, ImagemAnexo } from "@/lib/types";
+import type {
+  BriefingCompleto,
+  EstiloDesejadoArteExistente,
+  Formato,
+  ImagemAnexo,
+  IntencaoArteExistente,
+  TipoFluxo,
+} from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -59,9 +66,61 @@ export async function POST(request: NextRequest) {
   }
 
   const conversa = (projeto.conversa ?? {}) as {
+    tipoFluxo?: TipoFluxo;
     briefing?: BriefingCompleto;
     imagens?: ImagemAnexo[];
+    imagemOriginal?: string;
+    intencao?: IntencaoArteExistente;
+    estiloDesejado?: EstiloDesejadoArteExistente;
+    instrucaoUsuario?: string;
   };
+
+  // Fluxo "melhorar/nova variação de arte existente" não tem briefing —
+  // reaplica o mesmo prompt-builder sobre a mesma arte original enviada.
+  const ehArteExistente =
+    conversa.tipoFluxo === "melhorar_arte_existente" || conversa.tipoFluxo === "nova_variacao_existente";
+
+  if (ehArteExistente) {
+    if (!conversa.imagemOriginal || !conversa.intencao) {
+      return NextResponse.json({ error: "Arte original não encontrada." }, { status: 400 });
+    }
+    const saldo = await debitarCredito(user.id, "Nova variação");
+    if (saldo < 0) {
+      return NextResponse.json({ error: "Você está sem créditos.", semCredito: true }, { status: 402 });
+    }
+    try {
+      const { prompt } = await montarPromptMelhorarArteExistente({
+        intencao: conversa.intencao,
+        estiloDesejado: conversa.estiloDesejado,
+        instrucaoUsuario: conversa.instrucaoUsuario,
+      });
+      const base = await baixarBase64({ tipo: "produto", url: conversa.imagemOriginal });
+      const [imagem] = await gerarVariacoes({ prompts: [prompt], imagens: [base], qualidade: qualidadeParaEtapa("rascunho") });
+
+      const urlGerada = await uploadImagem(user.id, imagem, "geradas");
+      const { data: row } = await supabase
+        .from("images")
+        .insert({
+          project_id: projeto.id,
+          user_id: user.id,
+          imagem_original_url: conversa.imagemOriginal,
+          imagem_gerada_url: urlGerada,
+          prompt_usado: imagem.promptUsado,
+          modelo_usado: IMAGE_MODEL,
+          status: "gerada",
+        })
+        .select("id, imagem_gerada_url")
+        .single();
+      if (!row) throw new Error("Falha ao salvar a nova variação.");
+      return NextResponse.json({ imagem: row, saldo });
+    } catch (e) {
+      await estornarCredito(user.id, "Estorno: falha na nova variação");
+      const msg = e instanceof Error ? e.message : "Erro ao gerar nova variação.";
+      console.error("[/api/generate-variation]", e);
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+  }
+
   const briefing = conversa.briefing;
   if (!briefing) {
     return NextResponse.json({ error: "Briefing original não encontrado." }, { status: 400 });
