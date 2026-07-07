@@ -59,7 +59,7 @@ export default async function DashboardPage() {
               ✨ Criar arte nova
             </Link>
             <Link href="/melhorar" className="btn btn-outline btn-block">
-              🪄 Melhorar uma arte pronta
+              🎨 Melhorar uma arte pronta
             </Link>
             <Link href="/editar" className="btn btn-outline btn-block">
               ✏️ Editar um design que já tenho
