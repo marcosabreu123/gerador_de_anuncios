@@ -1,19 +1,28 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { debitarCredito, estornarCredito } from "@/lib/credits";
-import { montarPromptAjuste } from "@/lib/ai/prompt-builder";
+import { montarPromptAjuste, montarPromptAjusteGptImage } from "@/lib/ai/prompt-builder";
 import { editarComFalKontext } from "@/lib/ai/fal-edit";
+import { gerarVariacoes } from "@/lib/ai/openai-image";
 import { uploadImagem } from "@/lib/storage";
-import { FAL_EDIT_MODEL } from "@/lib/ai/models";
+import { ENABLE_FLUX_EDIT, FAL_EDIT_MODEL, IMAGE_MODEL, qualidadeParaEtapa } from "@/lib/ai/models";
 
 export const runtime = "nodejs";
-// FAL Kontext Pro edita em ~13-20s (vs. 79-93s do gpt-image-2 pra essa mesma
-// classe de edição) — 30s dá boa folga sem chegar perto do teto de 60s.
-export const maxDuration = 30;
+// Vercel Pro assinado — ENABLE_FLUX_EDIT=false por padrão agora (gpt-image-2,
+// ~79-93s medido ao vivo). 120s dá boa folga acima disso.
+export const maxDuration = 120;
 
 interface Body {
   imageId: string; // imagem de origem a ajustar
   pedido: string; // ajuste em linguagem natural
+}
+
+async function baixarBase64(url: string): Promise<{ base64: string; mimeType: string; tipo: "base" }> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Não foi possível ler a imagem base.");
+  const mimeType = res.headers.get("content-type") ?? "image/png";
+  const buf = Buffer.from(await res.arrayBuffer());
+  return { base64: buf.toString("base64"), mimeType, tipo: "base" };
 }
 
 export async function POST(request: NextRequest) {
@@ -50,12 +59,27 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Reinterpreta o pedido combinando com o prompt anterior.
-    const { prompt } = await montarPromptAjuste(origem.prompt_usado ?? "", body.pedido);
+    let prompt: string;
+    let imagem: { base64: string; mimeType: string; promptUsado: string };
+    let modeloUsado: string;
 
-    // Ajuste parte da ARTE já gerada (edição), preservando identidade — FAL
-    // aceita a URL da imagem diretamente, sem precisar baixar/converter.
-    const imagem = await editarComFalKontext(origem.imagem_gerada_url, prompt);
+    if (ENABLE_FLUX_EDIT) {
+      // Ajuste parte da ARTE já gerada (edição), preservando identidade —
+      // FAL aceita a URL da imagem diretamente, sem precisar baixar/converter.
+      ({ prompt } = await montarPromptAjuste(origem.prompt_usado ?? "", body.pedido));
+      imagem = await editarComFalKontext(origem.imagem_gerada_url, prompt);
+      modeloUsado = FAL_EDIT_MODEL;
+    } else {
+      ({ prompt } = await montarPromptAjusteGptImage(origem.prompt_usado ?? "", body.pedido));
+      const base = await baixarBase64(origem.imagem_gerada_url);
+      const [gerada] = await gerarVariacoes({
+        prompts: [prompt],
+        imagens: [base],
+        qualidade: qualidadeParaEtapa("final"),
+      });
+      imagem = gerada;
+      modeloUsado = IMAGE_MODEL;
+    }
 
     const urlGerada = await uploadImagem(user.id, imagem, "geradas");
     const { data: row } = await supabase
@@ -66,7 +90,7 @@ export async function POST(request: NextRequest) {
         imagem_original_url: origem.imagem_original_url,
         imagem_gerada_url: urlGerada,
         prompt_usado: prompt,
-        modelo_usado: FAL_EDIT_MODEL,
+        modelo_usado: modeloUsado,
         status: "ajustada",
       })
       .select("id, imagem_gerada_url")

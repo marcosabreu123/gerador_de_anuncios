@@ -65,8 +65,25 @@ export const TAMANHO_POR_FORMATO: Record<Formato, string> = {
 // editam uma arte JÁ PRONTA (texto+logo+foto) — medido ao vivo: a mesma
 // edição via gpt-image-2 levava 79-93s mesmo em qualidade baixa (arriscando
 // estourar o teto de 60s da function); Flux Kontext Pro faz a mesma edição
-// por instrução em ~13s, com boa fidelidade aos elementos não pedidos.
+// por instrução em ~13-25s, mas às vezes erra ao ADICIONAR texto novo (só é
+// confiável pra MODIFICAR o que já existe) e cada edição encadeada acumula
+// pequena degradação nos textos não relacionados.
 export const FAL_EDIT_MODEL = "fal-ai/flux-pro/kontext";
+
+// Testamos Ideogram (v2/edit exige mask_url — inpainting de região, não
+// temos como gerar a máscara sem um sistema de overlay/posicionamento) e
+// Recraft (v3/image-to-image, mesmo em strength baixo recriava a arte
+// inteira: mudava cor de fundo, inventava textos e logo) como alternativas
+// de ajuste com texto integrado — nenhum dos dois preserva o resto da arte
+// como o Flux Kontext. Descartados por enquanto (ver histórico da sessão).
+
+// Liga/desliga o Flux Kontext como provider de ajuste. Padrão agora é FALSE
+// (Vercel Pro assinado — teto de function bem acima de 60s, ver maxDuration
+// em /api/adjust e /api/edit-design): ajustes usam gpt-image-2 (via
+// /images/edits), mais fiel e confiável pra adicionar/alterar texto e logo,
+// ao custo de ~79-93s por ajuste. Defina ENABLE_FLUX_EDIT=true pra voltar ao
+// Flux Kontext (mais rápido, ~13-25s, mas menos confiável em texto novo).
+export const ENABLE_FLUX_EDIT = process.env.ENABLE_FLUX_EDIT === "true";
 
 // ---------- Legado (Gemini, sem uso por padrão) ----------
 // Mantidos só pra src/lib/ai/gemini.ts continuar compilando caso precise

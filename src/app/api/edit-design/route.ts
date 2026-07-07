@@ -1,15 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { debitarCredito, estornarCredito } from "@/lib/credits";
-import { montarPromptEdicaoDireta } from "@/lib/ai/prompt-builder";
+import { montarPromptEdicaoDireta, montarPromptEdicaoDiretaGptImage } from "@/lib/ai/prompt-builder";
 import { editarComFalKontext } from "@/lib/ai/fal-edit";
+import { gerarVariacoes } from "@/lib/ai/openai-image";
 import { uploadImagem } from "@/lib/storage";
-import { FAL_EDIT_MODEL } from "@/lib/ai/models";
+import { ENABLE_FLUX_EDIT, FAL_EDIT_MODEL, IMAGE_MODEL, qualidadeParaEtapa } from "@/lib/ai/models";
 
 export const runtime = "nodejs";
-// FAL Kontext Pro edita em ~13-20s (vs. 79-93s do gpt-image-2 pra essa mesma
-// classe de edição) — 30s dá boa folga sem chegar perto do teto de 60s.
-export const maxDuration = 30;
+// Vercel Pro assinado — ENABLE_FLUX_EDIT=false por padrão agora (gpt-image-2,
+// ~79-93s medido ao vivo). 120s dá boa folga acima disso.
+export const maxDuration = 120;
 
 // Fluxo "editar um design existente": o lojista sobe uma arte pronta (feita
 // fora do app) e pede uma mudança em texto livre — sem passar pela conversa
@@ -18,6 +19,14 @@ export const maxDuration = 30;
 interface Body {
   originalUrl: string; // design existente enviado pelo usuário
   pedido: string; // o que ele quer mudar
+}
+
+async function baixarBase64(url: string): Promise<{ base64: string; mimeType: string; tipo: "base" }> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Não foi possível ler o design enviado.");
+  const mimeType = res.headers.get("content-type") ?? "image/jpeg";
+  const buf = Buffer.from(await res.arrayBuffer());
+  return { base64: buf.toString("base64"), mimeType, tipo: "base" };
 }
 
 export async function POST(request: NextRequest) {
@@ -43,8 +52,25 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { prompt } = await montarPromptEdicaoDireta(body.pedido);
-    const imagem = await editarComFalKontext(body.originalUrl, prompt);
+    let prompt: string;
+    let imagem: { base64: string; mimeType: string; promptUsado: string };
+    let modeloUsado: string;
+
+    if (ENABLE_FLUX_EDIT) {
+      ({ prompt } = await montarPromptEdicaoDireta(body.pedido));
+      imagem = await editarComFalKontext(body.originalUrl, prompt);
+      modeloUsado = FAL_EDIT_MODEL;
+    } else {
+      ({ prompt } = await montarPromptEdicaoDiretaGptImage(body.pedido));
+      const base = await baixarBase64(body.originalUrl);
+      const [gerada] = await gerarVariacoes({
+        prompts: [prompt],
+        imagens: [base],
+        qualidade: qualidadeParaEtapa("final"),
+      });
+      imagem = gerada;
+      modeloUsado = IMAGE_MODEL;
+    }
 
     const { data: projeto, error: projErr } = await supabase
       .from("projects")
@@ -68,7 +94,7 @@ export async function POST(request: NextRequest) {
         imagem_original_url: body.originalUrl,
         imagem_gerada_url: urlGerada,
         prompt_usado: prompt,
-        modelo_usado: FAL_EDIT_MODEL,
+        modelo_usado: modeloUsado,
         status: "gerada",
       })
       .select("id, imagem_gerada_url")

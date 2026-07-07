@@ -19,7 +19,20 @@ const SYSTEM = `Você é diretor de arte sênior de publicidade, especializado e
 
 Antes de escrever o prompt final, interprete o briefing e defina uma linguagem visual coerente: conceito visual, clima/atmosfera da peça, estilo de fotografia, hierarquia editorial, linguagem tipográfica, composição, tratamento de luz, textura, profundidade, posição estratégica de cada elemento, nível de sofisticação e referência estética do segmento do produto. O resultado deve parecer criado por um designer publicitário experiente, com domínio de composição, tipografia, fotografia, luz, textura e hierarquia visual — comparável a uma campanha de perfumaria, catálogo premium, social media profissional ou peça editorial, nunca a algo montado rapidamente em um template.
 
-O produto deve ser tratado como protagonista visual absoluto da peça — mais do que qualquer texto. Se houver foto enviada, preserve formato, cor, rótulo, proporção e características reais. Nunca invente outro produto nem altere a marca. Se não houver foto, componha o produto do zero a partir da descrição, com o máximo de coerência e realismo possível. O texto deve complementar a venda, nunca dominar a arte.
+O produto deve ser tratado como protagonista visual absoluto da peça — mais do que qualquer texto. Nunca invente outro produto nem altere a marca. Se não houver foto, componha o produto do zero a partir da descrição, com o máximo de coerência e realismo possível. O texto deve complementar a venda, nunca dominar a arte.
+
+## Foto de produto enviada — referência do produto, NÃO composição final (regra crítica)
+Quando o briefing indicar que há uma foto real do produto anexada, trate essa imagem como REFERÊNCIA VISUAL do produto, nunca como o layout final da peça. Use a foto só para entender as características reais do produto: formato, cor, material, proporção, tampa/rótulo/detalhes, textura, identidade visual e ângulo aproximado (quando útil). Muitas dessas fotos são casuais — tiradas rapidamente no trabalho, em casa ou num ambiente improvisado — e o prompt final NUNCA deve preservar esse contexto amador: remova mentalmente a mesa, o ambiente de trabalho, o fundo bagunçado, a luz fraca, sombras feias, ruído, objetos secundários e o enquadramento casual da foto original, a menos que o lojista peça explicitamente para manter o ambiente. Recrie o produto como um hero shot publicitário profissional: cena de estúdio coerente com a direção de arte da peça, iluminação direcional profissional, sombra realista, reflexos naturais sutis, integração natural com o cenário — nunca a aparência de "foto colada" ou recortada artificialmente sobre um fundo/template. O produto deve ter recorte limpo, textura preservada, proporção e volume realistas, nitidez e aparência comercial; nunca bordas estranhas, luz destoante do cenário, textura plástica falsa, deformação ou um resultado genérico a ponto de perder a identidade real do produto.
+
+## Fundo "clean" — minimalista profissional, nunca vazio
+Quando o lojista pedir fundo "mais clean" ou similar, isso NÃO significa fundo vazio, chapado, sem profundidade ou sem acabamento. Um fundo clean profissional ainda tem: gradiente sutil, luz controlada, sombra natural do produto, textura mínima mas presente, profundidade suave (nunca uma cor lisa morta), paleta coerente com o produto, área de respiro generosa e acabamento de campanha comercial. "Clean" é uma direção de arte (minimalismo intencional), não ausência de direção de arte.
+
+## Relação entre produto, fundo e texto
+Antes de escrever o prompt final, defina explicitamente a relação entre produto, fundo e texto: o produto é sempre o protagonista; o fundo existe para valorizar o produto (nunca compete com ele, nunca é só preenchimento); os textos seguem hierarquia de marketing (headline > oferta/preço > benefício/CTA > assinatura). Nunca projete um layout onde o produto pareça separado ou "colado" na peça — produto, fundo e texto devem parecer desenhados juntos, como uma única composição.
+Quando houver produto real (foto anexada): o produto ocupa a área de maior peso visual; a headline usa uma área de respiro que não compete com o produto; o preço/oferta aparece em bloco ou selo bem integrado ao layout (nunca solto ou por cima do produto); benefícios ficam menores e secundários; a logo fica onde equilibrar melhor a composição; evite excesso de elementos e nunca deixe texto cobrindo o produto.
+
+## Textos dentro da imagem — poucos blocos, curtos e exatos
+Como ainda não existe sistema de overlay no app, os textos são gerados dentro da própria imagem pelo modelo — por isso o prompt final deve reduzir a quantidade de texto sempre que possível. Priorize nesta ordem: (1) headline curta, (2) preço/oferta, (3) um benefício ou CTA essencial, (4) logo/assinatura da marca. Evite frases longas, textos redundantes ou muitos blocos textuais. Preserve exatamente, sem alterar uma letra ou número, todos os preços, telefones, nomes de marca e nomes de produto fornecidos pelo lojista.
 
 ## Direção de arte (campo direcaoArte do briefing)
 Se o briefing trouxer um objeto "direcaoArte" (conceitoVisual, atmosfera, composicao, tratamentoLuz, paleta, tipografia, texturas, hierarquia, posicionamentoLogo, restricoesEsteticas), USE-O como espinha dorsal do prompt — é a direção que já foi pensada e aprovada com o lojista, não a ignore nem a substitua por algo genérico. Se algum campo dela estiver vazio, ou se o objeto inteiro não vier no briefing, você mesmo define essa direção de arte a partir do resto do briefing (produto, segmento, nível visual, nível de produção), com o mesmo nível de exigência.
@@ -80,6 +93,8 @@ O nível de produção do prompt final deve mirar algo comparável a uma arte pu
 
 Inclua restrições negativas explícitas ao final do raciocínio (incorporadas na descrição, não como lista à parte): sem aparência de template pronto, sem estética de panfleto barato, sem layout previsível, sem texto gigante genérico, sem contorno preto grosso, sem sombra pesada/exagerada, sem efeito 3D nas letras, sem amarelo neon, sem fundo vermelho saturado genérico, sem excesso de informação/texto, sem rodapé pesado, sem produto colado artificialmente no fundo, sem render 3D, sem textura plástica, sem composição amadora ou poluída, sem logo gigante, sem logo sempre obrigatoriamente no rodapé, sem assinatura desalinhada, sem logo competindo com headline/produto/preço, sem texto quebrado, sem letras ilegíveis, sem palavras separadas incorretamente, sem produto deformado, sem logo inventada, sem marca d'água, sem elementos aleatórios, sem fundo branco genérico quando não solicitado, sem distorções, sem brilho plástico, sem aparência de IA.
 
+Quando houver foto de produto anexada, inclua também estas restrições: sem aparência de foto amadora colada sobre o fundo, sem preservar mesa ou ambiente de trabalho, sem fundo de escritório ou mesa bagunçada, sem luz ruim ou casual da foto original, sem produto recortado artificialmente com bordas estranhas, sem produto com textura plástica falsa, sem layout de template genérico com o produto por cima, sem fundo chapado/morto sem direção de arte quando o pedido for "clean".
+
 ## Uma única direção criativa, bem equilibrada
 Gere UMA peça só, mas pensada com cuidado: equilibre sofisticação editorial (composição elegante, espaço negativo, tratamento conceitual) com clareza comercial (produto e oferta legíveis rapidamente, preço bem visível). Não é pra escolher um extremo — é pra acertar o meio-termo profissional que vende sem parecer panfleto.
 
@@ -131,7 +146,7 @@ function briefingParaTexto(b: BriefingCompleto): string {
   if (b.detalhesVisuaisProduto) linhas.push(`Detalhes visuais reais do produto: ${b.detalhesVisuaisProduto}`);
   linhas.push(
     b.temFotoProduto
-      ? "Há uma foto real do produto anexada — use-a como base fiel."
+      ? "Há uma foto real do produto anexada — use-a apenas como referência do produto (formato, cor, material, proporção, rótulo, tampa e detalhes reais), NUNCA como composição final. Se a foto for casual (mesa, ambiente de trabalho, luz fraca, bagunça), remova esse contexto amador e recrie o produto como hero shot publicitário profissional, a menos que o lojista peça explicitamente para preservar o ambiente original."
       : "NÃO há foto do produto — componha a partir da descrição, com o máximo de realismo possível.",
   );
   if (b.temReferencia) linhas.push("Há uma imagem de referência de estilo anexada — inspire-se nela.");
@@ -205,7 +220,7 @@ export function montarPromptFallback(b: BriefingCompleto): string {
     `Crie uma arte publicitária ${fmt.aspecto} profissional e realista para ${TIPOS_PECA[b.tipoPeca]?.label.toLowerCase() ?? "anúncio"} do produto "${b.nomeProduto}"${b.descricaoProduto ? ` (${b.descricaoProduto})` : ""},`,
     `${estiloHint}, ${nivel}, com produção visual no nível "${producao}", equilibrando sofisticação editorial com clareza comercial,`,
     b.temFotoProduto
-      ? "produto real em destaque como herói da composição, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA."
+      ? "use a foto anexada apenas como referência do produto (formato, cor, material, proporção e detalhes reais) — remova o ambiente casual da foto original (mesa, fundo bagunçado, luz fraca) e recrie o produto como hero shot publicitário profissional, iluminação de estúdio, sombra realista, acabamento premium e comercial, sem aparência de foto colada ou de imagem gerada por IA."
       : "produto composto a partir da descrição com máximo realismo, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA.",
   ];
   if (c?.headline) partes.push(`Inclua a headline "${c.headline}" em destaque, com tipografia sans-serif limpa e legível, sem contorno preto grosso, sem sombra exagerada, sem efeito 3D e sem quebra de palavra.`);
@@ -377,6 +392,178 @@ Return only the final edit prompt in English (with any visual text kept in its o
     texto = completion.choices[0]?.message?.content?.trim();
   } catch (e) {
     console.error("[prompt-builder] edição direta OpenAI falhou, usando fallback:", e);
+    return { prompt: fallback, usouFallback: true };
+  }
+  if (!texto) return { prompt: fallback, usouFallback: true };
+  return { prompt: texto, usouFallback: false };
+}
+
+// Fallback determinístico em português pro caminho gpt-image-2 (usado só
+// quando ENABLE_FLUX_EDIT=false, ver models.ts) — gpt-image-2 segue
+// instrução em português com fidelidade alta, incluindo texto renderizado
+// corretamente (testado ao vivo, sem os erros de digitação que o Flux
+// Kontext às vezes introduz em textos não relacionados ao pedido).
+function fallbackAjusteCirurgicoPortugues(pedidoUsuario: string): string {
+  return `Aplique somente esta alteração: ${pedidoUsuario}. Preserve exatamente todo o restante da arte original, incluindo composição geral, enquadramento, proporção da arte, produto, formato do produto, cor do produto, textura do produto, fundo, iluminação, sombras, reflexos, paleta de cores, estilo visual aprovado, tipografia, hierarquia visual, todos os textos existentes, preço, telefone/WhatsApp, endereço, CTA, nome da marca, logo, cores da logo, formato da logo, proporção da logo, posição da logo, nitidez da logo e identidade visual da marca, a menos que o pedido tenha citado explicitamente um desses elementos. Não recrie a arte inteira e não mude nenhum elemento que não tenha sido pedido.`;
+}
+
+// Variante de montarPromptAjuste em PORTUGUÊS, para quando o provider de
+// ajuste é gpt-image-2 em vez do Flux Kontext (ver ENABLE_FLUX_EDIT em
+// models.ts). Mesma exigência de edição cirúrgica — só muda o idioma de
+// saída, porque gpt-image-2 não tem o mesmo ganho de fidelidade com inglês
+// que o Flux Kontext tem.
+export async function montarPromptAjusteGptImage(
+  promptAnterior: string,
+  pedidoUsuario: string,
+): Promise<PromptGerado> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const fallback = fallbackAjusteCirurgicoPortugues(pedidoUsuario);
+  if (!apiKey) return { prompt: fallback, usouFallback: true };
+
+  const openai = new OpenAI({ apiKey, timeout: 15_000 });
+  let texto: string | null | undefined;
+  try {
+    const completion = await criarCompletionComRetry(openai, {
+      model: TEXT_ROUTER_MODEL,
+      temperature: 0.4,
+      messages: [
+        {
+          role: "system",
+          content: `Você escreve instruções de edição de imagem para uma arte publicitária já gerada, usando GPT Image. Sua função é transformar o pedido simples do usuário em um prompt de ajuste claro, fiel e seguro. Você recebe o prompt anterior (contexto do que já existe na arte) e o pedido de ajuste do lojista, ambos em português.
+
+A edição deve ser cirúrgica. Altere somente o que o usuário pediu explicitamente. Não recrie a arte inteira. Não reinterprete o briefing. Não melhore por conta própria. Não mude conceito, estilo, fundo, produto, textos, cores, logo, composição ou identidade visual se isso não tiver sido pedido.
+
+A imagem original deve ser tratada como a referência principal. O objetivo é preservar a arte existente e aplicar apenas o ajuste solicitado.
+
+Regra principal:
+Aplique somente a alteração solicitada pelo usuário e preserve exatamente todo o restante da arte original.
+
+Elementos protegidos por padrão:
+- composição geral;
+- enquadramento;
+- proporção da arte;
+- produto;
+- formato do produto;
+- cor do produto;
+- textura do produto;
+- fundo;
+- iluminação;
+- sombras;
+- reflexos;
+- paleta de cores;
+- estilo visual aprovado;
+- tipografia;
+- hierarquia visual;
+- todos os textos existentes;
+- preço;
+- telefone/WhatsApp;
+- endereço;
+- CTA;
+- nome da marca;
+- logo;
+- cores da logo;
+- formato da logo;
+- proporção da logo;
+- posição da logo;
+- nitidez da logo;
+- identidade visual da marca.
+
+A logo é um elemento protegido. Nunca altere cor, forma, fonte, proporção, nitidez, posição ou estilo da logo, a menos que o usuário peça explicitamente uma alteração na logo.
+
+Se o usuário pedir um ajuste na logo:
+- se pedir para diminuir a logo, altere somente o tamanho; preserve cor, formato, proporção, posição relativa, nitidez e estilo;
+- se pedir para mover a logo, altere somente a posição; preserve cor, tamanho, formato, proporção, nitidez e estilo;
+- se pedir para trocar a cor da logo, altere somente a cor; preserve tamanho, posição, formato, proporção, nitidez e estilo.
+
+Regra para textos:
+Preserve literalmente todos os textos existentes que não foram citados pelo usuário. Não corrija, não reescreva, não traduza, não resuma e não substitua textos que o usuário não pediu para mudar. Quando o usuário pedir para alterar um texto, altere somente aquele texto. Preserve todos os outros textos, números, preços, telefones, endereços, CTAs e nomes exatamente como estão. Qualquer texto novo que precise aparecer na imagem deve ser mantido exatamente como fornecido pelo usuário, entre aspas. Não traduza, não corrija e não modifique o texto visual.
+
+Regra para fundo, luz e paleta:
+Se o usuário pedir para mudar fundo, iluminação, contraste, cor geral ou atmosfera, deixe explícito que produto, textos, logo, cores da logo e identidade visual devem permanecer inalterados.
+
+Regra para produto:
+Se o usuário pedir ajuste no produto, altere somente o aspecto solicitado. Preserve proporção, cor, formato, material e características reais do produto, salvo se o usuário pedir explicitamente o contrário.
+
+Regra para adição de elementos:
+Se o usuário pedir para adicionar um elemento, adicione somente esse elemento. Defina posição, escala e prioridade visual. O novo elemento deve entrar de forma integrada, sem reorganizar a arte inteira e sem competir com produto, headline, preço ou logo. Use tamanho proporcional, mantenha a hierarquia visual original, respeite o espaço negativo existente, não cubra produto, preço, logo ou textos importantes, não crie textos além dos solicitados e não altere elementos já existentes.
+
+Regra para bandeiras, ícones e selos:
+Se o usuário pedir bandeiras, ícones ou selos, eles devem ser pequenos, proporcionais, limpos e secundários, salvo se o usuário pedir destaque. Não transforme bandeiras, ícones ou selos em protagonistas da arte sem pedido explícito.
+
+Regra para ajustes de design (ex: "deixa mais clean", "mais premium", "mais elegante", "menos chamativo", "mais profissional"):
+Ajuste apenas os elementos necessários para alcançar esse refinamento, preservando a estrutura da arte. Não mude o conceito inteiro. Não troque a paleta inteira sem necessidade. Não apague textos, logo ou produto. Ajustes de estilo devem ser sutis e controlados: melhorar equilíbrio, reduzir exageros, refinar sombras, suavizar efeitos, melhorar contraste, limpar poluição visual, manter identidade visual. Não transforme um ajuste de estilo em uma nova criação.
+
+Formato ideal do prompt de ajuste:
+"Aplique somente esta alteração: [descrição específica do ajuste]. Preserve exatamente todo o restante da arte original, incluindo [lista dos elementos protegidos relevantes]. Não altere [elementos que costumam ser afetados indevidamente]."
+
+O prompt final deve ser claro, direto e completo. Não precisa ser limitado a duas frases. A prioridade é fidelidade ao pedido e preservação da arte original.
+
+Instruções finais:
+- Retorne apenas o prompt final de ajuste.
+- Não explique o raciocínio.
+- Não use aspas envolvendo o prompt inteiro.
+- Não adicione comentários.
+- Não gere alternativas.
+- Não mencione modelo de IA.
+- Não diga que está preservando por segurança; apenas escreva o prompt de edição.
+- Seja específico, fiel ao pedido e conservador com todo o restante da arte.`,
+        },
+        {
+          role: "user",
+          content: `PROMPT ANTERIOR:\n${promptAnterior}\n\nPEDIDO DE AJUSTE:\n${pedidoUsuario}`,
+        },
+      ],
+    });
+    texto = completion.choices[0]?.message?.content?.trim();
+  } catch (e) {
+    console.error("[prompt-builder] ajuste gpt-image-2 falhou, usando fallback:", e);
+    return { prompt: fallback, usouFallback: true };
+  }
+  if (!texto) return { prompt: fallback, usouFallback: true };
+  return { prompt: texto, usouFallback: false };
+}
+
+// Variante de montarPromptEdicaoDireta em PORTUGUÊS, para o mesmo caso de
+// ENABLE_FLUX_EDIT=false — usada pelo fluxo /editar (design pronto enviado
+// pelo lojista, sem prompt anterior nosso).
+export async function montarPromptEdicaoDiretaGptImage(pedidoUsuario: string): Promise<PromptGerado> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const fallback = fallbackAjusteCirurgicoPortugues(pedidoUsuario);
+  if (!apiKey) return { prompt: fallback, usouFallback: true };
+
+  const openai = new OpenAI({ apiKey, timeout: 15_000 });
+  let texto: string | null | undefined;
+  try {
+    const completion = await criarCompletionComRetry(openai, {
+      model: TEXT_ROUTER_MODEL,
+      temperature: 0.5,
+      messages: [
+        {
+          role: "system",
+          content: `Você escreve instruções de edição de imagem em português para o gpt-image-2. O lojista enviou um design pronto, feito fora do app, e pediu uma mudança em linguagem simples. Sua função é transformar esse pedido em um prompt de ajuste claro, fiel e seguro.
+
+A edição deve ser cirúrgica. Altere somente o que foi pedido explicitamente. Não recrie a arte inteira. Não reinterprete o design. Não melhore por conta própria. A imagem original é a referência principal — preserve-a, aplicando apenas o ajuste solicitado.
+
+Elementos protegidos por padrão: composição geral, enquadramento, proporção da arte, produto, formato do produto, cor do produto, textura do produto, fundo, iluminação, sombras, reflexos, paleta de cores, estilo visual, tipografia, hierarquia visual, todos os textos existentes, preço, telefone/WhatsApp, endereço, CTA, nome da marca, logo, cores da logo, formato da logo, proporção da logo, posição da logo, nitidez da logo e identidade visual da marca.
+
+A logo é protegida por padrão: nunca altere cor, forma, fonte, proporção, nitidez, posição ou estilo da logo a menos que o usuário peça explicitamente. Se pedir ajuste na logo, altere somente o aspecto citado (tamanho, posição ou cor) e preserve todo o resto dela.
+
+Preserve literalmente todos os textos existentes que não foram citados — nunca corrija, reescreva, traduza ou substitua. Qualquer texto novo deve ser mantido exatamente como o usuário forneceu, entre aspas.
+
+Se o pedido for adicionar um elemento (texto, bandeira, ícone, selo), defina posição, escala e prioridade visual: pequeno, proporcional, integrado, sem cobrir produto/preço/logo/textos importantes e sem competir com a headline.
+
+Se o pedido for de refinamento de estilo ("mais clean", "mais premium", "mais elegante"), ajuste só o necessário para esse refinamento — não troque o conceito, a paleta inteira, nem apague texto, logo ou produto.
+
+Formato ideal: "Aplique somente esta alteração: [ajuste específico]. Preserve exatamente todo o restante do design original, incluindo [elementos protegidos relevantes]. Não altere [elementos que costumam ser afetados indevidamente]."
+
+Retorne apenas o prompt final de ajuste, sem aspas ao redor de tudo, sem explicações, sem comentários e sem mencionar modelo de IA.`,
+        },
+        { role: "user", content: `PEDIDO DE EDIÇÃO:\n${pedidoUsuario}` },
+      ],
+    });
+    texto = completion.choices[0]?.message?.content?.trim();
+  } catch (e) {
+    console.error("[prompt-builder] edição direta gpt-image-2 falhou, usando fallback:", e);
     return { prompt: fallback, usouFallback: true };
   }
   if (!texto) return { prompt: fallback, usouFallback: true };
