@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { lerRespostaJSON } from "@/lib/fetch-json";
 import {
+  CAMPOS_CONDICIONAIS_PRINCIPAL,
+  CARD_BRIEFING_PRINCIPAL,
+  selecoesCardPrincipalParaBriefing,
+  selecoesCardSegmentoParaPerguntas,
+} from "@/lib/briefing-card";
+import CardAgrupado from "@/components/CardAgrupado";
+import {
   TIPOS_IMAGEM_ANEXO,
   type BriefingCompleto,
   type ContratoAgente,
@@ -16,6 +23,13 @@ import {
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
 const TIPOS_ANEXO: TipoImagemAnexo[] = ["produto", "referencia", "logotipo"];
 
+// Etapas fixas do fluxo rápido de criação (controladas pelo app, não pelo
+// modelo — ver agente-conversa.ts): a conversa livre só cobre a primeira
+// pergunta ("o que você quer anunciar?") e o resumo/confirmação final. No
+// meio, dois cards agrupados (principal + segmento opcional) e uma
+// observação opcional substituem o antigo "uma pergunta por mensagem".
+type Fase = "conversa" | "card_principal" | "card_segmento" | "observacao";
+
 // Primeira pergunta é fixa (não gasta chamada à IA) — já entra no formato do
 // contrato do agente pra manter o histórico consistente (ver agente-conversa.ts).
 // A conversa começa entendendo o produto (aberto), não escolhendo categoria.
@@ -23,6 +37,7 @@ function contratoInicial(): ContratoAgente {
   return {
     mensagem: "Oi! Vou te ajudar a montar sua arte. Pra começar: o que você quer anunciar hoje?",
     opcoes: [],
+    grupos: [],
     campoEmColeta: "descricaoProduto",
     briefingParcial: {},
     prontoParaGerar: false,
@@ -43,9 +58,9 @@ function mensagemEnvio(tipo: TipoImagemAnexo, n: number): string {
     case "produto":
       return n > 1 ? `Enviei ${n} fotos do produto.` : "Enviei a foto do produto.";
     case "referencia":
-      return n > 1 ? `Enviei ${n} imagens de referência.` : "Enviei uma imagem de referência.";
+      return n > 1 ? `Enviei ${n} referências de cores/estilo.` : "Enviei uma referência de cores/estilo.";
     case "logotipo":
-      return "Enviei o logotipo.";
+      return "Enviei a logo da marca.";
   }
 }
 
@@ -62,6 +77,13 @@ export default function ChatWizard() {
   const [mensagens, setMensagens] = useState<MensagemChat[]>(() => [
     { role: "assistant", content: JSON.stringify(contratoInicial()) },
   ]);
+  const [fase, setFase] = useState<Fase>("conversa");
+  // Campos definidos diretamente pelas escolhas do lojista nos cards e na
+  // observação — nunca dependem do modelo ecoar corretamente um JSON, só
+  // são mesclados com briefingParcial (extração/composição da IA) na hora
+  // de gerar (ver gerar()).
+  const [briefingFront, setBriefingFront] = useState<Partial<BriefingCompleto>>({});
+  const [observacao, setObservacao] = useState("");
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [enviandoTipo, setEnviandoTipo] = useState<TipoImagemAnexo | null>(null);
@@ -73,12 +95,13 @@ export default function ChatWizard() {
   const ultimaAssistente = [...mensagens].reverse().find((m) => m.role === "assistant");
   const contrato = ultimaAssistente ? parseContrato(ultimaAssistente.content) : null;
   const temOpcoes = !!contrato?.opcoes?.length;
+  const jaTeveMensagemUsuario = mensagens.some((m) => m.role === "user");
 
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [mensagens, gerando]);
+  }, [mensagens, gerando, fase]);
 
-  async function enviarMensagem(conteudo: string) {
+  async function enviarMensagem(conteudo: string, aoReceberResposta?: (c: ContratoAgente) => void) {
     if (!conteudo.trim() || enviando || gerando) return;
     setErro(null);
     const novas: MensagemChat[] = [...mensagens, { role: "user", content: conteudo.trim() }];
@@ -96,11 +119,44 @@ export default function ChatWizard() {
         throw new Error("error" in json ? json.error : "Erro na conversa.");
       }
       setMensagens([...novas, { role: "assistant", content: JSON.stringify(json) }]);
+      aoReceberResposta?.(json);
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Não consegui responder agora. Tente de novo.");
     } finally {
       setEnviando(false);
     }
+  }
+
+  // Primeira mensagem livre ("o que você quer anunciar?") sempre avança pro
+  // card principal — depois disso, a conversa livre volta a ser só o
+  // resumo/confirmação (ou "quero mudar algo"), sem forçar fase.
+  function onEnviarTextoLivre(conteudo: string) {
+    if (jaTeveMensagemUsuario) {
+      enviarMensagem(conteudo);
+    } else {
+      enviarMensagem(conteudo, () => setFase("card_principal"));
+    }
+  }
+
+  function onEnviarCardPrincipal(texto: string, selecoes: Record<string, string>, camposTexto: Record<string, string>) {
+    setBriefingFront((prev) => ({ ...prev, ...selecoesCardPrincipalParaBriefing(selecoes, camposTexto) }));
+    enviarMensagem(texto, (c) => setFase(c.grupos.length > 0 ? "card_segmento" : "observacao"));
+  }
+
+  function onEnviarCardSegmento(texto: string, selecoes: Record<string, string>) {
+    const gruposAtuais = contrato?.grupos ?? [];
+    setBriefingFront((prev) => ({
+      ...prev,
+      perguntasSegmento: [...(prev.perguntasSegmento ?? []), ...selecoesCardSegmentoParaPerguntas(gruposAtuais, selecoes)],
+    }));
+    enviarMensagem(texto, () => setFase("observacao"));
+  }
+
+  function onContinuarObservacao() {
+    if (enviando) return;
+    const texto = observacao.trim() || "Sem observação adicional.";
+    setBriefingFront((prev) => ({ ...prev, observacaoUsuario: observacao.trim() || undefined }));
+    enviarMensagem(texto, () => setFase("conversa"));
   }
 
   async function onSelecionarImagens(tipo: TipoImagemAnexo, e: React.ChangeEvent<HTMLInputElement>) {
@@ -127,7 +183,10 @@ export default function ChatWizard() {
         novas.push({ tipo, url: data.publicUrl });
       }
       setImagens((prev) => [...prev, ...novas]);
-      await enviarMensagem(mensagemEnvio(tipo, novas.length));
+      // Só registra o envio na transcrição se a conversa já estiver em modo
+      // livre — durante os cards agrupados isso viraria uma 2ª mensagem de
+      // usuário fora de ordem, sem afetar o card em andamento.
+      if (fase === "conversa") await enviarMensagem(mensagemEnvio(tipo, novas.length));
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Falha ao enviar a imagem.");
     } finally {
@@ -147,10 +206,13 @@ export default function ChatWizard() {
     setErro(null);
     try {
       // A verdade sobre quais anexos existem vem do que foi de fato enviado
-      // (painel lateral), não do que a conversa acha que existe — mais
-      // confiável do que depender do modelo acertar esses três booleanos.
+      // (painel lateral), não do que a conversa acha que existe. Os campos
+      // do card agrupado (briefingFront) têm prioridade sobre o que o
+      // modelo ecoou em briefingParcial — nunca dependem da IA acertar a
+      // transcrição de objetivo/formato/estilo/cores/texto principal.
       const briefing: BriefingCompleto = {
         ...(contrato.briefingParcial as BriefingCompleto),
+        ...briefingFront,
         temFotoProduto: imagens.some((i) => i.tipo === "produto"),
         temReferencia: imagens.some((i) => i.tipo === "referencia"),
         temLogotipo: imagens.some((i) => i.tipo === "logotipo"),
@@ -173,15 +235,15 @@ export default function ChatWizard() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0 relative">
-      {/* Cabeçalho leve com acesso ao painel de anexos — sempre disponível,
-          nada aqui é obrigatório para gerar. */}
+      {/* Cabeçalho leve com acesso a "Materiais da arte" — sempre
+          disponível, nada aqui é obrigatório para gerar. */}
       <div className="flex items-center justify-end mb-2">
         <button
           type="button"
           onClick={() => setPainelAberto(true)}
           className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--accent-soft)] px-3 py-1.5 rounded-full"
         >
-          📎 Anexos {totalAnexos > 0 ? `(${totalAnexos})` : "(opcional)"}
+          🧩 Materiais da arte {totalAnexos > 0 ? `(${totalAnexos})` : ""}
         </button>
       </div>
 
@@ -190,7 +252,10 @@ export default function ChatWizard() {
         {mensagens.map((m, i) => {
           if (m.role === "user") {
             return (
-              <div key={i} className="self-end max-w-[85%] bg-[var(--primary)] text-[var(--primary-foreground)] rounded-2xl rounded-br-sm px-4 py-2.5 text-sm">
+              <div
+                key={i}
+                className="self-end max-w-[85%] bg-[var(--primary)] text-[var(--primary-foreground)] rounded-2xl rounded-br-sm px-4 py-2.5 text-sm whitespace-pre-line"
+              >
                 {m.content}
               </div>
             );
@@ -216,7 +281,7 @@ export default function ChatWizard() {
 
       {/* Botão de gerar — aparece assim que o briefing estiver resolvido,
           mas a conversa continua liberada pra refinar depois. */}
-      {contrato?.prontoParaGerar && (
+      {contrato?.prontoParaGerar && fase === "conversa" && (
         <button
           type="button"
           onClick={gerar}
@@ -227,50 +292,84 @@ export default function ChatWizard() {
         </button>
       )}
 
-      {/* Área de interação: botões de resposta rápida e/ou texto livre.
-          Anexar imagem nunca bloqueia essa área — fica no painel lateral. */}
-      <div className="flex flex-col gap-2">
-        {temOpcoes && (
-          <div className="flex flex-wrap gap-2">
-            {contrato!.opcoes.map((o) => (
-              <button
-                key={o}
-                type="button"
-                onClick={() => enviarMensagem(o)}
-                disabled={enviando || gerando}
-                className="text-sm font-medium bg-[var(--accent-soft)] px-4 py-2.5 rounded-full disabled:opacity-50"
-              >
-                {o}
-              </button>
-            ))}
+      {/* Área de interação — muda de acordo com a etapa fixa do fluxo. */}
+      {fase === "card_principal" ? (
+        <CardAgrupado
+          card={CARD_BRIEFING_PRINCIPAL}
+          camposCondicionais={CAMPOS_CONDICIONAIS_PRINCIPAL}
+          onEnviar={onEnviarCardPrincipal}
+          enviando={enviando}
+        />
+      ) : fase === "card_segmento" && contrato?.grupos?.length ? (
+        <CardAgrupado
+          card={{ titulo: contrato.mensagem, grupos: contrato.grupos, botaoEnviar: "Enviar respostas" }}
+          onEnviar={onEnviarCardSegmento}
+          enviando={enviando}
+        />
+      ) : fase === "observacao" ? (
+        <div className="card p-4 flex flex-col gap-3">
+          <div>
+            <h3 className="font-semibold text-sm">Quer acrescentar alguma observação?</h3>
+            <p className="text-xs text-[var(--muted)] mt-1">
+              Ex: evitar fundo escuro, destacar preço, deixar mais jovem, seguir estilo do Instagram da loja...
+            </p>
           </div>
-        )}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            enviarMensagem(texto);
-          }}
-          className="flex gap-2"
-        >
-          <input
-            className="input flex-1"
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            placeholder={temOpcoes ? "Ou descreva com suas palavras…" : "Digite sua resposta…"}
-            disabled={enviando || gerando}
+          <textarea
+            className="input min-h-[70px] resize-none"
+            value={observacao}
+            onChange={(e) => setObservacao(e.target.value)}
+            placeholder="Opcional — pode deixar em branco e continuar"
+            disabled={enviando}
           />
-          <button
-            type="submit"
-            disabled={!texto.trim() || enviando || gerando}
-            className="btn btn-primary"
-          >
-            Enviar
+          <button type="button" onClick={onContinuarObservacao} disabled={enviando} className="btn btn-accent btn-block">
+            {enviando ? "Continuando…" : "Continuar"}
           </button>
-        </form>
-      </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {temOpcoes && (
+            <div className="flex flex-wrap gap-2">
+              {contrato!.opcoes.map((o) => (
+                <button
+                  key={o}
+                  type="button"
+                  onClick={() => enviarMensagem(o)}
+                  disabled={enviando || gerando}
+                  className="text-sm font-medium bg-[var(--accent-soft)] px-4 py-2.5 rounded-full disabled:opacity-50"
+                >
+                  {o}
+                </button>
+              ))}
+            </div>
+          )}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              onEnviarTextoLivre(texto);
+            }}
+            className="flex gap-2"
+          >
+            <input
+              className="input flex-1"
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              placeholder={temOpcoes ? "Ou descreva com suas palavras…" : "Digite sua resposta…"}
+              disabled={enviando || gerando}
+            />
+            <button
+              type="submit"
+              disabled={!texto.trim() || enviando || gerando}
+              className="btn btn-primary"
+            >
+              Enviar
+            </button>
+          </form>
+        </div>
+      )}
 
-      {/* Painel lateral de anexos — foto do produto, referência e logotipo.
-          Nenhum é obrigatório para gerar a arte. */}
+      {/* Painel lateral "Materiais da arte" — foto do produto, logo e
+          referência de cores/estilo. Nenhum é obrigatório para gerar, e a
+          conversa não pergunta de novo sobre isso (ver agente-conversa.ts). */}
       {painelAberto && (
         <div className="fixed inset-0 z-20 flex justify-end">
           <div
@@ -279,7 +378,7 @@ export default function ChatWizard() {
           />
           <div className="relative w-[85%] max-w-sm h-full bg-[var(--background)] shadow-xl flex flex-col p-4 overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold">Anexos (opcional)</h2>
+              <h2 className="font-semibold">Materiais da arte</h2>
               <button
                 type="button"
                 onClick={() => setPainelAberto(false)}
@@ -289,8 +388,7 @@ export default function ChatWizard() {
               </button>
             </div>
             <p className="text-xs text-[var(--muted)] mb-4">
-              Nenhum anexo é obrigatório. Fotos reais do produto ajudam a fidelidade da arte, mas
-              você pode gerar sem nenhum deles.
+              Envie fotos, logo ou referências para deixar a arte mais fiel à sua marca.
             </p>
 
             <div className="flex flex-col gap-5">

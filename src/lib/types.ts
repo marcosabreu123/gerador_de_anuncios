@@ -261,8 +261,10 @@ export interface ConteudoAnuncio {
   assinaturaMarca?: string;
 }
 
-// Tipos de imagem que o lojista pode anexar durante a conversa. Cada tipo
-// aceita mais de um arquivo (ex.: produto em vários ângulos).
+// Tipos de imagem que o lojista pode anexar na área "Materiais da arte"
+// (separada da conversa). Cada tipo aceita mais de um arquivo (ex.: produto
+// em vários ângulos). "referencia" é usado só para entender paleta/estilo/
+// clima visual — nunca tratado como produto nem como logo.
 export type TipoImagemAnexo = "produto" | "referencia" | "logotipo";
 
 export const TIPOS_IMAGEM_ANEXO: Record<
@@ -271,18 +273,18 @@ export const TIPOS_IMAGEM_ANEXO: Record<
 > = {
   produto: {
     label: "foto do produto",
-    botao: "📷 Enviar foto do produto",
+    botao: "📷 Foto do produto",
     ajuda: "Uma ou mais fotos reais do produto (ângulos diferentes ajudam).",
   },
   referencia: {
-    label: "imagem de referência",
-    botao: "🖼️ Enviar referência de anúncio",
-    ajuda: "Um anúncio ou arte que você goste, como inspiração de estilo.",
+    label: "referência de cores/estilo",
+    botao: "🎨 Referência de cores/estilo",
+    ajuda: "Uma imagem que representa a paleta, o clima ou o estilo que você imagina — não é o produto nem a logo.",
   },
   logotipo: {
-    label: "logotipo",
-    botao: "🏷️ Enviar logotipo",
-    ajuda: "Sua marca/logo, se quiser que apareça na arte.",
+    label: "logo da marca",
+    botao: "🏷️ Logo da marca",
+    ajuda: "Sua logo, se quiser que apareça na arte.",
   },
 };
 
@@ -291,20 +293,72 @@ export interface ImagemAnexo {
   url: string;
 }
 
+// ==== Card de briefing agrupado (fluxo rápido de criação) ====
+// Em vez de perguntar objetivo/formato/estilo/cores/texto um de cada vez
+// (o que gerava várias idas e voltas e chamadas ao modelo), esse card fixo
+// (ver src/lib/briefing-card.ts) mostra todos os grupos de uma vez — o
+// lojista escolhe 1 opção por grupo e só then a conversa é acionada, com
+// uma única mensagem consolidada. O mesmo formato (CardPerguntas) também é
+// usado pelo bloco extra de perguntas de segmento, que aí é gerado pelo
+// próprio agente conversacional (ver agente-conversa.ts).
+export interface OpcaoGrupo {
+  label: string;
+  value: string;
+}
+
+export interface GrupoPergunta {
+  id: string;
+  pergunta: string;
+  opcoes: OpcaoGrupo[];
+}
+
+export interface CardPerguntas {
+  titulo: string;
+  grupos: GrupoPergunta[];
+  botaoEnviar: string;
+}
+
+// Objetivo de marketing da peça (tom/abordagem) — diferente de `Objetivo`
+// (canal/destino, ex. instagram/whatsapp) já existente acima.
+export type ObjetivoMarketing = "vender_rapido" | "divulgar_novidade" | "chamar_whatsapp" | "fortalecer_marca" | "ia_decide";
+
+// Canal/formato escolhido no card rápido — mapeado para `Formato` (proporção)
+// e `Objetivo` (canal) ao montar o briefing final (ver briefing-card.ts).
+export type FormatoCanal = "story" | "feed" | "whatsapp" | "trafego_pago" | "ia_decide";
+
+// Estilo de comunicação escolhido no card rápido — não inclui cor (a cor é
+// escolhida à parte em `preferenciaCores`), diferente do `EstiloVisual`
+// legado (que já vem com paleta embutida, ex. "premium-bege").
+export type EstiloComunicacao = "premium" | "clean" | "chamativo" | "moderno" | "divertido" | "ia_decide";
+
+export type PreferenciaCores = "segmento" | "marca" | "referencia" | "ia_decide";
+
+export type TextoPrincipalModo = "usar_minha_frase" | "criar_frase" | "destacar_oferta";
+
 // Briefing completo e resolvido — exigido para poder gerar a imagem.
 // `conteudoAnuncio` precisa estar aprovado (ver regra de negócio no agente:
 // nunca inserir texto que o lojista não pediu sem antes confirmar).
 // `estiloVisual` é híbrido: um preset, OU "estilo-livre" com o texto real em
-// `estiloLivre`.
+// `estiloLivre` — no fluxo rápido atual, `estiloComunicacao` é usado no
+// lugar dele (ver validação em /api/generate e prompt-builder.ts).
 export interface BriefingCompleto {
   tipoPeca: TipoPeca;
   nomeProduto: string;
   descricaoProduto?: string;
   detalhesVisuaisProduto?: string;
+  segmentoDetectado?: string;
+  oferta?: string;
   formato: Formato;
   objetivo?: Objetivo;
+  objetivoMarketing?: ObjetivoMarketing;
+  formatoCanal?: FormatoCanal;
   estiloVisual?: EstiloVisual;
   estiloLivre?: string;
+  estiloComunicacao?: EstiloComunicacao;
+  preferenciaCores?: PreferenciaCores;
+  coresMarca?: string;
+  textoPrincipalModo?: TextoPrincipalModo;
+  textoPrincipal?: string;
   nivelVisual?: NivelVisual;
   nivelProducaoVisual?: NivelProducaoVisual;
   direcaoArte?: DirecaoArte;
@@ -324,6 +378,7 @@ export interface BriefingCompleto {
   entrega?: string;
   elementosExtras?: ElementoExtra[];
   perguntasSegmento?: PerguntaSegmento[];
+  observacaoUsuario?: string;
 }
 
 // Estado em andamento durante a conversa — nada é obrigatório até o agente
@@ -414,10 +469,14 @@ export type AcaoSugerida =
 
 // Contrato de resposta do agente a cada turno (ver system prompt em
 // src/lib/ai/agente-conversa.ts). `opcoes` vazio = pergunta de texto livre.
+// `grupos` só é usado no bloco extra de perguntas de segmento (no máximo 1
+// por conversa) — o card principal é fixo e não depende do modelo (ver
+// src/lib/briefing-card.ts).
 export interface ContratoAgente {
   mensagem: string;
   opcoes: string[];
   campoEmColeta: string | null;
+  grupos: GrupoPergunta[];
   briefingParcial: BriefingParcial;
   prontoParaGerar: boolean;
   acaoSugerida: AcaoSugerida;

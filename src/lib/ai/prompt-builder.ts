@@ -10,9 +10,60 @@ import {
   type ArteExistenteRequest,
   type BriefingCompleto,
   type DirecaoTransformacao,
+  type EstiloComunicacao,
   type MensagemAjusteConversa,
+  type ObjetivoMarketing,
   type TipoUsoAnexoAjuste,
 } from "@/lib/types";
+
+// Traduções em português (para manter o mesmo idioma do resto do contexto
+// enviado ao prompt-builder, ver briefingParaTexto) dos 5 campos do card
+// rápido de criação (ver src/lib/briefing-card.ts) que não têm equivalente
+// direto nos tipos legados (EstiloVisual já vem com paleta embutida;
+// Objetivo é canal/destino, não objetivo de marketing).
+const ESTILOS_COMUNICACAO: Record<Exclude<EstiloComunicacao, "ia_decide">, string> = {
+  premium: "estética premium e sofisticada, acabamento refinado, tom aspiracional",
+  clean: "composição minimalista, bastante espaço negativo, foco quase total no produto, poucos elementos",
+  chamativo: "alto impacto visual, tipografia forte e direta, energia comercial evidente, mas sem cair em estética de panfleto amador",
+  moderno: "linguagem visual contemporânea, tipografia moderna, composição dinâmica e atual",
+  divertido: "clima descontraído, jovem e leve, tom amigável, ainda com acabamento profissional",
+};
+
+const OBJETIVOS_MARKETING_HINT: Record<Exclude<ObjetivoMarketing, "ia_decide">, string> = {
+  vender_rapido: "tom direto de venda, senso de urgência e oferta clara, prioridade em converter rápido",
+  divulgar_novidade: "tom de lançamento/novidade, destaque para o que é novo",
+  chamar_whatsapp: "prioridade em levar o cliente a chamar no WhatsApp — CTA de contato bem visível",
+  fortalecer_marca: "tom mais institucional e aspiracional, produto e marca como protagonistas, menos ênfase no preço",
+};
+
+// Direção de cores do card rápido — as 4 frases já eram dadas prontas em
+// inglês na especificação original, mas o resto do contexto enviado ao
+// prompt-builder (briefingParaTexto) é em português, então aqui elas viram
+// frases em português equivalentes pra manter o texto consistente.
+function direcaoDeCoresParaTexto(b: BriefingCompleto): string {
+  if (b.preferenciaCores === "marca" && b.coresMarca?.trim()) {
+    return `Use as cores da marca informadas pelo lojista (${b.coresMarca.trim()}) como paleta principal, equilibrando com tons neutros complementares para manter contraste, legibilidade e acabamento profissional. Não use cores do segmento que briguem com essa identidade.`;
+  }
+  if (b.preferenciaCores === "marca") {
+    // Escolheu "cores da marca" mas não informou quais — sem base nenhuma
+    // pra travar a composição numa identidade específica, cai pro critério
+    // do segmento (nunca invente uma identidade visual não informada).
+    return "O lojista não informou as cores específicas da marca — use uma paleta coerente com o segmento, produto, objetivo e estilo visual.";
+  }
+  if (b.preferenciaCores === "referencia") {
+    if (b.temReferencia) {
+      return "Há uma imagem de referência de cores/estilo anexada — use-a apenas para entender paleta principal, clima visual, nível de sofisticação e linguagem estética. Não copie a imagem literalmente, não a trate como produto e não a trate como logotipo. Extraia a direção visual e aplique numa composição publicitária original.";
+    }
+    // Pediu "seguir referência" mas não anexou nada — sem imagem não há o
+    // que seguir; cai pro critério do segmento em vez de travar/inventar.
+    return "O lojista pediu para seguir uma referência visual, mas nenhuma imagem de referência foi anexada — use uma paleta coerente com o segmento, produto, objetivo e estilo visual.";
+  }
+  if (b.preferenciaCores === "ia_decide") {
+    return "Escolha a paleta de cores mais eficaz com base no produto, segmento, objetivo e estilo visual da peça.";
+  }
+  // "segmento" (padrão) ou não informado.
+  return "Use uma paleta de cores coerente com o segmento, o produto, o objetivo e o estilo visual desta peça.";
+}
 
 // A "IA de conversa" transforma o briefing coletado pelo agente
 // conversacional (src/lib/ai/agente-conversa.ts) num prompt visual
@@ -84,6 +135,9 @@ A composição deve seguir o objetivo da peça: anúncio de produto e promoção
 
 Se houver imagem de referência anexada, use-a só como inspiração de composição/paleta/clima — nunca copie texto, marca ou logotipo de terceiros que apareçam nela.
 
+## Referência de cores/estilo (quando a direção de cores pedir "seguir referência")
+Essa imagem representa só paleta, clima visual, nível de sofisticação e linguagem estética — nunca é o produto da peça nem a logo da marca. Extraia a direção visual dela (não copie literalmente) e aplique numa composição publicitária original.
+
 Se houver preset visual, traduza assim:
 - premium-bege: fundo bege sofisticado, luz suave, estética limpa e elegante.
 - minimalista: poucos elementos, muito espaço negativo, composição limpa.
@@ -120,6 +174,11 @@ function estiloParaTexto(b: BriefingCompleto): string {
     return `descrito pelo lojista em suas palavras: "${b.estiloLivre ?? ""}" (traduza em atributos visuais concretos)`;
   }
   if (b.estiloVisual) return `${ESTILOS[b.estiloVisual].label} — ${ESTILOS[b.estiloVisual].hint}`;
+  // Fluxo rápido de criação (card agrupado, ver briefing-card.ts) usa
+  // estiloComunicacao no lugar do preset legado — sem paleta embutida
+  // (a cor vem à parte, ver direcaoDeCoresParaTexto).
+  if (b.estiloComunicacao && b.estiloComunicacao !== "ia_decide") return ESTILOS_COMUNICACAO[b.estiloComunicacao];
+  if (b.estiloComunicacao === "ia_decide") return "a critério do diretor de arte, com base no produto, segmento e objetivo";
   return "não especificado — use um estilo comercial neutro e elegante";
 }
 
@@ -161,6 +220,10 @@ function briefingParaTexto(b: BriefingCompleto): string {
   if (b.publicoTom) linhas.push(`Público/tom: ${b.publicoTom}`);
   if (b.conceito) linhas.push(`Ângulo criativo/conceito: ${b.conceito}`);
   if (b.objetivo) linhas.push(`Objetivo: ${b.objetivo}`);
+  if (b.objetivoMarketing && b.objetivoMarketing !== "ia_decide") {
+    linhas.push(`Objetivo de marketing: ${OBJETIVOS_MARKETING_HINT[b.objetivoMarketing]}`);
+  }
+  linhas.push(`Direção de cores: ${direcaoDeCoresParaTexto(b)}`);
 
   const d = b.direcaoArte;
   if (d && Object.values(d).some((v) => (Array.isArray(v) ? v.length : v))) {
@@ -216,7 +279,9 @@ export function montarPromptFallback(b: BriefingCompleto): string {
       ? (b.estiloLivre ?? "estilo comercial neutro e elegante")
       : b.estiloVisual
         ? ESTILOS[b.estiloVisual].hint
-        : "estilo comercial neutro e elegante";
+        : b.estiloComunicacao && b.estiloComunicacao !== "ia_decide"
+          ? ESTILOS_COMUNICACAO[b.estiloComunicacao]
+          : "estilo comercial neutro e elegante";
   const nivel = NIVEIS_VISUAIS[b.nivelVisual ?? "profissional-equilibrado"].hint;
   const producao = NIVEIS_PRODUCAO_VISUAL[b.nivelProducaoVisual ?? "premium-editorial"].hint;
   const c = b.conteudoAnuncio;
@@ -236,6 +301,10 @@ export function montarPromptFallback(b: BriefingCompleto): string {
   if (c?.assinaturaMarca) partes.push(`Assine a arte com "${c.assinaturaMarca}" como logo/assinatura pequena, posicionada onde a composição ficar mais equilibrada (não precisa ser sempre no rodapé).`);
   for (const info of c?.informacoesSecundarias ?? []) partes.push(`Inclua também: ${info}.`);
   for (const el of b.elementosExtras ?? []) partes.push(`Inclua também: ${el.tipo}: ${el.valor}.`);
+  partes.push(`Direção de cores: ${direcaoDeCoresParaTexto(b)}`);
+  if (b.objetivoMarketing && b.objetivoMarketing !== "ia_decide") {
+    partes.push(`Tom da comunicação: ${OBJETIVOS_MARKETING_HINT[b.objetivoMarketing]}.`);
+  }
   partes.push(`Composição pronta para ${fmt.descricao}, fugindo de layout de template óbvio, com no máximo 3 blocos de texto principais, sem estética de panfleto barato, sem fundo vermelho/laranja saturado genérico, sem amarelo neon e sem excesso de texto.`);
   return partes.join(" ");
 }

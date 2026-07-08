@@ -42,10 +42,13 @@ function validar(b: BriefingCompleto | undefined): b is BriefingCompleto {
   if (!b.nomeProduto?.trim()) return false;
   if (!(b.tipoPeca in TIPOS_PECA)) return false;
   if (!(b.formato in FORMATOS)) return false;
-  // Estilo é híbrido: preset válido, OU "estilo-livre" com o texto preenchido.
+  // Estilo é híbrido: preset legado válido, OU "estilo-livre" com o texto
+  // preenchido, OU estiloComunicacao do card rápido de criação (ver
+  // src/lib/briefing-card.ts — esse fluxo não usa mais o preset legado).
   const estiloOk =
     (b.estiloVisual && b.estiloVisual !== "estilo-livre" && b.estiloVisual in ESTILOS) ||
-    (b.estiloVisual === "estilo-livre" && !!b.estiloLivre?.trim());
+    (b.estiloVisual === "estilo-livre" && !!b.estiloLivre?.trim()) ||
+    !!b.estiloComunicacao;
   if (!estiloOk) return false;
   // Conteúdo precisa estar organizado e ter ao menos a chamada principal.
   if (!b.conteudoAnuncio?.headline?.trim()) return false;
