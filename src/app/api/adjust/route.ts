@@ -3,9 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { debitarCredito, estornarCredito } from "@/lib/credits";
 import { montarPromptAjuste, montarPromptAjusteGptImage } from "@/lib/ai/prompt-builder";
 import { editarComFalKontext } from "@/lib/ai/fal-edit";
-import { gerarVariacoes } from "@/lib/ai/openai-image";
+import { gerarVariacoes, type EntradaImagem, type TipoEntradaImagem } from "@/lib/ai/openai-image";
 import { uploadImagem } from "@/lib/storage";
 import { ENABLE_FLUX_EDIT, FAL_EDIT_MODEL, IMAGE_MODEL, qualidadeParaEtapa } from "@/lib/ai/models";
+import type { TipoUsoAnexoAjuste } from "@/lib/types";
 
 export const runtime = "nodejs";
 // Vercel Pro assinado — ENABLE_FLUX_EDIT=false por padrão agora (gpt-image-2,
@@ -14,15 +15,26 @@ export const maxDuration = 120;
 
 interface Body {
   imageId: string; // imagem de origem a ajustar
-  pedido: string; // ajuste em linguagem natural
+  pedido: string; // ajuste em linguagem natural (já esclarecido pela mini conversa)
+  anexoUrl?: string | null; // imagem de referência opcional anexada durante a conversa de ajuste
+  tipoUsoAnexo?: TipoUsoAnexoAjuste;
 }
 
-async function baixarBase64(url: string): Promise<{ base64: string; mimeType: string; tipo: "base" }> {
+const TIPO_ENTRADA_POR_USO_ANEXO: Record<TipoUsoAnexoAjuste, TipoEntradaImagem> = {
+  logo: "logotipo",
+  produto: "produto",
+  fundo: "fundo",
+  referencia_estilo: "referencia",
+  elemento_extra: "elemento_extra",
+  indefinido: "referencia",
+};
+
+async function baixarBase64(url: string, tipo: TipoEntradaImagem = "base"): Promise<EntradaImagem> {
   const res = await fetch(url);
   if (!res.ok) throw new Error("Não foi possível ler a imagem base.");
   const mimeType = res.headers.get("content-type") ?? "image/png";
   const buf = Buffer.from(await res.arrayBuffer());
-  return { base64: buf.toString("base64"), mimeType, tipo: "base" };
+  return { base64: buf.toString("base64"), mimeType, tipo };
 }
 
 export async function POST(request: NextRequest) {
@@ -63,7 +75,10 @@ export async function POST(request: NextRequest) {
     let imagem: { base64: string; mimeType: string; promptUsado: string };
     let modeloUsado: string;
 
-    if (ENABLE_FLUX_EDIT) {
+    // Flux Kontext (FAL) só aceita 1 imagem de entrada — com anexo de
+    // referência, sempre usa gpt-image-2 (aceita múltiplas imagens de
+    // entrada via /images/edits), independente de ENABLE_FLUX_EDIT.
+    if (ENABLE_FLUX_EDIT && !body.anexoUrl) {
       // Ajuste parte da ARTE já gerada (edição), preservando identidade —
       // FAL aceita a URL da imagem diretamente, sem precisar baixar/converter.
       ({ prompt } = await montarPromptAjuste(origem.prompt_usado ?? "", body.pedido));
@@ -72,9 +87,14 @@ export async function POST(request: NextRequest) {
     } else {
       ({ prompt } = await montarPromptAjusteGptImage(origem.prompt_usado ?? "", body.pedido));
       const base = await baixarBase64(origem.imagem_gerada_url);
+      const imagens = [base];
+      if (body.anexoUrl) {
+        const tipoAnexo = TIPO_ENTRADA_POR_USO_ANEXO[body.tipoUsoAnexo ?? "indefinido"];
+        imagens.push(await baixarBase64(body.anexoUrl, tipoAnexo));
+      }
       const [gerada] = await gerarVariacoes({
         prompts: [prompt],
-        imagens: [base],
+        imagens,
         qualidade: qualidadeParaEtapa("final"),
       });
       imagem = gerada;

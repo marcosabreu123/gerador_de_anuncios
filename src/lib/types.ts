@@ -370,6 +370,31 @@ export interface ArteExistenteRequest {
   preservarIdentidade?: boolean;
 }
 
+// ==== Ajuste conversacional (mini-chat antes de gerar, ver AjusteConversa.tsx) ====
+// Reaproveitado em toda tela que tenha uma área de ajuste sobre uma arte já
+// existente (pós-geração, editar design, melhorar arte, nova versão): antes
+// de gastar crédito, o pedido passa por uma pequena conversa de
+// esclarecimento (turnos de pergunta/resposta) em vez de ir direto pra
+// geração ou travar numa pergunta sem campo pra responder.
+export type StatusAjusteConversa =
+  | "aguardando_pedido"
+  | "precisa_esclarecimento"
+  | "pronto_para_confirmar"
+  | "gerando"
+  | "concluido"
+  | "erro";
+
+// Papel que uma imagem anexada durante o ajuste deve cumprir na geração —
+// "indefinido" força uma pergunta de esclarecimento antes de liberar o botão
+// de gerar (nunca assumimos o uso de um anexo ambíguo).
+export type TipoUsoAnexoAjuste = "logo" | "produto" | "fundo" | "referencia_estilo" | "elemento_extra" | "indefinido";
+
+export interface MensagemAjusteConversa {
+  role: "user" | "assistant";
+  content: string;
+  anexoUrl?: string | null;
+}
+
 // ==== Agente conversacional ====
 
 export interface MensagemChat {

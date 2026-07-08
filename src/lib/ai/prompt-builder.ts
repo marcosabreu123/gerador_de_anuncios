@@ -10,6 +10,8 @@ import {
   type ArteExistenteRequest,
   type BriefingCompleto,
   type DirecaoTransformacao,
+  type MensagemAjusteConversa,
+  type TipoUsoAnexoAjuste,
 } from "@/lib/types";
 
 // A "IA de conversa" transforma o briefing coletado pelo agente
@@ -576,11 +578,17 @@ export type TipoPedidoAjuste = "ajuste" | "nova-criacao" | "ambiguo";
 
 export interface ClassificacaoAjuste {
   tipo: TipoPedidoAjuste;
-  resumo: string; // frase curta descrevendo o que vai mudar, para confirmação
+  // Estado da mini conversa de ajuste — enquanto for "precisa_esclarecimento"
+  // nunca é seguro gerar (ver AjusteConversa.tsx, que só libera o botão de
+  // gerar/cobra crédito quando o status vira "pronto_para_confirmar").
+  status: "precisa_esclarecimento" | "pronto_para_confirmar";
+  pergunta: string | null; // pergunta de esclarecimento, quando status = precisa_esclarecimento
+  resumo: string; // frase curta e específica dizendo o que vai mudar, para confirmação
   elementosAlvo: string[]; // o que o usuário realmente pediu para mudar
   elementosProtegidos: string[]; // tudo que deve permanecer igual
-  riscoDeAlterarMarca: boolean; // pedido envolve logo, cores da marca ou identidade visual
-  precisaConfirmacao: boolean; // ambíguo ou com risco de mexer na marca sem pedido explícito
+  usaAnexo: boolean; // true quando há uma imagem anexada nesta conversa de ajuste
+  tipoUsoAnexo: TipoUsoAnexoAjuste; // "indefinido" força esclarecimento antes de gerar
+  precisaConfirmacao: boolean; // ambíguo, nova criação, ou anexo sem uso definido
   // Pedidos de texto exato/preço/contato/bandeira/ícone/logo tendem a ficar
   // mais precisos com um overlay do app (HTML/CSS/SVG) do que com edição
   // generativa, que pode reinterpretar ou distorcer esses elementos. Por
@@ -592,7 +600,6 @@ export interface ClassificacaoAjuste {
 // aqui mesmo sem o lojista mencionar, porque ela nunca deve mudar "de
 // carona" num ajuste de outra coisa.
 const ELEMENTOS_PROTEGIDOS_BASE = ["logo", "cores da logo", "proporção da logo", "posição da logo", "produto", "textos existentes", "preço", "contato"];
-const PALAVRAS_RISCO_MARCA = /\b(logo|logotipo|marca|identidade visual|paleta)\b/i;
 const PALAVRAS_NOVA_CRIACAO = /\b(refaz|refazer|refeito|n[aã]o gostei|cria outra|completamente diferente|come[cç]a de novo|do zero)\b/i;
 // Texto exato, preço, contato, bandeiras/ícones e logo são elementos onde um
 // overlay do app (HTML/CSS/SVG) tende a ser mais preciso que edição
@@ -601,24 +608,70 @@ const PALAVRAS_NOVA_CRIACAO = /\b(refaz|refazer|refeito|n[aã]o gostei|cria outr
 const PALAVRAS_OVERLAY =
   /\b(texto|frase|palavra|escrit[ao]|pre[cç]o|telefone|whatsapp|endere[cç]o|contato|bandeira|[ií]cone|logo|logotipo)\b/i;
 
-// Decide se um pedido em linguagem natural sobre uma arte já gerada é um
-// AJUSTE pontual (chamar /api/adjust) ou parece uma NOVA CRIAÇÃO disfarçada
-// (o lojista deveria recomeçar o briefing). Roda antes de gastar 1 crédito.
-export async function classificarPedidoAjuste(pedido: string): Promise<ClassificacaoAjuste> {
+const TIPOS_USO_ANEXO_VALIDOS: TipoUsoAnexoAjuste[] = [
+  "logo",
+  "produto",
+  "fundo",
+  "referencia_estilo",
+  "elemento_extra",
+  "indefinido",
+];
+
+const PERGUNTA_ANEXO_INDEFINIDO =
+  "Você quer usar essa imagem como referência de estilo, como produto, como logo ou como fundo?";
+const PERGUNTA_NOVA_CRIACAO =
+  "Isso parece uma nova versão, não um ajuste pontual. Quer criar uma nova versão mantendo as mesmas informações?";
+
+function fallbackClassificacao(pedido: string, temAnexo: boolean): ClassificacaoAjuste {
+  const tipo: TipoPedidoAjuste = PALAVRAS_NOVA_CRIACAO.test(pedido) ? "nova-criacao" : "ajuste";
+  // Sem IA disponível não dá pra inferir com segurança nem ambiguidade fina
+  // nem o uso pretendido de um anexo — nesses dois casos preferimos parar e
+  // perguntar a arriscar gerar algo que o lojista não pediu.
+  const status: ClassificacaoAjuste["status"] = tipo === "nova-criacao" || temAnexo ? "precisa_esclarecimento" : "pronto_para_confirmar";
+  const pergunta = tipo === "nova-criacao" ? PERGUNTA_NOVA_CRIACAO : temAnexo ? PERGUNTA_ANEXO_INDEFINIDO : null;
+  return {
+    tipo,
+    status,
+    pergunta,
+    resumo: pedido,
+    elementosAlvo: [pedido],
+    elementosProtegidos: ELEMENTOS_PROTEGIDOS_BASE,
+    usaAnexo: temAnexo,
+    tipoUsoAnexo: "indefinido",
+    precisaConfirmacao: status === "precisa_esclarecimento",
+    sugerirOverlay: PALAVRAS_OVERLAY.test(pedido),
+  };
+}
+
+const SYSTEM_AJUSTE_CONVERSA = `Você conduz uma mini conversa de ajuste para uma arte publicitária já existente. Sua função é entender exatamente o que o usuário quer alterar antes de gastar crédito com geração. Você recebe o histórico da conversa de ajuste (mensagens do usuário e suas perguntas/resumos anteriores) e decide o próximo passo.
+
+Se o pedido for claro, escreva em "resumo" uma frase curta e específica dizendo exatamente o que será alterado e que o restante será preservado, e marque status = "pronto_para_confirmar".
+
+Se o pedido for ambíguo (não deixar claro qual elemento deve mudar, ou puder afetar logo, cores da marca, produto, textos principais ou composição inteira sem ter sido pedido), faça uma pergunta objetiva e curta em "pergunta", classifique tipo = "ambiguo" e marque status = "precisa_esclarecimento". Nunca gere um resumo de confirmação nesse caso.
+
+Se a última mensagem do usuário indicar que há uma imagem anexada (usaAnexo = true no contexto): identifique se ela deve ser usada como logo, produto, fundo, referência de estilo ou elemento extra (bandeira, ícone, selo, embalagem etc). Se estiver claro, defina tipoUsoAnexo com esse valor e mencione isso explicitamente no resumo (ex: "Vou trocar a logo pela imagem anexada, preservando o restante da arte"). Se não estiver claro, defina tipoUsoAnexo = "indefinido", escreva em "pergunta" algo como "Você quer usar essa imagem como referência de estilo, como produto, como logo ou como fundo?", classifique tipo = "ambiguo" e marque status = "precisa_esclarecimento".
+
+Se o pedido parecer uma nova criação disfarçada (recomeçar do zero, mudar o conceito inteiro, trocar o produto principal, mudar tudo ao mesmo tempo, dizer que não gostou e quer outra arte), classifique tipo = "nova-criacao", escreva em "pergunta" algo como "Isso parece uma nova versão, não um ajuste pontual. Quer criar uma nova versão mantendo as mesmas informações?" e marque status = "precisa_esclarecimento". Nunca trate isso como ajuste cirúrgico.
+
+Sempre identifique elementosAlvo (o que muda) e elementosProtegidos (tudo que deve continuar igual). Considere logo, cores da logo, formato da logo, proporção da logo, posição da logo, produto, todos os textos, preço, telefone, endereço, composição, fundo, estilo e identidade visual como protegidos por padrão, a menos que tenham sido explicitamente citados como alvo da alteração.
+
+Nunca force a geração quando ainda houver dúvida: enquanto status for "precisa_esclarecimento", presuma que não é seguro gerar.
+
+Responda somente em JSON válido, neste formato: {"tipo": "ajuste"|"nova-criacao"|"ambiguo", "status": "precisa_esclarecimento"|"pronto_para_confirmar", "pergunta": "pergunta de esclarecimento, ou null quando não houver", "resumo": "frase curta e específica do que vai mudar", "elementosAlvo": ["..."], "elementosProtegidos": ["..."], "usaAnexo": true|false, "tipoUsoAnexo": "logo"|"produto"|"fundo"|"referencia_estilo"|"elemento_extra"|"indefinido", "precisaConfirmacao": true|false}`;
+
+// Conduz a mini conversa de ajuste sobre uma arte já existente (ver
+// MensagemAjusteConversa em types.ts e o componente AjusteConversa.tsx que
+// consome isso). Decide, turno a turno, se o pedido já está claro o
+// suficiente pra confirmar a geração (chamando /api/adjust ou
+// /api/edit-design) ou se precisa perguntar antes — nunca gasta crédito
+// sozinho, isso só acontece quando o usuário confirma a geração.
+export async function classificarPedidoAjuste(
+  historico: MensagemAjusteConversa[],
+  temAnexo: boolean,
+): Promise<ClassificacaoAjuste> {
+  const ultimoPedido = [...historico].reverse().find((m) => m.role === "user")?.content ?? "";
   const apiKey = process.env.OPENAI_API_KEY;
-  // Fallback heurístico simples caso a IA não esteja configurada/disponível.
-  if (!apiKey) {
-    const riscoDeAlterarMarca = PALAVRAS_RISCO_MARCA.test(pedido);
-    return {
-      tipo: PALAVRAS_NOVA_CRIACAO.test(pedido) ? "nova-criacao" : "ajuste",
-      resumo: pedido,
-      elementosAlvo: [pedido],
-      elementosProtegidos: ELEMENTOS_PROTEGIDOS_BASE,
-      riscoDeAlterarMarca,
-      precisaConfirmacao: riscoDeAlterarMarca,
-      sugerirOverlay: PALAVRAS_OVERLAY.test(pedido),
-    };
-  }
+  if (!apiKey) return fallbackClassificacao(ultimoPedido, temAnexo);
 
   const openai = new OpenAI({ apiKey, timeout: 15_000 });
   let texto: string | null | undefined;
@@ -628,67 +681,58 @@ export async function classificarPedidoAjuste(pedido: string): Promise<Classific
       temperature: 0.2,
       response_format: { type: "json_object" },
       messages: [
-        {
-          role: "system",
-          content: `Você classifica pedidos de alteração feitos sobre uma arte publicitária já gerada. Sua função é decidir se o pedido é um ajuste pontual, uma nova criação disfarçada ou ambíguo. Responda somente em JSON válido.
-
-Use:
-- ajuste: quando o usuário pedir mudança pequena e específica, como trocar preço, mudar cor de fundo, aumentar texto, remover um elemento, diminuir logo ou ajustar posição.
-- nova-criacao: quando o usuário quiser recomeçar, mudar o conceito inteiro, trocar produto principal, mudar formato e estilo ao mesmo tempo, ou disser que não gostou e quer outra arte.
-- ambiguo: quando o pedido não deixar claro qual elemento deve mudar, ou quando puder afetar elementos importantes como logo, cores da marca, produto, textos principais ou composição inteira.
-
-Sempre identifique os elementosAlvo, ou seja, aquilo que o usuário realmente pediu para mudar. Sempre identifique elementosProtegidos, ou seja, tudo que deve permanecer igual. Considere a logo e seus atributos como protegidos por padrão: cor, forma, proporção, posição, legibilidade e estilo. Marque riscoDeAlterarMarca como true quando o pedido envolver logo, cores da marca, identidade visual, paleta geral ou algo que possa afetar a marca. Marque precisaConfirmacao como true quando houver ambiguidade ou risco de alterar a marca sem pedido explícito.
-
-Se o pedido for ambíguo sobre QUAL elemento deve mudar (ex: "troque a cor para vermelho" sem dizer de quê), escreva em "resumo" uma pergunta direta pro lojista escolher o elemento, em vez de supor.
-
-Responda em JSON: {"tipo": "ajuste"|"nova-criacao"|"ambiguo", "resumo": "frase curta e específica, ou a pergunta de esclarecimento quando ambíguo", "elementosAlvo": ["..."], "elementosProtegidos": ["..."], "riscoDeAlterarMarca": true|false, "precisaConfirmacao": true|false}`,
-        },
-        { role: "user", content: pedido },
+        { role: "system", content: SYSTEM_AJUSTE_CONVERSA },
+        ...historico.map((m) => ({ role: m.role, content: m.content })),
+        { role: "user", content: `[contexto: usaAnexo=${temAnexo ? "true" : "false"} na última mensagem do usuário]` },
       ],
     });
     texto = completion.choices[0]?.message?.content;
   } catch (e) {
-    console.error("[prompt-builder] classificação de ajuste falhou:", e);
-    return {
-      tipo: "ajuste",
-      resumo: pedido,
-      elementosAlvo: [pedido],
-      elementosProtegidos: ELEMENTOS_PROTEGIDOS_BASE,
-      riscoDeAlterarMarca: false,
-      precisaConfirmacao: false,
-      sugerirOverlay: PALAVRAS_OVERLAY.test(pedido),
-    };
+    console.error("[prompt-builder] classificação de ajuste (conversa) falhou:", e);
+    return fallbackClassificacao(ultimoPedido, temAnexo);
   }
 
-  const fallbackClassificacao: ClassificacaoAjuste = {
-    tipo: "ajuste",
-    resumo: pedido,
-    elementosAlvo: [pedido],
-    elementosProtegidos: ELEMENTOS_PROTEGIDOS_BASE,
-    riscoDeAlterarMarca: false,
-    precisaConfirmacao: false,
-    sugerirOverlay: PALAVRAS_OVERLAY.test(pedido),
-  };
-  if (!texto) return fallbackClassificacao;
+  if (!texto) return fallbackClassificacao(ultimoPedido, temAnexo);
   try {
     const j = JSON.parse(texto);
     const tipo: TipoPedidoAjuste = ["ajuste", "nova-criacao", "ambiguo"].includes(j.tipo) ? j.tipo : "ajuste";
-    const resumo = typeof j.resumo === "string" && j.resumo.trim() ? j.resumo.trim() : pedido;
+    const pergunta = typeof j.pergunta === "string" && j.pergunta.trim() ? j.pergunta.trim() : null;
+    const resumo = typeof j.resumo === "string" && j.resumo.trim() ? j.resumo.trim() : ultimoPedido;
     const elementosAlvo = Array.isArray(j.elementosAlvo)
       ? j.elementosAlvo.filter((x: unknown) => typeof x === "string")
-      : [pedido];
+      : [ultimoPedido];
     const elementosProtegidos = Array.isArray(j.elementosProtegidos)
       ? j.elementosProtegidos.filter((x: unknown) => typeof x === "string")
       : ELEMENTOS_PROTEGIDOS_BASE;
-    const riscoDeAlterarMarca = j.riscoDeAlterarMarca === true;
-    const precisaConfirmacao = j.precisaConfirmacao === true || tipo === "ambiguo" || riscoDeAlterarMarca;
-    const sugerirOverlay = PALAVRAS_OVERLAY.test(pedido);
-    return { tipo, resumo, elementosAlvo, elementosProtegidos, riscoDeAlterarMarca, precisaConfirmacao, sugerirOverlay };
+    const usaAnexo = j.usaAnexo === true || temAnexo;
+    const tipoUsoAnexoBruto: TipoUsoAnexoAjuste = TIPOS_USO_ANEXO_VALIDOS.includes(j.tipoUsoAnexo) ? j.tipoUsoAnexo : "indefinido";
+
+    // Nunca libera geração com anexo sem uso definido, mesmo que o modelo
+    // tenha (incorretamente) marcado status = pronto_para_confirmar.
+    const precisaEsclarecerAnexo = usaAnexo && tipoUsoAnexoBruto === "indefinido";
+    const status: ClassificacaoAjuste["status"] =
+      j.status === "precisa_esclarecimento" || precisaEsclarecerAnexo ? "precisa_esclarecimento" : "pronto_para_confirmar";
+    const perguntaFinal =
+      status === "precisa_esclarecimento" ? (precisaEsclarecerAnexo && !pergunta ? PERGUNTA_ANEXO_INDEFINIDO : pergunta) : null;
+    const precisaConfirmacao = j.precisaConfirmacao === true || status === "precisa_esclarecimento";
+
+    return {
+      tipo,
+      status,
+      pergunta: perguntaFinal,
+      resumo,
+      elementosAlvo,
+      elementosProtegidos,
+      usaAnexo,
+      tipoUsoAnexo: tipoUsoAnexoBruto,
+      precisaConfirmacao,
+      sugerirOverlay: PALAVRAS_OVERLAY.test(ultimoPedido),
+    };
   } catch (e) {
     // Falha de PARSE (conteúdo não é JSON válido) é um erro diferente de
     // falha de API — nunca deixa o texto cru do modelo vazar pro chamador.
     console.error("[prompt-builder] resposta de classificação não é JSON válido:", e, texto);
-    return fallbackClassificacao;
+    return fallbackClassificacao(ultimoPedido, temAnexo);
   }
 }
 

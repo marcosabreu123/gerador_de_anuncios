@@ -13,7 +13,7 @@ export interface ImagemGerada {
 // Tipo de imagem de entrada — usado para descrever o papel de cada uma pro
 // modelo, já que a API de imagem da OpenAI não tem um campo estruturado de
 // "papel" por imagem (só uma lista ordenada de arquivos).
-export type TipoEntradaImagem = "produto" | "referencia" | "logotipo" | "base";
+export type TipoEntradaImagem = "produto" | "referencia" | "logotipo" | "base" | "fundo" | "elemento_extra";
 
 export interface EntradaImagem {
   base64: string;
@@ -27,6 +27,10 @@ const LABELS_ENTRADA: Record<TipoEntradaImagem, string> = {
     "uma imagem de referência de estilo anexada — use só como inspiração de composição/paleta/clima, nunca copie texto, marca ou logotipo de terceiros que apareçam nela",
   logotipo: "o logotipo da marca do lojista anexado — inclua de forma discreta e legível na arte, sem distorcer",
   base: "a imagem base a ser editada — aplique o ajuste pedido preservando o restante exatamente como está",
+  fundo:
+    "uma imagem de referência de fundo anexada pelo lojista — use como base/inspiração para o novo fundo da arte, sem copiar textos ou marcas de terceiros que apareçam nela",
+  elemento_extra:
+    "um elemento visual adicional anexado pelo lojista (ex: selo, ícone, bandeira, embalagem) — inclua-o na arte de forma pequena, proporcional e integrada, sem competir com produto, preço ou headline",
 };
 
 function getClient(): OpenAI {

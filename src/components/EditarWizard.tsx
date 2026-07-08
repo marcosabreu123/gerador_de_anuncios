@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { lerRespostaJSON } from "@/lib/fetch-json";
+import AjusteConversa, { type ConfirmacaoAjuste } from "@/components/AjusteConversa";
 
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
 
@@ -15,8 +16,6 @@ export default function EditarWizard() {
   const [preview, setPreview] = useState<string | null>(null);
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [enviandoFoto, setEnviandoFoto] = useState(false);
-  const [pedido, setPedido] = useState("");
-  const [aplicando, setAplicando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   async function onSelecionarDesign(e: React.ChangeEvent<HTMLInputElement>) {
@@ -49,23 +48,19 @@ export default function EditarWizard() {
     }
   }
 
-  async function aplicar() {
-    if (!originalUrl || !pedido.trim()) return;
-    setAplicando(true);
-    setErro(null);
-    try {
-      const res = await fetch("/api/edit-design", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ originalUrl, pedido }),
-      });
-      const json = await lerRespostaJSON<{ error?: string; projectId?: string }>(res);
-      if (!res.ok || !json.projectId) throw new Error(json.error ?? "Erro ao editar.");
-      router.push(`/resultado/${json.projectId}`);
-    } catch (err) {
-      setErro(err instanceof Error ? err.message : "Erro ao editar o design.");
-      setAplicando(false);
-    }
+  // Chamado pela mini conversa de ajuste (AjusteConversa) só quando o pedido
+  // já está claro e o usuário confirmou — 1 crédito é cobrado aqui dentro de
+  // /api/edit-design, nunca durante a conversa de esclarecimento.
+  async function aplicar({ pedidoFinal, anexoUrl, tipoUsoAnexo }: ConfirmacaoAjuste) {
+    if (!originalUrl) return;
+    const res = await fetch("/api/edit-design", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ originalUrl, pedido: pedidoFinal, anexoUrl, tipoUsoAnexo }),
+    });
+    const json = await lerRespostaJSON<{ error?: string; projectId?: string }>(res);
+    if (!res.ok || !json.projectId) throw new Error(json.error ?? "Erro ao editar.");
+    router.push(`/resultado/${json.projectId}`);
   }
 
   const sugestoes = [
@@ -109,43 +104,17 @@ export default function EditarWizard() {
         className="hidden"
       />
 
-      {originalUrl && (
-        <div className="card p-4">
-          <h3 className="font-semibold text-sm">O que você quer mudar?</h3>
-          <p className="text-xs text-[var(--muted)] mt-1 mb-3">
-            Escreva com suas palavras. Isso usa 1 crédito.
-          </p>
-          <div className="flex flex-wrap gap-2 mb-3">
-            {sugestoes.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setPedido(s)}
-                className="text-xs bg-[var(--accent-soft)] px-3 py-1.5 rounded-full"
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-          <textarea
-            className="input min-h-[80px] resize-none"
-            value={pedido}
-            onChange={(e) => setPedido(e.target.value)}
-            placeholder="Ex: troque a frase para 'Promoção de verão' e deixe o fundo azul"
-          />
-        </div>
-      )}
-
       {erro && <p className="text-sm text-[var(--danger)]">{erro}</p>}
 
-      <button
-        type="button"
-        onClick={aplicar}
-        disabled={!originalUrl || !pedido.trim() || aplicando}
-        className="btn btn-accent btn-block mt-auto"
-      >
-        {aplicando ? "Aplicando edição…" : "Aplicar edição ✨"}
-      </button>
+      {originalUrl && (
+        <div className="card p-4">
+          <h3 className="font-semibold text-sm mb-1">O que você quer mudar?</h3>
+          <p className="text-xs text-[var(--muted)] mb-3">
+            Escreva com suas palavras. A edição confirmada usa 1 crédito.
+          </p>
+          <AjusteConversa onConfirmar={aplicar} labelGerar="Aplicar edição (1 crédito)" sugestoes={sugestoes} />
+        </div>
+      )}
     </div>
   );
 }
