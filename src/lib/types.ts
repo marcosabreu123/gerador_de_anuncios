@@ -394,11 +394,14 @@ export type BriefingParcial = Partial<BriefingCompleto>;
 // certo pra "só trocar o preço", "só mudar o texto", etc.).
 export type TipoFluxo = "criacao_completa" | "ajuste_pontual" | "transformar_arte_existente";
 
-// melhoria_conservadora: mantém layout/estrutura, só refina acabamento.
+// melhoria_recompositiva: mantém ideia/produto/marca/informações comerciais,
+// mas tem liberdade média pra reorganizar layout, hierarquia e composição —
+// não é ajuste cirúrgico (isso já existe no fluxo de editar detalhe) nem
+// clareamento superficial da mesma peça.
 // nova_versao_criativa: mantém as informações, mas recria o design do zero.
-export type ModoTransformacao = "melhoria_conservadora" | "nova_versao_criativa";
+export type ModoTransformacao = "melhoria_recompositiva" | "nova_versao_criativa";
 
-export type GrauLiberdadeCriativa = "baixo" | "alto";
+export type GrauLiberdadeCriativa = "medio" | "alto";
 
 // Direções rápidas oferecidas após escolher o modo — o mesmo tipo cobre as
 // duas telas (cada uma mostra um subconjunto diferente de opções).

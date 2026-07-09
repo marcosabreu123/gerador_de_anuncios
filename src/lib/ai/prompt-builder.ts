@@ -839,8 +839,8 @@ function descreverPedidoArteExistente(
   req: Pick<ArteExistenteRequest, "modoTransformacao" | "direcao" | "instrucaoUsuario">,
 ): string {
   const linhas: string[] = [
-    req.modoTransformacao === "melhoria_conservadora"
-      ? "O lojista quer MELHORAR a arte existente, mantendo a mesma estrutura, layout e ideia original."
+    req.modoTransformacao === "melhoria_recompositiva"
+      ? "O lojista quer MELHORAR a arte existente: mesma campanha, mesmas informações, mas uma composição visivelmente melhor — pode reorganizar layout, hierarquia e distribuição dos elementos, não é só clarear ou polir a mesma peça."
       : "O lojista quer CRIAR UMA NOVA VERSÃO da arte existente: mesmas informações, mas um design visivelmente diferente.",
   ];
   if (req.direcao && req.direcao !== "personalizado") {
@@ -852,8 +852,8 @@ function descreverPedidoArteExistente(
   return linhas.join("\n");
 }
 
-const PROMPT_BASE_MELHORIA_CONSERVADORA =
-  "Use the uploaded artwork as the main reference and create a more professional improved version of the same design. Preserve the original layout structure, commercial information, products, logo, brand identity, prices, contact information and main message. Improve only the visual quality: refine hierarchy, spacing, typography, contrast, lighting, polish, balance and readability. Keep the same idea and overall composition, but make it look more professional and less amateur. Do not change the offer, product names, prices, phone number, address or logo.";
+const PROMPT_BASE_MELHORIA_RECOMPOSITIVA =
+  "Use the uploaded artwork as the main reference for content, product, brand and sales message. Create a clearly improved version of the same advertising piece. Preserve all important commercial information exactly, including product names, prices, phone number, address, CTA, brand name and logo. Keep the same main idea and sales intent, but do not copy the original layout rigidly. Improve the composition, hierarchy, spacing, typography, background, product emphasis, price presentation, contrast, readability and overall professional finish. You may reorganize elements, resize blocks, change the visual arrangement and rebuild the layout structure if it makes the artwork stronger. The result must look noticeably better and more professionally designed, not just brighter or slightly polished. Do not invent new information, do not change prices, do not change the logo, and do not turn it into a completely different campaign.";
 
 const PROMPT_BASE_NOVA_VERSAO =
   "Use the uploaded artwork as a content and brand reference, not as a layout template. Create a completely new advertising design using the same commercial information, products, logo, prices, contact details and main offer. Do not copy the original layout. Do not keep the same structure unless absolutely necessary. Reimagine the composition with a new visual concept, new hierarchy, new background, new arrangement of products, new price card style and a fresh advertising direction. The result must look clearly different from the original while preserving the same information and sales intent. Keep all product names, prices, phone number, address, logo and brand identity accurate. Do not invent new commercial information.";
@@ -862,22 +862,24 @@ function fallbackTransformarArteExistente(
   req: Pick<ArteExistenteRequest, "modoTransformacao" | "instrucaoUsuario">,
 ): string {
   const base =
-    req.modoTransformacao === "melhoria_conservadora" ? PROMPT_BASE_MELHORIA_CONSERVADORA : PROMPT_BASE_NOVA_VERSAO;
+    req.modoTransformacao === "melhoria_recompositiva" ? PROMPT_BASE_MELHORIA_RECOMPOSITIVA : PROMPT_BASE_NOVA_VERSAO;
   const instrucao = req.instrucaoUsuario?.trim();
   return instrucao ? `${base} ${instrucao}.` : base;
 }
 
-const SYSTEM_MELHORIA_CONSERVADORA = `Você escreve prompts para o GPT Image melhorar uma arte publicitária existente SEM mudar sua estrutura. Grau de liberdade criativa: BAIXO.
+const SYSTEM_MELHORIA_RECOMPOSITIVA = `Você escreve prompts para o GPT Image melhorar uma arte publicitária existente. Grau de liberdade criativa: MÉDIO. Isso NÃO é um ajuste cirúrgico (ajuste cirúrgico já existe no fluxo de editar detalhe) — o resultado precisa parecer uma versão claramente melhorada, não a mesma arte apenas mais clara ou com contraste ajustado.
 
-A imagem enviada é a referência principal — mantenha o layout geral, a distribuição dos blocos, a ideia original, produtos, textos principais, preços, marca, logo, telefone, endereço, CTA e identidade visual exatamente como estão.
+Preserve exatamente: a ideia principal da campanha, produto, marca, logo, preço, informações comerciais, telefone, endereço, CTA e mensagem principal.
 
-Você PODE melhorar: acabamento, alinhamento, espaçamento, contraste, legibilidade, hierarquia, tipografia, iluminação, nitidez, organização e aparência profissional.
+Preserve o conceito, mas NÃO preserve rigidamente: o layout original, a posição exata dos blocos, a composição geral ou a distribuição dos elementos. Você pode: mudar a posição dos produtos, melhorar a distribuição dos blocos, criar cards mais bonitos, redesenhar a área de preço, melhorar o fundo, alterar a hierarquia, aumentar o foco no produto, reduzir poluição visual, mudar o equilíbrio entre texto e imagem, e deixar a arte mais comercial e profissional.
 
-Não mude o conceito, não recrie a composição, não invente informações comerciais novas, não altere preço, telefone, endereço, nome de produto ou logo.
+Nunca limite a melhoria a brilho, contraste ou polimento superficial — isso é o erro mais comum a evitar aqui. Ao mesmo tempo, não recrie uma campanha totalmente diferente sem relação visual com a original (isso é o modo "nova versão", não este).
 
-Prompt-base (adapte ao pedido, não copie literalmente): "${PROMPT_BASE_MELHORIA_CONSERVADORA}"
+Prompt-base (adapte ao pedido, não copie literalmente): "${PROMPT_BASE_MELHORIA_RECOMPOSITIVA}"
 
-Se o lojista pedir uma direção específica (mais profissional, mais clean, mais premium, melhorar legibilidade, reduzir poluição visual, ou deixar a IA decidir), incorpore isso mantendo sempre o grau de liberdade BAIXO — a estrutura nunca muda.
+O prompt final que você escrever deve sempre conter, adaptado ao contexto: "Do not copy the original layout rigidly.", "Improve the composition noticeably.", "You may reorganize the layout while preserving the same information and sales intent.", "Do not limit the improvement to brightness, contrast or small polish."
+
+Se o lojista pedir uma direção específica (mais profissional, mais clean, mais premium, melhorar legibilidade, reduzir poluição visual, ou deixar a IA decidir), incorpore isso mantendo sempre o grau de liberdade MÉDIO.
 
 A saída deve ser apenas o prompt final em INGLÊS (o modelo de imagem segue instrução de direção de arte com mais consistência em inglês), sem explicações, sem comentários e sem aspas ao redor de tudo.`;
 
@@ -898,7 +900,7 @@ A saída deve ser apenas o prompt final em INGLÊS, sem explicações, sem comen
 // Gera o prompt final (em INGLÊS — gpt-image-2 segue esse tipo de instrução
 // de direção de arte com mais consistência) pro fluxo de transformar uma
 // arte existente enviada pelo lojista. modoTransformacao decide o grau de
-// liberdade criativa (baixo = melhoria conservadora, alto = nova versão).
+// liberdade criativa (médio = melhoria recompositiva, alto = nova versão).
 export async function montarPromptMelhorarArteExistente(
   req: Pick<ArteExistenteRequest, "modoTransformacao" | "direcao" | "instrucaoUsuario">,
 ): Promise<PromptGerado> {
@@ -907,7 +909,7 @@ export async function montarPromptMelhorarArteExistente(
   if (!apiKey) return { prompt: fallback, usouFallback: true };
 
   const systemPrompt =
-    req.modoTransformacao === "melhoria_conservadora" ? SYSTEM_MELHORIA_CONSERVADORA : SYSTEM_NOVA_VERSAO_CRIATIVA;
+    req.modoTransformacao === "melhoria_recompositiva" ? SYSTEM_MELHORIA_RECOMPOSITIVA : SYSTEM_NOVA_VERSAO_CRIATIVA;
 
   const openai = new OpenAI({ apiKey, timeout: 25_000 });
   let texto: string | null | undefined;

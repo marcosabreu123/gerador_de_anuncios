@@ -52,10 +52,10 @@ function resumoConfirmacao(modo: ModoTransformacao, direcao: DirecaoTransformaca
   const rotulo =
     DIRECOES_MELHORAR.find((d) => d.valor === direcao)?.label.toLowerCase() ??
     DIRECOES_NOVA_VERSAO.find((d) => d.valor === direcao)?.label.toLowerCase();
-  if (modo === "melhoria_conservadora") {
+  if (modo === "melhoria_recompositiva") {
     return rotulo && direcao !== "ia_decide"
-      ? `Vou melhorar essa arte deixando-a ${rotulo}, mantendo a mesma estrutura, produto, marca, textos e informações comerciais. Posso gerar?`
-      : "Vou melhorar essa arte mantendo a mesma estrutura, produto, marca, textos e informações comerciais, mas com acabamento mais profissional. Posso gerar?";
+      ? `Vou melhorar essa arte deixando-a ${rotulo}, com uma composição visivelmente melhor — podendo reorganizar layout e distribuição dos elementos, mantendo produto, marca, preço e informações comerciais. Posso gerar?`
+      : "Vou melhorar essa arte com uma composição visivelmente melhor — podendo reorganizar layout e distribuição dos elementos, mantendo produto, marca, preço e informações comerciais. Posso gerar?";
   }
   return rotulo && direcao !== "ia_decide"
     ? `Vou criar uma nova versão ${rotulo} dessa arte — mesmas informações, mas um design diferente. Posso gerar?`
@@ -192,12 +192,12 @@ export default function MelhorarArteWizard() {
 
           <button
             type="button"
-            onClick={() => escolherModo("melhoria_conservadora")}
+            onClick={() => escolherModo("melhoria_recompositiva")}
             className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl"
           >
             <p className="font-semibold text-sm">Melhorar esta arte</p>
             <p className="text-xs text-[var(--muted)] mt-0.5">
-              Deixar mais profissional mantendo a mesma ideia e estrutura.
+              Mesma campanha e informações, com uma composição visivelmente melhor.
             </p>
           </button>
 
@@ -217,10 +217,10 @@ export default function MelhorarArteWizard() {
       {fase === "direcao" && modo && (
         <div className="card p-4">
           <h3 className="font-semibold text-sm">
-            {modo === "melhoria_conservadora" ? "Quer melhorar em qual direção?" : "Qual direção você quer para essa nova versão?"}
+            {modo === "melhoria_recompositiva" ? "Quer melhorar em qual direção?" : "Qual direção você quer para essa nova versão?"}
           </h3>
           <div className="flex flex-col gap-2 mt-3">
-            {(modo === "melhoria_conservadora" ? DIRECOES_MELHORAR : DIRECOES_NOVA_VERSAO).map((opcao) => (
+            {(modo === "melhoria_recompositiva" ? DIRECOES_MELHORAR : DIRECOES_NOVA_VERSAO).map((opcao) => (
               <button
                 key={opcao.valor}
                 type="button"

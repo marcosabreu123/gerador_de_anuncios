@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   }
 
   const nomeProjeto =
-    body.modoTransformacao === "melhoria_conservadora" ? "Melhoria de arte existente" : "Nova versão de arte";
+    body.modoTransformacao === "melhoria_recompositiva" ? "Melhoria de arte existente" : "Nova versão de arte";
 
   const saldo = await debitarCredito(user.id, nomeProjeto);
   if (saldo < 0) {
