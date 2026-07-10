@@ -19,7 +19,7 @@ export default function FlowCard({
     <Link href={href} className="card card-interactive flex items-center gap-4 p-4">
       <span
         className={`flex items-center justify-center w-11 h-11 rounded-xl text-xl shrink-0 ${
-          destaque ? "bg-[var(--accent)]" : "bg-[var(--accent-soft)]"
+          destaque ? "gradiente-ia-bg" : "bg-[var(--accent-soft)]"
         }`}
         aria-hidden="true"
       >

@@ -1,11 +1,11 @@
 import type {
   BriefingParcial,
   CardPerguntas,
-  ConteudoComposicaoModo,
   EstiloComunicacao,
   Formato,
   FormatoCanal,
   GrupoPergunta,
+  ModoUsoConteudo,
   Objetivo,
   ObjetivoMarketing,
   PreferenciaCores,
@@ -63,31 +63,18 @@ export const CARD_BRIEFING_PRINCIPAL: CardPerguntas = {
         { label: "IA decide", value: "ia_decide" },
       ],
     },
-    {
-      id: "conteudoComposicaoModo",
-      pergunta: "Conteúdo da composição",
-      opcoes: [
-        { label: "Quero informar o que deve aparecer", value: "usuario_informa" },
-        { label: "Criar conteúdo para mim", value: "ia_cria" },
-        { label: "Só destacar a oferta", value: "destacar_oferta" },
-        { label: "Usar apenas o que já falei", value: "usar_o_que_ja_falou" },
-      ],
-    },
   ],
   botaoEnviar: "Enviar respostas",
 };
 
 // Campo de texto que aparece logo abaixo de um grupo quando uma opção
-// específica é escolhida (ex.: "Quero informar o que deve aparecer" abre o
-// campo aberto de composição — não é só uma frase de destaque, pode ser
-// título, preço, WhatsApp, entrega, selo etc.). Chave: "<idDoGrupo>:<value>".
-// Só existe pro card principal — o card de segmento (gerado pelo agente)
-// não tem campos condicionais.
+// específica é escolhida (ex.: "Cores da minha marca" abre "quais cores?").
+// Chave: "<idDoGrupo>:<value>". Só existe pro card principal — o card de
+// segmento (gerado pelo agente) não tem campos condicionais. O "conteúdo da
+// composição" saiu deste card (ver etapa dedicada "conteudo" no ChatWizard,
+// abaixo) porque tem uma interação diferente: campo livre primeiro, depois
+// só 2 opções — não é um "single choice" comum como os outros grupos.
 export const CAMPOS_CONDICIONAIS_PRINCIPAL: Record<string, { label: string; placeholder: string }> = {
-  "conteudoComposicaoModo:usuario_informa": {
-    label: "O que você quer que apareça na composição?",
-    placeholder: "Ex: título, preço, produto, promoção, WhatsApp, entrega, endereço, CTA, selo ou alguma observação",
-  },
   "preferenciaCores:marca": {
     label: "Quais cores sua marca usa?",
     placeholder: "Ex: roxo e amarelo, preto e vermelho, azul e branco...",
@@ -159,16 +146,19 @@ export function selecoesCardPrincipalParaBriefing(
     }
   }
 
-  const conteudoComposicaoModo = selecoes.conteudoComposicaoModo as ConteudoComposicaoModo | undefined;
-  if (conteudoComposicaoModo) {
-    parcial.conteudoComposicaoModo = conteudoComposicaoModo;
-    if (conteudoComposicaoModo === "usuario_informa") {
-      const conteudo = camposTexto["conteudoComposicaoModo:usuario_informa"];
-      if (conteudo?.trim()) parcial.conteudoComposicaoUsuario = conteudo.trim();
-    }
-  }
-
   return parcial;
+}
+
+// Rótulo da etapa dedicada "conteúdo da composição" (campo livre + só 2
+// opções) — formata a mesma linha que entraria num card comum, pra poder
+// combinar com formatarRespostasCard() numa única mensagem consolidada.
+const ROTULO_MODO_USO_CONTEUDO: Record<ModoUsoConteudo, string> = {
+  usar_exatamente: "Usar exatamente como escrevi",
+  melhorar_ideia: "Melhorar minha ideia",
+};
+
+export function formatarConteudoComposicao(modo: ModoUsoConteudo, textoUsuario: string): string {
+  return `Conteúdo da composição: ${ROTULO_MODO_USO_CONTEUDO[modo]} ("${textoUsuario.trim()}")`;
 }
 
 // Converte as respostas do bloco extra de segmento (gerado pelo agente, ver

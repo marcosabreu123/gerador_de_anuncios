@@ -65,6 +65,51 @@ function direcaoDeCoresParaTexto(b: BriefingCompleto): string {
   return "Use uma paleta de cores coerente com o segmento, o produto, o objetivo e o estilo visual desta peça.";
 }
 
+// ==== Modo comida realista ====
+// Ativado internamente (nunca é pergunta ao lojista, ver agente-conversa.ts
+// que preenche modoComidaRealista/submodoAcougue) sempre que o segmento é
+// alimentício. Objetivo: para comida, realismo vem antes de exagero visual
+// — evita a aparência de CGI/render 3D/brilho plástico que modelos de
+// imagem tendem a produzir por padrão em fotos de comida.
+const INSTRUCAO_COMIDA_REALISTA =
+  "Use realistic food photography. The food must look real, natural and appetizing, with believable texture, natural imperfections, realistic lighting, natural shadows and plausible colors. Avoid CGI look, plastic shine, exaggerated gloss, artificial smoke, oversaturated colors, fake textures, unrealistic shapes and AI-generated food appearance.";
+
+const INSTRUCAO_ACOUGUE_BASE =
+  "For butcher shop meat, prioritize realistic meat texture, natural fat, visible fibers, believable cut shape and fresh sellable appearance. Avoid plastic-looking meat, overly glossy surfaces, fake fat, strange anatomy, excessive smoke and artificial barbecue effects.";
+
+const INSTRUCAO_SUBMODO_ACOUGUE: Record<Exclude<NonNullable<BriefingCompleto["submodoAcougue"]>, "ia_decide">, string> = {
+  produto_cru_fresco:
+    "Show the meat as a real fresh butcher shop product, with natural red tones, realistic fat marbling, visible fibers, believable cut shape, natural moisture, and professional food photography lighting. The meat must look fresh and sellable, not cooked, not plastic, not CGI, not overly glossy.",
+  pronto_para_consumo:
+    "Show the food as a realistic cooked meat photograph, with natural browning, believable crust, realistic juiciness, subtle highlights, natural fat rendering, and appetizing texture. It must look like a real food photo, not a 3D render.",
+  clima_churrasco:
+    "Create a realistic barbecue atmosphere with subtle smoke, warm side lighting, dark wood or grill context, natural meat texture and believable food styling. Smoke must be minimal and realistic. The meat should look appetizing but not artificial.",
+};
+
+// Frase única (em português, pro contexto enviado ao prompt-builder — a
+// tradução final pro inglês do prompt de imagem já é feita pelo próprio
+// SYSTEM/fallback abaixo) descrevendo o modo comida realista pro produto em
+// questão — usada tanto na chamada à IA quanto no fallback determinístico.
+function instrucaoComidaRealista(b: BriefingCompleto): string | null {
+  if (!b.modoComidaRealista) return null;
+  const partes = [INSTRUCAO_COMIDA_REALISTA];
+  if (b.submodoAcougue && b.submodoAcougue !== "ia_decide") {
+    partes.push(INSTRUCAO_ACOUGUE_BASE, INSTRUCAO_SUBMODO_ACOUGUE[b.submodoAcougue]);
+  } else if (b.submodoAcougue === "ia_decide") {
+    partes.push(INSTRUCAO_ACOUGUE_BASE);
+  }
+  return partes.join(" ");
+}
+
+// Aplicada de forma DETERMINÍSTICA (não só pedida ao modelo) ao prompt
+// final, tanto no caminho via IA quanto no fallback — garante que as
+// frases obrigatórias de comida realista sempre cheguem ao modelo de
+// imagem, mesmo que o prompt-builder (texto) não as tenha citado.
+function aplicarComidaRealista(prompt: string, b: BriefingCompleto): string {
+  const instrucao = instrucaoComidaRealista(b);
+  return instrucao ? `${prompt} ${instrucao}` : prompt;
+}
+
 // A "IA de conversa" transforma o briefing coletado pelo agente
 // conversacional (src/lib/ai/agente-conversa.ts) num prompt visual
 // estruturado em português, pronto para o Gemini. O usuário NUNCA escreve
@@ -224,6 +269,11 @@ function briefingParaTexto(b: BriefingCompleto): string {
     linhas.push(`Objetivo de marketing: ${OBJETIVOS_MARKETING_HINT[b.objetivoMarketing]}`);
   }
   linhas.push(`Direção de cores: ${direcaoDeCoresParaTexto(b)}`);
+  if (b.modoComidaRealista) {
+    linhas.push(
+      "Modo comida realista ativado: para alimentos, realismo vem antes de exagero visual. A comida deve parecer fotografada de verdade, com textura natural, pequenas imperfeições reais, volume coerente, iluminação realista e aparência vendável — nunca aparência de CGI, render 3D, brilho plástico ou banco de imagens genérico gerado por IA.",
+    );
+  }
 
   const d = b.direcaoArte;
   if (d && Object.values(d).some((v) => (Array.isArray(v) ? v.length : v))) {
@@ -306,7 +356,7 @@ export function montarPromptFallback(b: BriefingCompleto): string {
     partes.push(`Tom da comunicação: ${OBJETIVOS_MARKETING_HINT[b.objetivoMarketing]}.`);
   }
   partes.push(`Composição pronta para ${fmt.descricao}, fugindo de layout de template óbvio, com no máximo 3 blocos de texto principais, sem estética de panfleto barato, sem fundo vermelho/laranja saturado genérico, sem amarelo neon e sem excesso de texto.`);
-  return partes.join(" ");
+  return aplicarComidaRealista(partes.join(" "), b);
 }
 
 function montarPromptsFallback(b: BriefingCompleto): string[] {
@@ -345,7 +395,7 @@ export async function montarPrompt(b: BriefingCompleto): Promise<PromptsGerados>
       ? j.variacoes.filter((p: unknown): p is string => typeof p === "string" && p.trim().length > 0)
       : [];
     if (prompts.length === 0) return { prompts: montarPromptsFallback(b), usouFallback: true };
-    return { prompts, usouFallback: false };
+    return { prompts: prompts.map((p: string) => aplicarComidaRealista(p, b)), usouFallback: false };
   } catch (e) {
     console.error("[prompt-builder] OpenAI falhou, usando fallback:", e);
     return { prompts: montarPromptsFallback(b), usouFallback: true };

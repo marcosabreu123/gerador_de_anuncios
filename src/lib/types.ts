@@ -333,13 +333,35 @@ export type EstiloComunicacao = "premium" | "clean" | "chamativo" | "moderno" | 
 
 export type PreferenciaCores = "segmento" | "marca" | "referencia" | "ia_decide";
 
-// Como o conteúdo textual/visual da composição (não só uma frase — pode ser
-// título, preço, WhatsApp, entrega, selo etc.) deve ser definido:
-// usuario_informa: o lojista descreve livremente o que quer ver (conteudoComposicaoUsuario).
-// ia_cria: a IA propõe o conteúdo (headline, oferta, CTA...), sem inventar dado comercial novo.
-// destacar_oferta: prioriza produto/preço/CTA simples, sem textos longos.
-// usar_o_que_ja_falou: usa só o que já foi dito na primeira mensagem, sem perguntar mais.
-export type ConteudoComposicaoModo = "usuario_informa" | "ia_cria" | "destacar_oferta" | "usar_o_que_ja_falou";
+// Submodo do modo comida realista quando o segmento é açougue/carnes (ver
+// prompt-builder.ts) — decide qual tratamento fotográfico faz mais sentido.
+export type SubmodoAcougue = "produto_cru_fresco" | "pronto_para_consumo" | "clima_churrasco" | "ia_decide";
+
+// Modo de uso do texto livre que o lojista escreveu pra etapa de conteúdo
+// (ver src/components/ChatWizard.tsx, etapa "conteudo"):
+// usar_exatamente: preserva literalmente frases, nomes, preços e informações.
+// melhorar_ideia (recomendado): a IA pode melhorar a copy e a hierarquia,
+// mas nunca pode inventar dado comercial novo (preço, telefone, endereço...).
+export type ModoUsoConteudo = "usar_exatamente" | "melhorar_ideia";
+
+export interface ConteudoOtimizado {
+  titulo?: string;
+  apoio?: string;
+  oferta?: string;
+  cta?: string;
+  observacoes?: string[];
+}
+
+// Conteúdo textual/visual da composição (não só uma frase — pode ser
+// título, preço, WhatsApp, entrega, selo etc.), coletado na etapa
+// "conteudo" do fluxo de criação.
+export interface ConteudoComposicao {
+  textoUsuario: string;
+  modoUso: ModoUsoConteudo;
+  // Preenchido pelo agente quando modoUso = "melhorar_ideia" — a partir
+  // daqui é organizado em conteudoAnuncio (ver agente-conversa.ts).
+  conteudoOtimizado?: ConteudoOtimizado;
+}
 
 // Briefing completo e resolvido — exigido para poder gerar a imagem.
 // `conteudoAnuncio` precisa estar aprovado (ver regra de negócio no agente:
@@ -363,12 +385,15 @@ export interface BriefingCompleto {
   estiloComunicacao?: EstiloComunicacao;
   preferenciaCores?: PreferenciaCores;
   coresMarca?: string;
-  conteudoComposicaoModo?: ConteudoComposicaoModo;
-  conteudoComposicaoUsuario?: string;
+  conteudoComposicao?: ConteudoComposicao;
   nivelVisual?: NivelVisual;
   nivelProducaoVisual?: NivelProducaoVisual;
   direcaoArte?: DirecaoArte;
   publicoTom?: string;
+  // Ativado internamente (não é pergunta ao lojista) quando o segmento é
+  // alimentício — ver prompt-builder.ts e agente-conversa.ts.
+  modoComidaRealista?: boolean;
+  submodoAcougue?: SubmodoAcougue;
   temFotoProduto: boolean;
   temReferencia?: boolean;
   temLogotipo?: boolean;

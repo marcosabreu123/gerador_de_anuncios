@@ -1,39 +1,42 @@
 @import "tailwindcss";
 
 :root {
-  /* Paleta premium — bege/areia + grafite, coerente com o nicho */
-  --background: #faf7f2;
+  /* Paleta estilo Apple — azul como cor funcional principal, base em
+     cinza/branco/preto. Gradiente reservado só para detalhes ligados à IA
+     (ver --gradiente-ia), nunca como cor de fundo geral. */
+  --background: #f5f5f7; /* nevoa */
   --surface: #ffffff;
-  --surface-muted: #f4efe6;
-  --foreground: #1c1a17;
-  --muted: #6f6a61;
-  --border: #e7e0d5;
-  --primary: #1c1a17;
-  --primary-foreground: #faf7f2;
-  --accent: #b08d57; /* dourado fosco */
-  --accent-soft: #f0e6d6;
+  --surface-muted: #e8e8ec;
+  --foreground: #1d1d1f; /* tinta */
+  --muted: #6e6e73; /* tinta-suave */
+  --border: #d2d2d7; /* divisor */
+  --primary: #0071e3; /* azul */
+  --primary-foreground: #ffffff;
+  --accent: #0071e3; /* azul — mesma cor funcional principal */
+  --accent-soft: #e8f1fd; /* azul-suave */
   --success: #2f7d4f;
   --success-soft: #e4f1e8;
   --danger: #b3261e;
   --danger-soft: #fbeae7;
   --radius: 16px;
-  --shadow-card: 0 1px 2px rgba(28, 26, 23, 0.04), 0 4px 16px rgba(28, 26, 23, 0.05);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.05);
+  --gradiente-ia: linear-gradient(120deg, #ff6b9d, #a78bfa, #60a5fa, #fdba74);
 }
 
 /* Modo escuro: aplicado via atributo data-theme no <html> (definido pelo
    script inline em layout.tsx, que roda antes do primeiro paint) — nunca
-   preto puro nem branco estourado, mesma identidade bege/dourada. */
+   preto puro absoluto nem branco estourado. */
 :root[data-theme="dark"] {
-  --background: #16140f;
-  --surface: #221e17;
-  --surface-muted: #2b2620;
-  --foreground: #f3ede2;
-  --muted: #a89f8f;
-  --border: #3a332a;
-  --primary: #f3ede2;
-  --primary-foreground: #1c1a17;
-  --accent: #cfa968;
-  --accent-soft: #362b1c;
+  --background: #0b0b0d;
+  --surface: #1c1c1e;
+  --surface-muted: #262628;
+  --foreground: #f5f5f7; /* tinta-clara */
+  --muted: #98989d; /* tinta-clara-suave */
+  --border: #38383a; /* divisor-escuro */
+  --primary: #409cff; /* azul levemente mais claro pra contraste no escuro */
+  --primary-foreground: #0b0b0d;
+  --accent: #409cff;
+  --accent-soft: rgba(0, 113, 227, 0.18);
   --success: #7cc79a;
   --success-soft: #1f3327;
   --danger: #e2897f;
@@ -45,16 +48,16 @@
    em layout.tsx só define data-theme quando há escolha explícita salva). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not([data-theme="dark"]) {
-    --background: #16140f;
-    --surface: #221e17;
-    --surface-muted: #2b2620;
-    --foreground: #f3ede2;
-    --muted: #a89f8f;
-    --border: #3a332a;
-    --primary: #f3ede2;
-    --primary-foreground: #1c1a17;
-    --accent: #cfa968;
-    --accent-soft: #362b1c;
+    --background: #0b0b0d;
+    --surface: #1c1c1e;
+    --surface-muted: #262628;
+    --foreground: #f5f5f7;
+    --muted: #98989d;
+    --border: #38383a;
+    --primary: #409cff;
+    --primary-foreground: #0b0b0d;
+    --accent: #409cff;
+    --accent-soft: rgba(0, 113, 227, 0.18);
     --success: #7cc79a;
     --success-soft: #1f3327;
     --danger: #e2897f;
@@ -234,6 +237,18 @@ body {
   color: var(--primary-foreground);
   border-color: var(--primary);
   font-weight: 600;
+}
+
+/* Gradiente reservado a detalhes ligados à IA (ícone de destaque, badge
+   "IA decide" etc.) — nunca usado como cor de fundo geral da interface. */
+.gradiente-ia-bg {
+  background: var(--gradiente-ia);
+}
+.gradiente-ia-text {
+  background: var(--gradiente-ia);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .badge {
