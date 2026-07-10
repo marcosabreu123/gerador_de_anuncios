@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { baixarArte } from "@/lib/download";
 import { lerRespostaJSON } from "@/lib/fetch-json";
 import AjusteConversa, { type ConfirmacaoAjuste } from "@/components/AjusteConversa";
+import GerandoMensagem from "@/components/GerandoMensagem";
 
 export interface ArteItem {
   id: string;
@@ -130,7 +131,7 @@ export default function ResultadoView({
         disabled={gerandoVariacao}
         className="btn btn-outline btn-block"
       >
-        {gerandoVariacao ? "Gerando nova variação…" : "🔁 Gerar outra variação (1 crédito)"}
+        {gerandoVariacao ? <GerandoMensagem mensagens={["Gerando nova variação…", "Explorando outro ângulo…"]} /> : "🔁 Gerar outra variação (1 crédito)"}
       </button>
       {erroVariacao && <p className="text-sm text-[var(--danger)]">{erroVariacao}</p>}
 

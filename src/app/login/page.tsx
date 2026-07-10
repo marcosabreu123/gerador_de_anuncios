@@ -88,7 +88,7 @@ function LoginForm() {
           </div>
 
           {state.error && <p className="text-sm text-[var(--danger)]">{state.error}</p>}
-          {state.message && <p className="text-sm text-green-700">{state.message}</p>}
+          {state.message && <p className="text-sm text-[var(--success)]">{state.message}</p>}
 
           <button type="submit" disabled={pending} className="btn btn-primary btn-block mt-2">
             {pending ? "Aguarde…" : modo === "login" ? "Entrar" : "Criar conta"}

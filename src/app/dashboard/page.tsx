@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import AppHeader from "@/components/AppHeader";
+import FlowCard from "@/components/FlowCard";
 import type { ImageRow } from "@/lib/types";
 
 export default async function DashboardPage() {
@@ -55,15 +56,25 @@ export default async function DashboardPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            <Link href="/novo" className="btn btn-primary btn-block text-lg py-4">
-              ✨ Criar arte nova
-            </Link>
-            <Link href="/melhorar" className="btn btn-outline btn-block">
-              🎨 Melhorar uma arte pronta
-            </Link>
-            <Link href="/editar" className="btn btn-outline btn-block">
-              ✏️ Editar um design que já tenho
-            </Link>
+            <FlowCard
+              href="/novo"
+              icon="✨"
+              title="Criar nova arte"
+              description="Comece do zero com ajuda da IA."
+              destaque
+            />
+            <FlowCard
+              href="/editar"
+              icon="✏️"
+              title="Editar detalhe de uma arte"
+              description="Altere preço, texto, logo, fundo ou outro ponto específico."
+            />
+            <FlowCard
+              href="/melhorar"
+              icon="🎨"
+              title="Melhorar ou recriar uma arte"
+              description="Envie uma arte pronta para melhorar o visual ou criar uma nova versão."
+            />
           </div>
         )}
 
@@ -86,7 +97,7 @@ export default async function DashboardPage() {
               <Link
                 key={img.id}
                 href={`/resultado/${img.project_id}`}
-                className="card overflow-hidden aspect-square block"
+                className="card card-interactive overflow-hidden aspect-square block"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img

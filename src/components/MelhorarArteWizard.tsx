@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { lerRespostaJSON } from "@/lib/fetch-json";
+import GerandoMensagem from "@/components/GerandoMensagem";
 import type { DirecaoTransformacao, ModoTransformacao } from "@/lib/types";
 
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
@@ -196,7 +197,7 @@ export default function MelhorarArteWizard() {
         type="button"
         onClick={() => fileRef.current?.click()}
         disabled={gerando}
-        className="card w-full aspect-square flex flex-col items-center justify-center gap-2 border-dashed overflow-hidden"
+        className="card card-interactive w-full aspect-square flex flex-col items-center justify-center gap-2 border-dashed overflow-hidden"
       >
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -208,8 +209,13 @@ export default function MelhorarArteWizard() {
           </>
         )}
       </button>
-      {enviandoFoto && <p className="text-sm text-[var(--muted)]">Enviando…</p>}
-      {originalUrl && !enviandoFoto && <p className="text-sm text-green-700">Arte enviada ✓</p>}
+      {enviandoFoto && (
+        <p className="text-sm text-[var(--muted)] flex items-center gap-2">
+          <span className="spinner" aria-hidden="true" />
+          Enviando…
+        </p>
+      )}
+      {originalUrl && !enviandoFoto && <p className="text-sm text-[var(--success)]">Arte enviada ✓</p>}
       <input ref={fileRef} type="file" accept="image/*" onChange={onSelecionarArte} className="hidden" />
 
       {fase === "modo" && (
@@ -219,7 +225,7 @@ export default function MelhorarArteWizard() {
           <button
             type="button"
             onClick={() => escolherModo("melhoria_recompositiva")}
-            className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl"
+            className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl border border-transparent hover:border-[var(--accent)] active:scale-[0.99] transition"
           >
             <p className="font-semibold text-sm">Melhorar esta arte</p>
             <p className="text-xs text-[var(--muted)] mt-0.5">
@@ -230,7 +236,7 @@ export default function MelhorarArteWizard() {
           <button
             type="button"
             onClick={() => escolherModo("nova_versao_criativa")}
-            className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl"
+            className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl border border-transparent hover:border-[var(--accent)] active:scale-[0.99] transition"
           >
             <p className="font-semibold text-sm">Criar uma nova versão</p>
             <p className="text-xs text-[var(--muted)] mt-0.5">
@@ -252,7 +258,7 @@ export default function MelhorarArteWizard() {
                   key={opcao.valor}
                   type="button"
                   onClick={() => escolherDirecao(opcao)}
-                  className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl"
+                  className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl border border-transparent hover:border-[var(--accent)] active:scale-[0.99] transition"
                 >
                   <p className="font-semibold text-sm">{opcao.label}</p>
                   <p className="text-xs text-[var(--muted)] mt-0.5">{opcao.descricao}</p>
@@ -323,7 +329,7 @@ export default function MelhorarArteWizard() {
               Cancelar
             </button>
             <button type="button" onClick={gerar} disabled={gerando} className="btn btn-accent flex-1">
-              {gerando ? "Gerando…" : "Gerar nova versão (1 crédito)"}
+              {gerando ? <GerandoMensagem /> : "Gerar nova versão (1 crédito)"}
             </button>
           </div>
         </div>

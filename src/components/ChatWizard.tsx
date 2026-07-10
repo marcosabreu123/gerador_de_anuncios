@@ -11,6 +11,7 @@ import {
   selecoesCardSegmentoParaPerguntas,
 } from "@/lib/briefing-card";
 import CardAgrupado from "@/components/CardAgrupado";
+import GerandoMensagem from "@/components/GerandoMensagem";
 import {
   TIPOS_IMAGEM_ANEXO,
   type BriefingCompleto,
@@ -238,11 +239,7 @@ export default function ChatWizard() {
       {/* Cabeçalho leve com acesso a "Materiais da arte" — sempre
           disponível, nada aqui é obrigatório para gerar. */}
       <div className="flex items-center justify-end mb-2">
-        <button
-          type="button"
-          onClick={() => setPainelAberto(true)}
-          className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--accent-soft)] px-3 py-1.5 rounded-full"
-        >
+        <button type="button" onClick={() => setPainelAberto(true)} className="badge cursor-pointer hover:border-[var(--accent)] transition-colors">
           🧩 Materiais da arte {totalAnexos > 0 ? `(${totalAnexos})` : ""}
         </button>
       </div>
@@ -269,7 +266,8 @@ export default function ChatWizard() {
         })}
 
         {enviando && (
-          <div className="self-start card px-4 py-2.5 text-sm text-[var(--muted)]">
+          <div className="self-start card px-4 py-2.5 text-sm text-[var(--muted)] flex items-center gap-2">
+            <span className="spinner" aria-hidden="true" />
             digitando…
           </div>
         )}
@@ -288,7 +286,7 @@ export default function ChatWizard() {
           disabled={gerando}
           className="btn btn-accent btn-block mb-3"
         >
-          {gerando ? "Gerando artes…" : "Gerar minhas artes ✨"}
+          {gerando ? <GerandoMensagem /> : "Gerar minhas artes ✨"}
         </button>
       )}
 
@@ -335,7 +333,7 @@ export default function ChatWizard() {
                   type="button"
                   onClick={() => enviarMensagem(o)}
                   disabled={enviando || gerando}
-                  className="text-sm font-medium bg-[var(--accent-soft)] px-4 py-2.5 rounded-full disabled:opacity-50"
+                  className="chip"
                 >
                   {o}
                 </button>
@@ -373,16 +371,17 @@ export default function ChatWizard() {
       {painelAberto && (
         <div className="fixed inset-0 z-20 flex justify-end">
           <div
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-black/40 panel-backdrop"
             onClick={() => setPainelAberto(false)}
           />
-          <div className="relative w-[85%] max-w-sm h-full bg-[var(--background)] shadow-xl flex flex-col p-4 overflow-y-auto">
+          <div className="relative w-[85%] max-w-sm h-full bg-[var(--background)] shadow-xl flex flex-col p-4 overflow-y-auto panel-sheet">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold">Materiais da arte</h2>
               <button
                 type="button"
                 onClick={() => setPainelAberto(false)}
-                className="text-sm text-[var(--muted)]"
+                aria-label="Fechar painel de materiais da arte"
+                className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
               >
                 Fechar
               </button>
@@ -399,7 +398,7 @@ export default function ChatWizard() {
                   .filter(({ img }) => img.tipo === tipo);
                 return (
                   <div key={tipo} className="card p-3">
-                    <p className="font-semibold text-sm">{info.label}</p>
+                    <p className="font-semibold text-sm capitalize">{info.label}</p>
                     <p className="text-xs text-[var(--muted)] mt-0.5 mb-2">{info.ajuda}</p>
 
                     {anexosDoTipo.length > 0 && (

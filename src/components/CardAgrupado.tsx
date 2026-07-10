@@ -43,15 +43,15 @@ export default function CardAgrupado({
   }
 
   return (
-    <div className="card p-4 flex flex-col gap-4">
+    <div className="card p-4 flex flex-col gap-5">
       <h3 className="font-semibold text-sm">{card.titulo}</h3>
 
       {card.grupos.map((g) => {
         const valorEscolhido = selecoes[g.id];
         const condicional = valorEscolhido ? camposCondicionais[`${g.id}:${valorEscolhido}`] : undefined;
         return (
-          <div key={g.id} className="flex flex-col gap-2">
-            <p className="text-xs font-semibold text-[var(--muted)]">{g.pergunta}</p>
+          <div key={g.id} className="flex flex-col gap-2 pb-4 border-b border-[var(--border)] last:border-b-0 last:pb-0">
+            <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide">{g.pergunta}</p>
             <div className="flex flex-wrap gap-2">
               {g.opcoes.map((o) => (
                 <button
@@ -59,18 +59,16 @@ export default function CardAgrupado({
                   type="button"
                   onClick={() => escolher(g.id, o.value)}
                   disabled={enviando}
-                  className={`text-sm font-medium px-3 py-1.5 rounded-full ${
-                    valorEscolhido === o.value
-                      ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
-                      : "bg-[var(--accent-soft)]"
-                  }`}
+                  aria-pressed={valorEscolhido === o.value}
+                  className={`chip ${valorEscolhido === o.value ? "chip-selected" : ""}`}
                 >
+                  {valorEscolhido === o.value && <span aria-hidden="true">✓</span>}
                   {o.label}
                 </button>
               ))}
             </div>
             {condicional && (
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1 mt-1">
                 <p className="text-xs text-[var(--muted)]">{condicional.label}</p>
                 <input
                   type="text"
@@ -94,6 +92,7 @@ export default function CardAgrupado({
         disabled={camposObrigatoriosPendentes() || enviando}
         className="btn btn-accent btn-block"
       >
+        {enviando && <span className="spinner" aria-hidden="true" />}
         {enviando ? "Enviando…" : card.botaoEnviar}
       </button>
     </div>

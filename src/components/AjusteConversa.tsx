@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { lerRespostaJSON } from "@/lib/fetch-json";
+import GerandoMensagem from "@/components/GerandoMensagem";
 import type { TipoUsoAnexoAjuste } from "@/lib/types";
 
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
@@ -192,7 +193,12 @@ export default function AjusteConversa({
         </div>
       )}
 
-      {classificando && <p className="text-xs text-[var(--muted)]">Entendendo o pedido…</p>}
+      {classificando && (
+        <p className="text-xs text-[var(--muted)] flex items-center gap-2">
+          <span className="spinner" aria-hidden="true" />
+          Entendendo o pedido…
+        </p>
+      )}
       {erro && <p className="text-sm text-[var(--danger)]">{erro}</p>}
 
       {ehNovaCriacao ? (
@@ -205,13 +211,16 @@ export default function AjusteConversa({
           </button>
         </div>
       ) : status === "pronto_para_confirmar" ? (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
+          <span className="badge self-start text-[var(--success)] border-[var(--success-soft)] bg-[var(--success-soft)]">
+            ✓ Pronto para gerar
+          </span>
           <div className="flex gap-2">
             <button type="button" onClick={editarPedido} disabled={gerando} className="btn btn-outline flex-1">
               Editar pedido
             </button>
             <button type="button" onClick={confirmar} disabled={gerando} className="btn btn-accent flex-1">
-              {gerando ? "Gerando…" : labelGerar}
+              {gerando ? <GerandoMensagem mensagens={["Aplicando ajuste…", "Refinando composição…"]} /> : labelGerar}
             </button>
           </div>
         </div>
@@ -220,12 +229,7 @@ export default function AjusteConversa({
           {status === "aguardando_pedido" && sugestoes.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {sugestoes.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setTexto(s)}
-                  className="text-xs bg-[var(--accent-soft)] px-3 py-1.5 rounded-full"
-                >
+                <button key={s} type="button" onClick={() => setTexto(s)} className="chip text-xs py-1.5 px-3">
                   {s}
                 </button>
               ))}

@@ -274,17 +274,17 @@ export const TIPOS_IMAGEM_ANEXO: Record<
   produto: {
     label: "foto do produto",
     botao: "📷 Foto do produto",
-    ajuda: "Uma ou mais fotos reais do produto (ângulos diferentes ajudam).",
+    ajuda: "Use para a IA representar o produto real na arte.",
   },
   referencia: {
     label: "referência de cores/estilo",
     botao: "🎨 Referência de cores/estilo",
-    ajuda: "Uma imagem que representa a paleta, o clima ou o estilo que você imagina — não é o produto nem a logo.",
+    ajuda: "Use para a IA entender cores, estética e clima visual.",
   },
   logotipo: {
     label: "logo da marca",
     botao: "🏷️ Logo da marca",
-    ajuda: "Sua logo, se quiser que apareça na arte.",
+    ajuda: "Use para assinar a peça com a identidade da loja.",
   },
 };
 

@@ -82,7 +82,7 @@ export default function EditarWizard() {
       <button
         type="button"
         onClick={() => fileRef.current?.click()}
-        className="card w-full aspect-square flex flex-col items-center justify-center gap-2 border-dashed overflow-hidden"
+        className="card card-interactive w-full aspect-square flex flex-col items-center justify-center gap-2 border-dashed overflow-hidden"
       >
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -94,8 +94,13 @@ export default function EditarWizard() {
           </>
         )}
       </button>
-      {enviandoFoto && <p className="text-sm text-[var(--muted)]">Enviando…</p>}
-      {originalUrl && !enviandoFoto && <p className="text-sm text-green-700">Design enviado ✓</p>}
+      {enviandoFoto && (
+        <p className="text-sm text-[var(--muted)] flex items-center gap-2">
+          <span className="spinner" aria-hidden="true" />
+          Enviando…
+        </p>
+      )}
+      {originalUrl && !enviandoFoto && <p className="text-sm text-[var(--success)]">Design enviado ✓</p>}
       <input
         ref={fileRef}
         type="file"
