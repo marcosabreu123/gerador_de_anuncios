@@ -418,8 +418,7 @@ export type DirecaoTransformacao =
   | "chamativa"
   | "moderna"
   | "divertida"
-  | "legibilidade"
-  | "reduzir_poluicao"
+  | "menos_ia"
   | "ia_decide"
   | "personalizado";
 

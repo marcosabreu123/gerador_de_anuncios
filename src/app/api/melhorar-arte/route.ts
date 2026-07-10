@@ -4,7 +4,8 @@ import { debitarCredito, estornarCredito } from "@/lib/credits";
 import { montarPromptMelhorarArteExistente } from "@/lib/ai/prompt-builder";
 import { gerarVariacoes } from "@/lib/ai/openai-image";
 import { uploadImagem } from "@/lib/storage";
-import { IMAGE_MODEL, qualidadeParaEtapa } from "@/lib/ai/models";
+import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
+import { formatoMaisProximo, formatoPedidoExplicitamente, medirDimensoes } from "@/lib/image-dimensions";
 import type { DirecaoTransformacao, ModoTransformacao } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -28,12 +29,12 @@ interface Body {
   instrucaoUsuario?: string;
 }
 
-async function baixarBase64(url: string): Promise<{ base64: string; mimeType: string; tipo: "base" }> {
+async function baixarImagem(url: string): Promise<{ base64: string; mimeType: string; tipo: "base"; buf: Buffer }> {
   const res = await fetch(url);
   if (!res.ok) throw new Error("Não foi possível ler a arte enviada.");
   const mimeType = res.headers.get("content-type") ?? "image/jpeg";
   const buf = Buffer.from(await res.arrayBuffer());
-  return { base64: buf.toString("base64"), mimeType, tipo: "base" };
+  return { base64: buf.toString("base64"), mimeType, tipo: "base", buf };
 }
 
 export async function POST(request: NextRequest) {
@@ -67,10 +68,17 @@ export async function POST(request: NextRequest) {
       direcao: body.direcao,
       instrucaoUsuario: body.instrucaoUsuario,
     });
-    const base = await baixarBase64(body.imagemOriginal);
+    const { buf, ...base } = await baixarImagem(body.imagemOriginal);
+    // Regra global de formato: nunca muda o aspect ratio automaticamente —
+    // usa o formato pedido explicitamente (ex.: "transforma em feed") se
+    // houver, senão preserva o mais próximo da proporção da arte original.
+    const formatoPedido = formatoPedidoExplicitamente(body.instrucaoUsuario);
+    const dimensoes = medirDimensoes(buf);
+    const formatoAlvo = formatoPedido ?? (dimensoes ? formatoMaisProximo(dimensoes) : null);
     const [imagem] = await gerarVariacoes({
       prompts: [prompt],
       imagens: [base],
+      tamanho: formatoAlvo ? TAMANHO_POR_FORMATO[formatoAlvo] : undefined,
       qualidade: qualidadeParaEtapa("rascunho"),
     });
 

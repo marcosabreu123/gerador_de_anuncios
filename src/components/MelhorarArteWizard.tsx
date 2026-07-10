@@ -18,14 +18,40 @@ type Fase = "upload" | "modo" | "direcao" | "instrucao" | "confirmando";
 interface OpcaoDirecao {
   label: string;
   valor: DirecaoTransformacao;
+  descricao?: string;
 }
 
 const DIRECOES_MELHORAR: OpcaoDirecao[] = [
-  { label: "Mais profissional", valor: "profissional" },
-  { label: "Mais clean", valor: "clean" },
-  { label: "Mais premium", valor: "premium" },
-  { label: "Melhorar legibilidade", valor: "legibilidade" },
-  { label: "Reduzir poluição visual", valor: "reduzir_poluicao" },
+  {
+    label: "Mais profissional",
+    valor: "profissional",
+    descricao:
+      "Organizar melhor a arte, corrigir hierarquia, alinhamento, espaçamento, contraste e legibilidade. Mantém a proposta comercial, mas com acabamento mais bem feito.",
+  },
+  {
+    label: "Mais premium",
+    valor: "premium",
+    descricao:
+      "Transformar a arte em uma versão mais sofisticada, refinada e top, com visual de marca mais forte. Reduz cara de panfleto, melhora fundo, luz, tipografia, composição e acabamento.",
+  },
+  {
+    label: "Mais clean",
+    valor: "clean",
+    descricao:
+      "Reduzir excesso de informação, efeitos, brilhos, elementos decorativos e poluição visual. Deixar a arte mais leve, organizada e fácil de ler.",
+  },
+  {
+    label: "Mais chamativo",
+    valor: "chamativa",
+    descricao:
+      "Dar mais força de venda para a arte, destacando produto, preço, oferta e chamada principal. Mais impacto visual, mas sem virar bagunça ou arte amadora.",
+  },
+  {
+    label: "Menos cara de IA",
+    valor: "menos_ia",
+    descricao:
+      "Diminuir aparência artificial: brilho exagerado, neon genérico, texto 3D forçado, sombras irreais, saturação excessiva e efeitos que parecem gerados por IA.",
+  },
   { label: "Deixar a IA decidir", valor: "ia_decide" },
 ];
 
@@ -220,16 +246,28 @@ export default function MelhorarArteWizard() {
             {modo === "melhoria_recompositiva" ? "Quer melhorar em qual direção?" : "Qual direção você quer para essa nova versão?"}
           </h3>
           <div className="flex flex-col gap-2 mt-3">
-            {(modo === "melhoria_recompositiva" ? DIRECOES_MELHORAR : DIRECOES_NOVA_VERSAO).map((opcao) => (
-              <button
-                key={opcao.valor}
-                type="button"
-                onClick={() => escolherDirecao(opcao)}
-                className="text-sm font-medium bg-[var(--accent-soft)] px-4 py-2.5 rounded-full text-left"
-              >
-                {opcao.label}
-              </button>
-            ))}
+            {(modo === "melhoria_recompositiva" ? DIRECOES_MELHORAR : DIRECOES_NOVA_VERSAO).map((opcao) =>
+              opcao.descricao ? (
+                <button
+                  key={opcao.valor}
+                  type="button"
+                  onClick={() => escolherDirecao(opcao)}
+                  className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl"
+                >
+                  <p className="font-semibold text-sm">{opcao.label}</p>
+                  <p className="text-xs text-[var(--muted)] mt-0.5">{opcao.descricao}</p>
+                </button>
+              ) : (
+                <button
+                  key={opcao.valor}
+                  type="button"
+                  onClick={() => escolherDirecao(opcao)}
+                  className="text-sm font-medium bg-[var(--accent-soft)] px-4 py-2.5 rounded-full text-left"
+                >
+                  {opcao.label}
+                </button>
+              ),
+            )}
           </div>
           <button type="button" onClick={() => setFase("modo")} className="text-xs text-[var(--muted)] underline mt-3">
             Voltar

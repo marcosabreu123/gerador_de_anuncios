@@ -5,7 +5,8 @@ import { montarPromptEdicaoDireta, montarPromptEdicaoDiretaGptImage } from "@/li
 import { editarComFalKontext } from "@/lib/ai/fal-edit";
 import { gerarVariacoes, type EntradaImagem, type TipoEntradaImagem } from "@/lib/ai/openai-image";
 import { uploadImagem } from "@/lib/storage";
-import { ENABLE_FLUX_EDIT, FAL_EDIT_MODEL, IMAGE_MODEL, qualidadeParaEtapa } from "@/lib/ai/models";
+import { ENABLE_FLUX_EDIT, FAL_EDIT_MODEL, IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
+import { formatoMaisProximo, formatoPedidoExplicitamente, medirDimensoes } from "@/lib/image-dimensions";
 import type { TipoUsoAnexoAjuste } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -82,9 +83,16 @@ export async function POST(request: NextRequest) {
         const tipoAnexo = TIPO_ENTRADA_POR_USO_ANEXO[body.tipoUsoAnexo ?? "indefinido"];
         imagens.push(await baixarBase64(body.anexoUrl, tipoAnexo));
       }
+      // Ajuste cirúrgico nunca muda o aspect ratio automaticamente — usa o
+      // formato pedido explicitamente no texto do pedido, senão preserva o
+      // mais próximo da proporção do design original.
+      const formatoPedido = formatoPedidoExplicitamente(body.pedido);
+      const dimensoes = medirDimensoes(Buffer.from(base.base64, "base64"));
+      const formatoAlvo = formatoPedido ?? (dimensoes ? formatoMaisProximo(dimensoes) : null);
       const [gerada] = await gerarVariacoes({
         prompts: [prompt],
         imagens,
+        tamanho: formatoAlvo ? TAMANHO_POR_FORMATO[formatoAlvo] : undefined,
         qualidade: qualidadeParaEtapa("final"),
       });
       imagem = gerada;

@@ -824,14 +824,18 @@ export function pareceAjustePontual(texto: string): boolean {
 }
 
 const DESCRICAO_DIRECAO: Record<Exclude<DirecaoTransformacao, "personalizado">, string> = {
-  profissional: "mais profissional",
-  clean: "mais clean",
-  premium: "mais premium",
-  chamativa: "mais chamativa",
+  profissional:
+    "mais profissional (melhora técnica de design: hierarquia, alinhamento, espaçamento, contraste e legibilidade, mantendo a proposta comercial com acabamento mais bem feito)",
+  clean:
+    "mais clean (simplificação visual: reduzir excesso de informação, efeitos, brilhos e poluição visual, deixando a arte mais leve, organizada e fácil de ler)",
+  premium:
+    "mais premium (elevação de valor percebido: versão mais sofisticada e refinada, reduzindo cara de panfleto e melhorando fundo, luz, tipografia, composição e acabamento)",
+  chamativa:
+    "mais chamativa (maior impacto comercial: mais força de venda, destacando produto, preço, oferta e chamada principal, sem virar bagunça ou arte amadora)",
   moderna: "mais moderna",
   divertida: "mais divertida",
-  legibilidade: "melhorar a legibilidade",
-  reduzir_poluicao: "reduzir a poluição visual",
+  menos_ia:
+    "menos cara de IA (redução de artificialidade: diminuir brilho exagerado, neon genérico, texto 3D forçado, sombras irreais e saturação excessiva)",
   ia_decide: "deixar a IA decidir a melhor direção",
 };
 
@@ -853,10 +857,10 @@ function descreverPedidoArteExistente(
 }
 
 const PROMPT_BASE_MELHORIA_RECOMPOSITIVA =
-  "Use the uploaded artwork as the main reference for content, product, brand and sales message. Create a clearly improved version of the same advertising campaign. Preserve all important commercial information exactly, including product names, prices, phone number, address, CTA, brand name and logo. Keep the same sales intent and main message, but do not copy the original layout rigidly. Improve the composition noticeably. You may reorganize the layout, hierarchy, spacing, background, product placement, price treatment, typography and visual balance as needed to make the artwork stronger. Preserve the campaign, not the exact structure. The result must look noticeably better and more professionally designed, not just brighter or slightly polished. Do not invent new information, do not change prices, do not change the logo, and do not turn it into a completely different campaign.";
+  "Use the uploaded artwork as the main reference for content, product, brand and sales message. Create a clearly improved version of the same advertising campaign. Preserve all important commercial information exactly, including product names, prices, phone number, address, CTA, brand name and logo. Keep the same sales intent and main message, but do not copy the original layout rigidly. Improve the composition noticeably. You may reorganize the layout, hierarchy, spacing, background, product placement, price treatment, typography and visual balance as needed to make the artwork stronger. Preserve the campaign, not the exact structure. Keep the original format/aspect ratio unless the user explicitly asks to change it. The result must look noticeably better and more professionally designed, not just brighter or slightly polished. Do not invent new information, do not change prices, do not change the logo, and do not turn it into a completely different campaign.";
 
 const PROMPT_BASE_NOVA_VERSAO =
-  "Use the uploaded artwork as a content and brand reference, not as a layout template. Create a completely new advertising design using the same commercial information, products, logo, prices, contact details and main offer. Do not copy the original layout. Create a substantially different composition. Preserve the information, not the structure. Reimagine the visual concept with a new hierarchy, new background, new product arrangement, new price treatment, new graphic language and a fresh advertising direction. The new design must look clearly different from the original while preserving the same sales intent and all commercial information. Keep all product names, prices, phone number, address, CTA, logo and brand identity accurate. Do not invent new commercial information.";
+  "Use the uploaded artwork as a content and brand reference, not as a layout template. Create a completely new advertising design using the same commercial information, products, logo, prices, contact details and main offer. Do not copy the original layout. Create a substantially different composition. Preserve the information, not the structure. Reimagine the visual concept with a new hierarchy, new background, new product arrangement, new price treatment, new graphic language and a fresh advertising direction. Keep the original format/aspect ratio unless the user explicitly asks to change it. The new design must look clearly different from the original while preserving the same sales intent and all commercial information. Keep all product names, prices, phone number, address, CTA, logo and brand identity accurate. Do not invent new commercial information.";
 
 function fallbackTransformarArteExistente(
   req: Pick<ArteExistenteRequest, "modoTransformacao" | "instrucaoUsuario">,
@@ -877,11 +881,13 @@ Nunca limite a melhoria a brilho, contraste ou polimento superficial — isso é
 
 Prompt-base (adapte ao pedido, não copie literalmente): "${PROMPT_BASE_MELHORIA_RECOMPOSITIVA}"
 
-O prompt final que você escrever deve sempre conter, adaptado ao contexto, estas 5 frases: "Do not copy the original layout rigidly.", "Improve the composition noticeably.", "You may reorganize the layout while preserving the same information and sales intent.", "Do not limit the improvement to brightness, contrast or small polish.", "Preserve the campaign, not the exact structure."
+O prompt final que você escrever deve sempre conter, adaptado ao contexto, estas 6 frases: "Do not copy the original layout rigidly.", "Improve the composition noticeably.", "You may reorganize the layout while preserving the same information and sales intent.", "Do not limit the improvement to brightness, contrast or small polish.", "Preserve the campaign, not the exact structure.", "Keep the original format/aspect ratio unless the user explicitly asks to change it."
 
 Se o lojista pedir uma direção específica (mais profissional, mais clean, mais premium, melhorar legibilidade, reduzir poluição visual, ou deixar a IA decidir), incorpore isso mantendo sempre o grau de liberdade MÉDIO.
 
-Antes de finalizar, confira este checklist (corrija o prompt antes de responder se qualquer resposta for "não"): o prompt permite mudança clara de composição? Permite reorganizar blocos? Permite redesenhar cards/preço? Pede melhoria perceptível? Evita dizer para preservar o layout rigidamente?
+Regra de formato: o formato/proporção da arte original (story 9:16, feed 4:5 ou quadrado 1:1) deve ser preservado — só sugira mudança de formato se o lojista pedir isso explicitamente (ex: "transforma em feed", "quero em story").
+
+Antes de finalizar, confira este checklist (corrija o prompt antes de responder se qualquer resposta for "não"): o prompt permite mudança clara de composição? Permite reorganizar blocos? Permite redesenhar cards/preço? Pede melhoria perceptível? Evita dizer para preservar o layout rigidamente? Preserva o formato original?
 
 A saída deve ser apenas o prompt final em INGLÊS (o modelo de imagem segue instrução de direção de arte com mais consistência em inglês), sem explicações, sem comentários e sem aspas ao redor de tudo.`;
 

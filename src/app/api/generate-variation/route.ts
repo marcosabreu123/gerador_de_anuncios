@@ -5,6 +5,7 @@ import { montarPrompt, montarPromptMelhorarArteExistente } from "@/lib/ai/prompt
 import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { uploadImagem } from "@/lib/storage";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
+import { formatoMaisProximo, formatoPedidoExplicitamente, medirDimensoes } from "@/lib/image-dimensions";
 import type {
   BriefingCompleto,
   DirecaoTransformacao,
@@ -94,7 +95,19 @@ export async function POST(request: NextRequest) {
         instrucaoUsuario: conversa.instrucaoUsuario,
       });
       const base = await baixarBase64({ tipo: "produto", url: conversa.imagemOriginal });
-      const [imagem] = await gerarVariacoes({ prompts: [prompt], imagens: [base], qualidade: qualidadeParaEtapa("rascunho") });
+      // Regra global de formato: nunca muda o aspect ratio automaticamente —
+      // usa o formato pedido explicitamente, senão preserva o mais próximo
+      // da proporção da arte original (mesma lógica de /api/melhorar-arte).
+      const bufOriginal = Buffer.from(base.base64, "base64");
+      const formatoPedido = formatoPedidoExplicitamente(conversa.instrucaoUsuario);
+      const dimensoes = medirDimensoes(bufOriginal);
+      const formatoAlvo = formatoPedido ?? (dimensoes ? formatoMaisProximo(dimensoes) : null);
+      const [imagem] = await gerarVariacoes({
+        prompts: [prompt],
+        imagens: [base],
+        tamanho: formatoAlvo ? TAMANHO_POR_FORMATO[formatoAlvo] : undefined,
+        qualidade: qualidadeParaEtapa("rascunho"),
+      });
 
       const urlGerada = await uploadImagem(user.id, imagem, "geradas");
       const { data: row } = await supabase
