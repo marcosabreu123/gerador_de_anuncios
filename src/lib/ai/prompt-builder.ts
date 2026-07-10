@@ -853,10 +853,10 @@ function descreverPedidoArteExistente(
 }
 
 const PROMPT_BASE_MELHORIA_RECOMPOSITIVA =
-  "Use the uploaded artwork as the main reference for content, product, brand and sales message. Create a clearly improved version of the same advertising piece. Preserve all important commercial information exactly, including product names, prices, phone number, address, CTA, brand name and logo. Keep the same main idea and sales intent, but do not copy the original layout rigidly. Improve the composition, hierarchy, spacing, typography, background, product emphasis, price presentation, contrast, readability and overall professional finish. You may reorganize elements, resize blocks, change the visual arrangement and rebuild the layout structure if it makes the artwork stronger. The result must look noticeably better and more professionally designed, not just brighter or slightly polished. Do not invent new information, do not change prices, do not change the logo, and do not turn it into a completely different campaign.";
+  "Use the uploaded artwork as the main reference for content, product, brand and sales message. Create a clearly improved version of the same advertising campaign. Preserve all important commercial information exactly, including product names, prices, phone number, address, CTA, brand name and logo. Keep the same sales intent and main message, but do not copy the original layout rigidly. Improve the composition noticeably. You may reorganize the layout, hierarchy, spacing, background, product placement, price treatment, typography and visual balance as needed to make the artwork stronger. Preserve the campaign, not the exact structure. The result must look noticeably better and more professionally designed, not just brighter or slightly polished. Do not invent new information, do not change prices, do not change the logo, and do not turn it into a completely different campaign.";
 
 const PROMPT_BASE_NOVA_VERSAO =
-  "Use the uploaded artwork as a content and brand reference, not as a layout template. Create a completely new advertising design using the same commercial information, products, logo, prices, contact details and main offer. Do not copy the original layout. Do not keep the same structure unless absolutely necessary. Reimagine the composition with a new visual concept, new hierarchy, new background, new arrangement of products, new price card style and a fresh advertising direction. The result must look clearly different from the original while preserving the same information and sales intent. Keep all product names, prices, phone number, address, logo and brand identity accurate. Do not invent new commercial information.";
+  "Use the uploaded artwork as a content and brand reference, not as a layout template. Create a completely new advertising design using the same commercial information, products, logo, prices, contact details and main offer. Do not copy the original layout. Create a substantially different composition. Preserve the information, not the structure. Reimagine the visual concept with a new hierarchy, new background, new product arrangement, new price treatment, new graphic language and a fresh advertising direction. The new design must look clearly different from the original while preserving the same sales intent and all commercial information. Keep all product names, prices, phone number, address, CTA, logo and brand identity accurate. Do not invent new commercial information.";
 
 function fallbackTransformarArteExistente(
   req: Pick<ArteExistenteRequest, "modoTransformacao" | "instrucaoUsuario">,
@@ -877,9 +877,11 @@ Nunca limite a melhoria a brilho, contraste ou polimento superficial — isso é
 
 Prompt-base (adapte ao pedido, não copie literalmente): "${PROMPT_BASE_MELHORIA_RECOMPOSITIVA}"
 
-O prompt final que você escrever deve sempre conter, adaptado ao contexto: "Do not copy the original layout rigidly.", "Improve the composition noticeably.", "You may reorganize the layout while preserving the same information and sales intent.", "Do not limit the improvement to brightness, contrast or small polish."
+O prompt final que você escrever deve sempre conter, adaptado ao contexto, estas 5 frases: "Do not copy the original layout rigidly.", "Improve the composition noticeably.", "You may reorganize the layout while preserving the same information and sales intent.", "Do not limit the improvement to brightness, contrast or small polish.", "Preserve the campaign, not the exact structure."
 
 Se o lojista pedir uma direção específica (mais profissional, mais clean, mais premium, melhorar legibilidade, reduzir poluição visual, ou deixar a IA decidir), incorpore isso mantendo sempre o grau de liberdade MÉDIO.
+
+Antes de finalizar, confira este checklist (corrija o prompt antes de responder se qualquer resposta for "não"): o prompt permite mudança clara de composição? Permite reorganizar blocos? Permite redesenhar cards/preço? Pede melhoria perceptível? Evita dizer para preservar o layout rigidamente?
 
 A saída deve ser apenas o prompt final em INGLÊS (o modelo de imagem segue instrução de direção de arte com mais consistência em inglês), sem explicações, sem comentários e sem aspas ao redor de tudo.`;
 
@@ -889,11 +891,13 @@ Preserve apenas: produtos anunciados, nomes dos produtos, preços, volumes, marc
 
 NÃO preserve obrigatoriamente: layout original, estrutura dos blocos, posição dos produtos, fundo, estilo dos cards, posição da logo, composição, hierarquia visual, tratamento dos preços ou linguagem gráfica.
 
-Regra obrigatória: o prompt final precisa deixar EXPLÍCITO que o modelo não deve copiar o layout original. Inclua sempre, adaptado ao contexto: "Do not copy the original layout.", "Use the uploaded artwork only as a content and brand reference, not as a layout template.", "Create a substantially different composition.", "Preserve the information, not the structure."
+Regra obrigatória: o prompt final precisa deixar EXPLÍCITO que o modelo não deve copiar o layout original. Inclua sempre, adaptado ao contexto, estas 5 frases: "Do not copy the original layout.", "Use the uploaded artwork only as a content and brand reference, not as a layout template.", "Create a substantially different composition.", "Preserve the information, not the structure.", "The new design must look clearly different from the original."
 
 Prompt-base (adapte ao pedido, não copie literalmente): "${PROMPT_BASE_NOVA_VERSAO}"
 
 Se o lojista pedir uma direção específica (mais premium, mais clean, mais chamativa, mais moderna, mais divertida, ou deixar a IA decidir), incorpore isso na nova direção criativa, sempre com grau de liberdade ALTO — o resultado precisa parecer visivelmente diferente do original.
+
+Antes de finalizar, confira este checklist (corrija o prompt antes de responder se qualquer resposta for "não"): o prompt proíbe copiar o layout? Pede composição substancialmente diferente? Deixa claro que preserva informação, não estrutura? Evita repetir a posição dos elementos originais?
 
 A saída deve ser apenas o prompt final em INGLÊS, sem explicações, sem comentários e sem aspas ao redor de tudo.`;
 

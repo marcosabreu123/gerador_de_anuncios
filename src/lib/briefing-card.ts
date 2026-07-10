@@ -1,6 +1,7 @@
 import type {
   BriefingParcial,
   CardPerguntas,
+  ConteudoComposicaoModo,
   EstiloComunicacao,
   Formato,
   FormatoCanal,
@@ -8,7 +9,6 @@ import type {
   Objetivo,
   ObjetivoMarketing,
   PreferenciaCores,
-  TextoPrincipalModo,
 } from "@/lib/types";
 
 // Card principal do fluxo rápido de criação — fixo (não gerado pelo modelo),
@@ -64,12 +64,13 @@ export const CARD_BRIEFING_PRINCIPAL: CardPerguntas = {
       ],
     },
     {
-      id: "textoPrincipalModo",
-      pergunta: "Texto principal",
+      id: "conteudoComposicaoModo",
+      pergunta: "Conteúdo da composição",
       opcoes: [
-        { label: "Usar minha frase", value: "usar_minha_frase" },
-        { label: "Criar uma frase para mim", value: "criar_frase" },
+        { label: "Quero informar o que deve aparecer", value: "usuario_informa" },
+        { label: "Criar conteúdo para mim", value: "ia_cria" },
         { label: "Só destacar a oferta", value: "destacar_oferta" },
+        { label: "Usar apenas o que já falei", value: "usar_o_que_ja_falou" },
       ],
     },
   ],
@@ -77,13 +78,15 @@ export const CARD_BRIEFING_PRINCIPAL: CardPerguntas = {
 };
 
 // Campo de texto que aparece logo abaixo de um grupo quando uma opção
-// específica é escolhida (ex.: "Usar minha frase" abre "qual frase?").
-// Chave: "<idDoGrupo>:<value>". Só existe pro card principal — o card de
-// segmento (gerado pelo agente) não tem campos condicionais.
+// específica é escolhida (ex.: "Quero informar o que deve aparecer" abre o
+// campo aberto de composição — não é só uma frase de destaque, pode ser
+// título, preço, WhatsApp, entrega, selo etc.). Chave: "<idDoGrupo>:<value>".
+// Só existe pro card principal — o card de segmento (gerado pelo agente)
+// não tem campos condicionais.
 export const CAMPOS_CONDICIONAIS_PRINCIPAL: Record<string, { label: string; placeholder: string }> = {
-  "textoPrincipalModo:usar_minha_frase": {
-    label: "Qual frase você quer que apareça em destaque?",
-    placeholder: "Ex: Sabor que refresca o seu dia",
+  "conteudoComposicaoModo:usuario_informa": {
+    label: "O que você quer que apareça na composição?",
+    placeholder: "Ex: título, preço, produto, promoção, WhatsApp, entrega, endereço, CTA, selo ou alguma observação",
   },
   "preferenciaCores:marca": {
     label: "Quais cores sua marca usa?",
@@ -156,12 +159,12 @@ export function selecoesCardPrincipalParaBriefing(
     }
   }
 
-  const textoPrincipalModo = selecoes.textoPrincipalModo as TextoPrincipalModo | undefined;
-  if (textoPrincipalModo) {
-    parcial.textoPrincipalModo = textoPrincipalModo;
-    if (textoPrincipalModo === "usar_minha_frase") {
-      const frase = camposTexto["textoPrincipalModo:usar_minha_frase"];
-      if (frase?.trim()) parcial.textoPrincipal = frase.trim();
+  const conteudoComposicaoModo = selecoes.conteudoComposicaoModo as ConteudoComposicaoModo | undefined;
+  if (conteudoComposicaoModo) {
+    parcial.conteudoComposicaoModo = conteudoComposicaoModo;
+    if (conteudoComposicaoModo === "usuario_informa") {
+      const conteudo = camposTexto["conteudoComposicaoModo:usuario_informa"];
+      if (conteudo?.trim()) parcial.conteudoComposicaoUsuario = conteudo.trim();
     }
   }
 

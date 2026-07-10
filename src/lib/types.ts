@@ -333,7 +333,13 @@ export type EstiloComunicacao = "premium" | "clean" | "chamativo" | "moderno" | 
 
 export type PreferenciaCores = "segmento" | "marca" | "referencia" | "ia_decide";
 
-export type TextoPrincipalModo = "usar_minha_frase" | "criar_frase" | "destacar_oferta";
+// Como o conteúdo textual/visual da composição (não só uma frase — pode ser
+// título, preço, WhatsApp, entrega, selo etc.) deve ser definido:
+// usuario_informa: o lojista descreve livremente o que quer ver (conteudoComposicaoUsuario).
+// ia_cria: a IA propõe o conteúdo (headline, oferta, CTA...), sem inventar dado comercial novo.
+// destacar_oferta: prioriza produto/preço/CTA simples, sem textos longos.
+// usar_o_que_ja_falou: usa só o que já foi dito na primeira mensagem, sem perguntar mais.
+export type ConteudoComposicaoModo = "usuario_informa" | "ia_cria" | "destacar_oferta" | "usar_o_que_ja_falou";
 
 // Briefing completo e resolvido — exigido para poder gerar a imagem.
 // `conteudoAnuncio` precisa estar aprovado (ver regra de negócio no agente:
@@ -357,8 +363,8 @@ export interface BriefingCompleto {
   estiloComunicacao?: EstiloComunicacao;
   preferenciaCores?: PreferenciaCores;
   coresMarca?: string;
-  textoPrincipalModo?: TextoPrincipalModo;
-  textoPrincipal?: string;
+  conteudoComposicaoModo?: ConteudoComposicaoModo;
+  conteudoComposicaoUsuario?: string;
   nivelVisual?: NivelVisual;
   nivelProducaoVisual?: NivelProducaoVisual;
   direcaoArte?: DirecaoArte;
