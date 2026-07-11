@@ -5,6 +5,7 @@ import type {
   Formato,
   FormatoCanal,
   GrupoPergunta,
+  IntensidadeVisual,
   ModoUsoConteudo,
   Objetivo,
   ObjetivoMarketing,
@@ -42,14 +43,30 @@ export const CARD_BRIEFING_PRINCIPAL: CardPerguntas = {
       ],
     },
     {
+      // Identidade estética da peça — NUNCA controla impacto/energia visual,
+      // isso é o grupo "intensidadeVisual" logo abaixo (dimensão independente,
+      // ver EstiloComunicacao/IntensidadeVisual em types.ts).
       id: "estiloComunicacao",
-      pergunta: "Estilo visual",
+      pergunta: "Qual estilo visual você prefere?",
       opcoes: [
         { label: "Premium", value: "premium" },
-        { label: "Clean", value: "clean" },
-        { label: "Chamativo", value: "chamativo" },
         { label: "Moderno", value: "moderno" },
-        { label: "Divertido", value: "divertido" },
+        { label: "Clean", value: "clean" },
+        { label: "Vibrante", value: "vibrante" },
+        { label: "Minimalista", value: "minimalista" },
+        { label: "IA decide", value: "ia_decide" },
+      ],
+    },
+    {
+      // Nível de impacto/energia comercial — independente do estilo escolhido
+      // acima (ex.: Premium + Discreta = sofisticação contida; Premium +
+      // Impactante = luxo com presença comercial forte).
+      id: "intensidadeVisual",
+      pergunta: "Quanto impacto visual você quer?",
+      opcoes: [
+        { label: "Discreta", value: "discreta" },
+        { label: "Equilibrada", value: "equilibrada" },
+        { label: "Impactante", value: "impactante" },
         { label: "IA decide", value: "ia_decide" },
       ],
     },
@@ -136,6 +153,9 @@ export function selecoesCardPrincipalParaBriefing(
 
   const estiloComunicacao = selecoes.estiloComunicacao as EstiloComunicacao | undefined;
   if (estiloComunicacao) parcial.estiloComunicacao = estiloComunicacao;
+
+  const intensidadeVisual = selecoes.intensidadeVisual as IntensidadeVisual | undefined;
+  if (intensidadeVisual) parcial.intensidadeVisual = intensidadeVisual;
 
   const preferenciaCores = selecoes.preferenciaCores as PreferenciaCores | undefined;
   if (preferenciaCores) {

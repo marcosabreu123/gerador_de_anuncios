@@ -328,8 +328,21 @@ export type FormatoCanal = "story" | "feed" | "whatsapp" | "trafego_pago" | "ia_
 
 // Estilo de comunicação escolhido no card rápido — não inclui cor (a cor é
 // escolhida à parte em `preferenciaCores`), diferente do `EstiloVisual`
-// legado (que já vem com paleta embutida, ex. "premium-bege").
-export type EstiloComunicacao = "premium" | "clean" | "chamativo" | "moderno" | "divertido" | "ia_decide";
+// legado (que já vem com paleta embutida, ex. "premium-bege"). Define APENAS
+// a identidade estética da peça — nunca o nível de impacto/energia visual,
+// que é uma dimensão independente (ver `IntensidadeVisual` abaixo). Antes
+// existia uma opção "Chamativo" aqui, o que misturava as duas dimensões e
+// gerava resultados inconsistentes (ex.: "Premium" + "Chamativo" ao mesmo
+// tempo não fazia sentido) — "Chamativo" virou a dimensão `IntensidadeVisual`.
+export type EstiloComunicacao = "premium" | "moderno" | "clean" | "vibrante" | "minimalista" | "ia_decide";
+
+// Intensidade/impacto visual da peça — dimensão independente do estilo
+// (EstiloComunicacao): controla apenas o nível de energia/contraste/força
+// comercial (destaque de preço/CTA/oferta), nunca a identidade estética.
+// Ex.: "Premium" + "Discreta" = campanha sofisticada e contida; "Premium" +
+// "Impactante" = luxo com presença comercial forte. Ver combinação completa
+// em prompt-builder.ts.
+export type IntensidadeVisual = "discreta" | "equilibrada" | "impactante" | "ia_decide";
 
 export type PreferenciaCores = "segmento" | "marca" | "referencia" | "ia_decide";
 
@@ -383,6 +396,7 @@ export interface BriefingCompleto {
   estiloVisual?: EstiloVisual;
   estiloLivre?: string;
   estiloComunicacao?: EstiloComunicacao;
+  intensidadeVisual?: IntensidadeVisual;
   preferenciaCores?: PreferenciaCores;
   coresMarca?: string;
   conteudoComposicao?: ConteudoComposicao;

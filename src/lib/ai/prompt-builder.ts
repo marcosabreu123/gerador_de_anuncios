@@ -11,22 +11,42 @@ import {
   type BriefingCompleto,
   type DirecaoTransformacao,
   type EstiloComunicacao,
+  type IntensidadeVisual,
   type MensagemAjusteConversa,
   type ObjetivoMarketing,
   type TipoUsoAnexoAjuste,
 } from "@/lib/types";
 
 // Traduções em português (para manter o mesmo idioma do resto do contexto
-// enviado ao prompt-builder, ver briefingParaTexto) dos 5 campos do card
+// enviado ao prompt-builder, ver briefingParaTexto) dos campos do card
 // rápido de criação (ver src/lib/briefing-card.ts) que não têm equivalente
 // direto nos tipos legados (EstiloVisual já vem com paleta embutida;
 // Objetivo é canal/destino, não objetivo de marketing).
+//
+// IMPORTANTE: EstiloComunicacao define APENAS identidade estética (a "cara"
+// da peça) — nunca controla energia/impacto visual, isso é responsabilidade
+// exclusiva de IntensidadeVisual (ver INTENSIDADES_VISUAIS logo abaixo). As
+// duas dimensões são independentes e sempre combinadas juntas no prompt final
+// (ver estiloParaTexto/intensidadeParaTexto/briefingParaTexto): por exemplo
+// "Premium" + "Discreta" = campanha extremamente sofisticada e contida;
+// "Premium" + "Impactante" = luxo com presença comercial forte; "Clean" +
+// "Discreta" = estilo Apple; "Vibrante" + "Impactante" = promoção de açaí;
+// "Minimalista" + "Impactante" = poucos elementos com muito impacto.
 const ESTILOS_COMUNICACAO: Record<Exclude<EstiloComunicacao, "ia_decide">, string> = {
-  premium: "estética premium e sofisticada, acabamento refinado, tom aspiracional",
-  clean: "composição minimalista, bastante espaço negativo, foco quase total no produto, poucos elementos",
-  chamativo: "alto impacto visual, tipografia forte e direta, energia comercial evidente, mas sem cair em estética de panfleto amador",
-  moderno: "linguagem visual contemporânea, tipografia moderna, composição dinâmica e atual",
-  divertido: "clima descontraído, jovem e leve, tom amigável, ainda com acabamento profissional",
+  premium: "estética sofisticada, poucos elementos, muito refinamento, hierarquia excelente, espaço negativo, texturas discretas, iluminação elegante, aspecto de marca premium — nunca exagerar em brilhos ou efeitos",
+  moderno: "visual contemporâneo, layout dinâmico, elementos gráficos discretos, sensação de profundidade e de marca tecnológica/atual, organização limpa",
+  clean: "layout extremamente limpo, poucos elementos, muito respiro, foco absoluto no produto, excelente legibilidade, paleta reduzida, sem excesso de efeitos",
+  vibrante: "visual energético, cores fortes, mais contraste, sensação de movimento e energia, clima promocional — sem perder organização",
+  minimalista: "remova tudo que não agrega valor: pouquíssimos elementos, muito espaço negativo, poucas cores, poucos textos, grande foco no produto, visual editorial",
+};
+
+// Nível de impacto/energia comercial da peça — dimensão independente do
+// estilo (nunca altera a identidade estética escolhida acima, só a força com
+// que ela é aplicada).
+const INTENSIDADES_VISUAIS: Record<Exclude<IntensidadeVisual, "ia_decide">, string> = {
+  discreta: "visual calmo, baixo contraste, poucos brilhos, poucos elementos chamativos — ideal para marcas sofisticadas",
+  equilibrada: "mistura organização com impacto — nível padrão, adequado para a maioria das artes",
+  impactante: "maior destaque para preço/CTA/oferta, maior contraste, maior profundidade, mais força visual e energia, sem exagerar e sem nunca perder legibilidade",
 };
 
 const OBJETIVOS_MARKETING_HINT: Record<Exclude<ObjetivoMarketing, "ia_decide">, string> = {
@@ -76,7 +96,7 @@ function direcaoDeCoresParaTexto(b: BriefingCompleto): string {
 
 // Seção obrigatória e forte — a mais importante do prompt quando há comida.
 const FOOD_REALISM_REQUIREMENTS =
-  "FOOD REALISM REQUIREMENTS (mandatory, stronger than any style instruction): Use realistic food photography. The food must look like a real photographed product, not a render, not CGI, not AI-generated food. Prioritize natural texture, believable imperfections, realistic moisture, natural fibers, plausible colors, real-world lighting and natural shadows. Avoid plastic shine, excessive gloss, fake fat, waxy texture, perfect surfaces, oversaturated colors, artificial smoke, fake steam, unrealistic anatomy, strange shapes, overprocessed food styling and 3D-rendered appearance. The graphic design can be bold and commercial, but the food itself must remain photorealistic, natural and believable. If there is any conflict between visual impact and food realism, food realism wins.";
+  "FOOD REALISM REQUIREMENTS (mandatory, stronger than any style or intensity instruction): Use realistic food photography. The food must look like a real photographed product, not a render, not CGI, not AI-generated food. Prioritize natural texture, believable imperfections, realistic moisture, natural fibers, plausible colors, real-world lighting and natural shadows. Avoid plastic shine, excessive gloss, fake fat, waxy texture, perfect surfaces, oversaturated colors, artificial smoke, fake steam, unrealistic anatomy, strange shapes, overprocessed food styling and 3D-rendered appearance. The chosen visual style and visual intensity may only change layout, typography, composition, graphic elements, hierarchy and the artwork's lighting/mood — they must never change the real appearance of the food itself (meat, burger, açaí, pizza or any other food item). The graphic design can be bold and commercial, but the food itself must remain photorealistic, natural and believable. If there is any conflict between visual impact and food realism, food realism wins.";
 
 // Blocos por estado do produto de açougue/carne.
 const MEAT_FRESH_BLOCK =
@@ -239,6 +259,9 @@ Para açougue/carnes, o padrão é SEMPRE "oferta premium acessível" — nunca 
 Para perfume, use linguagem editorial premium: fundo escuro, bege, branco limpo ou textura sofisticada; luz cinematográfica; produto com presença; tipografia elegante; poucos textos; sensação aspiracional. Evite excesso de cards, selos e poluição visual.
 Exemplo de calibração para açougue (não copie literalmente, use como referência de qualidade e de como pensar a composição): "Crie uma arte publicitária vertical 9:16 para Instagram Stories com nível premium-editorial, anunciando costela bovina para o 'Sábado da Carne'. A peça deve parecer uma campanha profissional de açougue premium acessível, não um panfleto popular. Use fotografia realista de uma costela bovina fresca e bem texturizada sobre madeira escura, com fibras, gordura e marmorização naturais, iluminada por luz quente lateral inspirada em brasa/churrasco. O fundo deve ter profundidade, tons de carvão, madeira, vinho escuro e laranja queimado muito sutil, com brasa desfocada ao fundo, sem fogo exagerado. A composição deve ser sofisticada e equilibrada, com o produto ocupando a área central/inferior como protagonista, bastante respiro e um grid visual elegante. A headline 'Sábado da Carne' deve aparecer com tipografia forte, limpa e editorial, em branco ou creme, sem contorno grosso. A oferta 'Costela bovina por apenas R$19,99/kg' deve entrar em um selo ou bloco discreto e refinado, integrado ao layout, sem parecer etiqueta de supermercado. O WhatsApp e endereço devem ficar menores e bem organizados em área secundária, sem rodapé pesado. Posicione a logo no local que melhor equilibrar a composição, podendo ser topo, lateral ou canto, como assinatura discreta da marca. Use luz realista, sombras naturais, profundidade de campo, textura tátil da madeira e da carne, tipografia profissional e acabamento de campanha comercial."
 
+## Estilo visual x Intensidade visual (duas camadas independentes)
+O briefing traz duas informações que NUNCA devem ser misturadas: "Estilo visual" define a identidade estética da peça (Premium, Moderno, Clean, Vibrante ou Minimalista) e "Intensidade visual" define apenas o nível de impacto/energia comercial (Discreta, Equilibrada ou Impactante) — nunca o contrário. A intensidade nunca substitui nem contradiz o estilo escolhido, só regula a força com que ele é aplicado. Combine as duas sempre: Premium + Discreta = campanha extremamente sofisticada e contida; Premium + Impactante = luxo com presença comercial forte; Clean + Discreta = estilo Apple; Clean + Equilibrada = catálogo premium; Moderno + Equilibrada = empresa de tecnologia; Moderno + Impactante = delivery moderno; Vibrante + Equilibrada = restaurante elegante; Vibrante + Impactante = promoção de açaí; Minimalista + Discreta = editorial; Minimalista + Impactante = poucos elementos com muito impacto visual.
+
 ## Nível visual (nivelVisual) e nível de produção (nivelProducaoVisual)
 Respeite o nível visual pedido (popular-chamativo, profissional-equilibrado ou premium-sofisticado) — mesmo no mais chamativo, a peça NUNCA tem aparência de panfleto amador, só varia a energia comercial. Respeite também o nível de produção (nivelProducaoVisual: basico-organizado, profissional-comercial, premium-editorial, campanha-impacto ou luxo-cinematografico) — ele define a ambição da direção de arte em si (quanto a peça se aproxima de uma produção publicitária completa). Quanto mais alto o nível de produção, mais a composição deve fugir do óbvio: use soluções de layout sofisticadas quando fizer sentido — composição assimétrica, espaço negativo, sobreposição sutil, blocos editoriais, selos discretos, grids invisíveis, profundidade de cena, luz cinematográfica e integração natural entre produto e texto.
 
@@ -305,6 +328,8 @@ export interface PromptsGerados {
   usouFallback: boolean;
 }
 
+// Identidade estética (EstiloComunicacao) — NUNCA inclui impacto/energia
+// visual, isso é intensidadeParaTexto logo abaixo (dimensão independente).
 function estiloParaTexto(b: BriefingCompleto): string {
   if (b.estiloVisual === "estilo-livre") {
     return `descrito pelo lojista em suas palavras: "${b.estiloLivre ?? ""}" (traduza em atributos visuais concretos)`;
@@ -316,6 +341,15 @@ function estiloParaTexto(b: BriefingCompleto): string {
   if (b.estiloComunicacao && b.estiloComunicacao !== "ia_decide") return ESTILOS_COMUNICACAO[b.estiloComunicacao];
   if (b.estiloComunicacao === "ia_decide") return "a critério do diretor de arte, com base no produto, segmento e objetivo";
   return "não especificado — use um estilo comercial neutro e elegante";
+}
+
+// Intensidade/impacto visual — dimensão independente do estilo acima. Só
+// existe no fluxo rápido de criação (não há equivalente no preset legado
+// EstiloVisual); quando ausente, cai pro padrão "equilibrada".
+function intensidadeParaTexto(b: BriefingCompleto): string {
+  if (b.intensidadeVisual && b.intensidadeVisual !== "ia_decide") return INTENSIDADES_VISUAIS[b.intensidadeVisual];
+  if (b.intensidadeVisual === "ia_decide") return "a critério do diretor de arte, com base no produto, segmento e objetivo";
+  return INTENSIDADES_VISUAIS.equilibrada;
 }
 
 function nivelVisualParaTexto(b: BriefingCompleto): string {
@@ -336,7 +370,8 @@ function briefingParaTexto(b: BriefingCompleto): string {
   const linhas = [
     `Tipo de peça: ${TIPOS_PECA[b.tipoPeca]?.label ?? b.tipoPeca}`,
     `Formato: ${fmt.label} (${fmt.aspecto}) — ${fmt.descricao}`,
-    `Estilo visual: ${estiloParaTexto(b)}`,
+    `Estilo visual (identidade estética): ${estiloParaTexto(b)}`,
+    `Intensidade visual (nível de impacto/energia — dimensão independente do estilo, nunca muda a identidade estética): ${intensidadeParaTexto(b)}`,
     `Nível visual: ${nivelVisualParaTexto(b)}`,
     `Nível de produção: ${nivelProducaoParaTexto(b)}`,
     `Produto: ${b.nomeProduto}`,
@@ -423,12 +458,13 @@ export function montarPromptFallback(b: BriefingCompleto): string {
         : b.estiloComunicacao && b.estiloComunicacao !== "ia_decide"
           ? ESTILOS_COMUNICACAO[b.estiloComunicacao]
           : "estilo comercial neutro e elegante";
+  const intensidadeHint = intensidadeParaTexto(b);
   const nivel = NIVEIS_VISUAIS[b.nivelVisual ?? "profissional-equilibrado"].hint;
   const producao = NIVEIS_PRODUCAO_VISUAL[b.nivelProducaoVisual ?? "premium-editorial"].hint;
   const c = b.conteudoAnuncio;
   const partes: string[] = [
     `Crie uma arte publicitária ${fmt.aspecto} profissional e realista para ${TIPOS_PECA[b.tipoPeca]?.label.toLowerCase() ?? "anúncio"} do produto "${b.nomeProduto}"${b.descricaoProduto ? ` (${b.descricaoProduto})` : ""},`,
-    `${estiloHint}, ${nivel}, com produção visual no nível "${producao}", equilibrando sofisticação editorial com clareza comercial,`,
+    `${estiloHint}; nível de impacto visual: ${intensidadeHint}; ${nivel}, com produção visual no nível "${producao}", equilibrando sofisticação editorial com clareza comercial,`,
     b.temFotoProduto
       ? "use a foto anexada apenas como referência do produto (formato, cor, material, proporção e detalhes reais) — remova o ambiente casual da foto original (mesa, fundo bagunçado, luz fraca) e recrie o produto como hero shot publicitário profissional, iluminação de estúdio, sombra realista, acabamento premium e comercial, sem aparência de foto colada ou de imagem gerada por IA."
       : "produto composto a partir da descrição com máximo realismo, iluminação realista de estúdio, acabamento premium e comercial, sem aparência de imagem gerada por IA.",
