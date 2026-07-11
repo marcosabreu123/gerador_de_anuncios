@@ -65,50 +65,141 @@ function direcaoDeCoresParaTexto(b: BriefingCompleto): string {
   return "Use uma paleta de cores coerente com o segmento, o produto, o objetivo e o estilo visual desta peça.";
 }
 
-// ==== Modo comida realista ====
-// Ativado internamente (nunca é pergunta ao lojista, ver agente-conversa.ts
-// que preenche modoComidaRealista/submodoAcougue) sempre que o segmento é
-// alimentício. Objetivo: para comida, realismo vem antes de exagero visual
-// — evita a aparência de CGI/render 3D/brilho plástico que modelos de
-// imagem tendem a produzir por padrão em fotos de comida.
-const INSTRUCAO_COMIDA_REALISTA =
-  "Use realistic food photography. The food must look real, natural and appetizing, with believable texture, natural imperfections, realistic lighting, natural shadows and plausible colors. Avoid CGI look, plastic shine, exaggerated gloss, artificial smoke, oversaturated colors, fake textures, unrealistic shapes and AI-generated food appearance.";
+// ==== Modo comida realista (regra GLOBAL do prompt-builder de imagem) ====
+// Vale em TODOS os fluxos de imagem (criação, edição, melhoria, nova versão,
+// variação, ajuste), não só no fluxo de criar arte nova. Para comida,
+// realismo fotográfico vem ANTES de impacto visual — esta é a instrução mais
+// forte do prompt final e vence "premium", "chamativo", "cinematográfico"
+// etc. Aplicada de forma DETERMINÍSTICA (anexada ao prompt final, não só
+// pedida ao modelo de texto), sempre em inglês (idioma do modelo de imagem),
+// pra garantir que as frases obrigatórias sempre cheguem ao modelo.
 
-const INSTRUCAO_ACOUGUE_BASE =
-  "For butcher shop meat, prioritize realistic meat texture, natural fat, visible fibers, believable cut shape and fresh sellable appearance. Avoid plastic-looking meat, overly glossy surfaces, fake fat, strange anatomy, excessive smoke and artificial barbecue effects.";
+// Seção obrigatória e forte — a mais importante do prompt quando há comida.
+const FOOD_REALISM_REQUIREMENTS =
+  "FOOD REALISM REQUIREMENTS (mandatory, stronger than any style instruction): Use realistic food photography. The food must look like a real photographed product, not a render, not CGI, not AI-generated food. Prioritize natural texture, believable imperfections, realistic moisture, natural fibers, plausible colors, real-world lighting and natural shadows. Avoid plastic shine, excessive gloss, fake fat, waxy texture, perfect surfaces, oversaturated colors, artificial smoke, fake steam, unrealistic anatomy, strange shapes, overprocessed food styling and 3D-rendered appearance. The graphic design can be bold and commercial, but the food itself must remain photorealistic, natural and believable. If there is any conflict between visual impact and food realism, food realism wins.";
 
-const INSTRUCAO_SUBMODO_ACOUGUE: Record<Exclude<NonNullable<BriefingCompleto["submodoAcougue"]>, "ia_decide">, string> = {
-  produto_cru_fresco:
-    "Show the meat as a real fresh butcher shop product, with natural red tones, realistic fat marbling, visible fibers, believable cut shape, natural moisture, and professional food photography lighting. The meat must look fresh and sellable, not cooked, not plastic, not CGI, not overly glossy.",
-  pronto_para_consumo:
-    "Show the food as a realistic cooked meat photograph, with natural browning, believable crust, realistic juiciness, subtle highlights, natural fat rendering, and appetizing texture. It must look like a real food photo, not a 3D render.",
-  clima_churrasco:
-    "Create a realistic barbecue atmosphere with subtle smoke, warm side lighting, dark wood or grill context, natural meat texture and believable food styling. Smoke must be minimal and realistic. The meat should look appetizing but not artificial.",
-};
+// Blocos por estado do produto de açougue/carne.
+const MEAT_FRESH_BLOCK =
+  "Show the meat as a real fresh butcher shop product. Use natural red tones, realistic fat marbling, visible muscle fibers, believable cut shape, natural moisture and professional food photography lighting. The meat must look fresh, raw and sellable, like a real butcher shop product. It must not look cooked, grilled, plastic, waxy, glossy, CGI or anatomically strange. Avoid cooked meat, grilled surface, barbecue gloss, plastic shine, varnished meat, fake fat, wax texture, overly smooth texture, oversaturated red, strange bone structure, unrealistic cut shape, artificial smoke, excessive cinematic glow and AI-generated food appearance.";
 
-// Frase única (em português, pro contexto enviado ao prompt-builder — a
-// tradução final pro inglês do prompt de imagem já é feita pelo próprio
-// SYSTEM/fallback abaixo) descrevendo o modo comida realista pro produto em
-// questão — usada tanto na chamada à IA quanto no fallback determinístico.
-function instrucaoComidaRealista(b: BriefingCompleto): string | null {
-  if (!b.modoComidaRealista) return null;
-  const partes = [INSTRUCAO_COMIDA_REALISTA];
-  if (b.submodoAcougue && b.submodoAcougue !== "ia_decide") {
-    partes.push(INSTRUCAO_ACOUGUE_BASE, INSTRUCAO_SUBMODO_ACOUGUE[b.submodoAcougue]);
-  } else if (b.submodoAcougue === "ia_decide") {
-    partes.push(INSTRUCAO_ACOUGUE_BASE);
+const MEAT_READY_BLOCK =
+  "Show the food as a realistic cooked meat photograph, with natural browning, believable crust, realistic juiciness, subtle highlights, natural fat rendering and appetizing texture. It must look like a real food photo, not a 3D render. Avoid exaggerated crust, plastic shine, artificial fat, excessive smoke, rubbery meat, overly brown or orange color and perfect surfaces.";
+
+const MEAT_BBQ_BLOCK =
+  "Create a realistic barbecue atmosphere with subtle, minimal smoke, warm side lighting, dark wood or grill context, natural meat texture and believable food styling. The meat should look appetizing but not artificial. Avoid exaggerated cinematic smoke, too much fire, fake embers, overly glossy meat, 3D-rendered look and excessive effects.";
+
+const NO_PHOTO_FOOD_NOTE =
+  "If no product photo is provided, create a believable realistic food photograph based on common real-world appearance. Do not invent exaggerated shapes, perfect textures or fantasy food styling.";
+
+// Detecção de comida por TEXTO (sem análise de imagem — os fluxos de
+// edição/melhoria não têm briefing estruturado, então inferimos pelo pedido
+// do lojista e/ou pelo prompt anterior da arte).
+// JS `\b` trata letras acentuadas como "não-palavra", então uma palavra que
+// TERMINA em vogal acentuada (açaí, café) nunca bate o `\b` de fechamento —
+// por isso os limites de palavra aqui são lookarounds manuais que também
+// tratam letras latinas acentuadas como parte da palavra.
+const LETRA_PALAVRA = "A-Za-zÀ-ÖØ-öø-ÿ0-9_";
+const INICIO_PALAVRA = `(?<![${LETRA_PALAVRA}])`;
+const FIM_PALAVRA = `(?![${LETRA_PALAVRA}])`;
+
+const PALAVRAS_COMIDA = new RegExp(
+  `${INICIO_PALAVRA}(comida|aliment(o|ar|[íi]cio)|bebida|drink|refrigerante|suco|cerveja|caf[ée]|a[çc]ougue|carne|costela|picanha|frango|coxinha|linguic|corte bovino|bovin|churrasc|brasa|grelh|assad|restaurante|lanchonete|lanche|hamb[úu]rg|burger|pizza|a[çc]a[íi]|sorvete|sobremesa|doce|confeitaria|padaria|p[ãa]o|bolo|torta|marmita|delivery|prato|refei[çc][ãa]o|salgad|espetinho|feijoada|churrascaria|fruta|queijo|frios|pastel|a[çc][úu]car)${FIM_PALAVRA}`,
+  "i",
+);
+
+const PALAVRAS_CARNE = new RegExp(
+  `${INICIO_PALAVRA}(a[çc]ougue|carne|costela|picanha|frango|coxa|sobrecoxa|linguic|corte bovino|bovin|su[íi]n|alcatra|maminha|fraldinha|contrafil[ée]|cox[ãa]o|patinho|ac[ée]m|cupim|fil[ée] mignon|fil[ée]|bife|ossobuco|paleta|panceta|bacon)${FIM_PALAVRA}`,
+  "i",
+);
+
+// true quando qualquer um dos textos passados envolver comida/alimento.
+export function textoEnvolveComida(...textos: (string | null | undefined)[]): boolean {
+  const juntos = textos.filter(Boolean).join(" ");
+  return PALAVRAS_COMIDA.test(juntos);
+}
+
+type EstadoCarne = "cru_fresco" | "pronto_para_consumo" | "churrasco";
+
+// Infere o estado correto do produto de carne pelo contexto textual (ver
+// 1.1 da especificação): venda por kg / oferta do dia / açougue → cru;
+// marmita / prato / restaurante / delivery → pronto; brasa / grelha /
+// churrasco / assado / fim de semana → churrasco. Padrão de açougue = cru.
+function estadoCarnePorTexto(texto: string): EstadoCarne | null {
+  if (!PALAVRAS_CARNE.test(texto)) return null;
+  if (/\b(brasa|grelh|churrasc|assad|espetinho|fim de semana|final de semana|domingo|s[áa]bado)\b/i.test(texto)) {
+    return "churrasco";
   }
+  if (/\b(marmita|prato pronto|prato feito|restaurante|delivery|refei[çc][ãa]o|pf\b|self.?service)\b/i.test(texto)) {
+    return "pronto_para_consumo";
+  }
+  return "cru_fresco";
+}
+
+function blocoCarne(estado: EstadoCarne): string {
+  if (estado === "churrasco") return MEAT_BBQ_BLOCK;
+  if (estado === "pronto_para_consumo") return MEAT_READY_BLOCK;
+  return MEAT_FRESH_BLOCK;
+}
+
+function estadoCarneDoSubmodo(b: BriefingCompleto): EstadoCarne | null {
+  if (b.submodoAcougue === "produto_cru_fresco") return "cru_fresco";
+  if (b.submodoAcougue === "pronto_para_consumo") return "pronto_para_consumo";
+  if (b.submodoAcougue === "clima_churrasco") return "churrasco";
+  // "ia_decide" ou ausente: infere pelo texto do produto/segmento.
+  return estadoCarnePorTexto(`${b.nomeProduto ?? ""} ${b.descricaoProduto ?? ""} ${b.segmentoDetectado ?? ""} ${b.conceito ?? ""}`);
+}
+
+// Bloco de comida realista para o fluxo de CRIAÇÃO (tem briefing com
+// modoComidaRealista/submodoAcougue já definidos pelo agente).
+function blocoComidaRealistaCriacao(b: BriefingCompleto): string | null {
+  if (!b.modoComidaRealista) return null;
+  const partes = [FOOD_REALISM_REQUIREMENTS];
+  const estado = estadoCarneDoSubmodo(b);
+  if (estado) partes.push(blocoCarne(estado));
+  if (!b.temFotoProduto) partes.push(NO_PHOTO_FOOD_NOTE);
   return partes.join(" ");
 }
 
-// Aplicada de forma DETERMINÍSTICA (não só pedida ao modelo) ao prompt
-// final, tanto no caminho via IA quanto no fallback — garante que as
-// frases obrigatórias de comida realista sempre cheguem ao modelo de
-// imagem, mesmo que o prompt-builder (texto) não as tenha citado.
+// Aplicada de forma DETERMINÍSTICA ao prompt final da criação (via IA e no
+// fallback) — garante que as frases obrigatórias de comida realista sempre
+// cheguem ao modelo de imagem.
 function aplicarComidaRealista(prompt: string, b: BriefingCompleto): string {
-  const instrucao = instrucaoComidaRealista(b);
-  return instrucao ? `${prompt} ${instrucao}` : prompt;
+  const bloco = blocoComidaRealistaCriacao(b);
+  return bloco ? `${prompt}\n\n${bloco}` : prompt;
 }
+
+// Reforço de comida realista para os fluxos que operam sobre uma imagem
+// EXISTENTE (ajuste, edição, melhoria, nova versão, variação). Só entra se o
+// texto de contexto (pedido do lojista + prompt anterior da arte) envolver
+// comida — nesses fluxos não há briefing estruturado com modoComidaRealista.
+// Idempotente: se o prompt já contém a seção, não duplica.
+export function reforcarComidaRealista(
+  promptFinal: string,
+  opts: { contexto: string; fluxo: "melhoria" | "nova_versao" | "edicao" },
+): string {
+  if (promptFinal.includes("FOOD REALISM REQUIREMENTS")) return promptFinal;
+  if (!textoEnvolveComida(opts.contexto)) return promptFinal;
+  const partes = [FOOD_REALISM_REQUIREMENTS];
+  const estado = estadoCarnePorTexto(opts.contexto);
+  if (estado) partes.push(blocoCarne(estado));
+  if (opts.fluxo === "melhoria" || opts.fluxo === "nova_versao") {
+    partes.push(
+      "The food realism requirements are mandatory. The design may change, but the food must remain realistic, natural and believable.",
+    );
+  } else {
+    partes.push(
+      "Change only the requested element and preserve the food realism. Do not alter the food texture, color, moisture, shape or natural appearance unless explicitly requested. Preserve the food with realistic texture, natural colors and believable appearance. Do not make the food more glossy, plastic, artificial, CGI-like or overprocessed.",
+    );
+  }
+  return `${promptFinal}\n\n${partes.join(" ")}`;
+}
+
+// Frase de comida SEMPRE presente (safe no-op para não-comida) nos prompts
+// de melhoria/nova-versão/edição — reforça realismo caso a arte-base tenha
+// comida, mesmo quando o texto do pedido não menciona (não conseguimos
+// analisar a imagem-base, então esta frase condicional é a rede de segurança).
+const FOOD_CONDITIONAL_HINT =
+  "If the artwork contains any food, drink or edible product, it must remain photorealistic and natural — real texture, natural colors, believable moisture — never plastic, glossy, waxy, CGI-like, oversaturated or AI-looking.";
 
 // A "IA de conversa" transforma o briefing coletado pelo agente
 // conversacional (src/lib/ai/agente-conversa.ts) num prompt visual
@@ -408,7 +499,7 @@ export async function montarPrompt(b: BriefingCompleto): Promise<PromptsGerados>
 // que deve aparecer na arte fica entre aspas, sempre no idioma original do
 // usuário (nunca traduzido) — só a INSTRUÇÃO de edição em si é em inglês.
 function fallbackAjusteCirurgico(pedidoUsuario: string): string {
-  return `Make a precise local edit only. Apply exactly this change: "${pedidoUsuario}". Any text that must appear in the image must stay exactly as written above, in its original language — do not translate, rewrite, or correct it. Preserve the original artwork exactly, including composition, product, background, lighting, color palette, existing text, price, phone number, address, typography, logo, logo colors, logo proportions, logo position and brand identity, unless explicitly requested otherwise. Do not redraw the artwork and do not change any element that was not explicitly requested.`;
+  return `Make a precise local edit only. Apply exactly this change: "${pedidoUsuario}". Any text that must appear in the image must stay exactly as written above, in its original language — do not translate, rewrite, or correct it. Preserve the original artwork exactly, including composition, product, background, lighting, color palette, existing text, price, phone number, address, typography, logo, logo colors, logo proportions, logo position and brand identity, unless explicitly requested otherwise. Preserve the original aspect ratio and output format of the attached image; do not change the composition format unless explicitly requested. Do not redraw the artwork and do not change any element that was not explicitly requested. ${FOOD_CONDITIONAL_HINT}`;
 }
 
 // Reinterpreta um pedido de ajuste em linguagem natural sobre uma arte já
@@ -445,7 +536,9 @@ Your task is to create a surgical edit prompt. Change only what the user explici
 
 Any text that must appear in the image must remain exactly in the original language and spelling the user provided, inside quotation marks (for example: add the text exactly as written: "BRASIL x NORUEGA"). Do not translate, rewrite, correct, summarize, or modify text that appears in the artwork, existing or new.
 
-Always preserve the original artwork exactly, including composition, background, lighting, colors, typography, product, logo, logo colors, logo proportions, logo position, brand identity, price, phone number, address, and all existing text, unless the user explicitly requested changing one of those elements.
+Always preserve the original artwork exactly, including composition, background, lighting, colors, typography, product, logo, logo colors, logo proportions, logo position, brand identity, price, phone number, address, and all existing text, unless the user explicitly requested changing one of those elements. Always preserve the original aspect ratio and output format of the artwork — never change the composition format unless the user explicitly requests a new format (e.g. "transform into feed", "make it a story").
+
+If the artwork contains any food, drink, meat or edible product, preserve its photorealistic appearance — real texture, natural colors, believable moisture. Never make the food look more glossy, plastic, artificial, CGI-like or overprocessed as a side effect of an unrelated edit.
 
 When adding a new element, specify exact position, scale, and visual priority using concrete words: small, discreet, secondary, aligned, below, above, left, right, centered, corner.
 
@@ -465,7 +558,8 @@ Return only the final edit prompt in English (with any visual text kept in its o
     return { prompt: fallback, usouFallback: true };
   }
   if (!texto) return { prompt: fallback, usouFallback: true };
-  return { prompt: texto, usouFallback: false };
+  const reforcado = reforcarComidaRealista(texto, { contexto: `${promptAnterior} ${pedidoUsuario}`, fluxo: "edicao" });
+  return { prompt: reforcado, usouFallback: false };
 }
 
 // Fluxo de edição direta (/editar): o lojista sobe um design PRONTO (feito
@@ -503,7 +597,9 @@ The edit must be surgical:
 - preserve the logo, logo colors, logo shape, logo proportions, logo position and logo legibility;
 - preserve typography, colors, lighting, background, style and brand identity, unless the user explicitly asked to change one of those.
 
-Do not redraw the whole artwork. Do not recreate the layout. Do not change the brand identity. Do not change the logo color as a side effect of background, contrast, light or palette adjustments.
+Do not redraw the whole artwork. Do not recreate the layout. Do not change the brand identity. Do not change the logo color as a side effect of background, contrast, light or palette adjustments. Preserve the original aspect ratio and output format of the artwork — never change the composition format unless the user explicitly requests a new format.
+
+If the artwork contains any food, drink, meat or edible product, preserve its photorealistic appearance — real texture, natural colors, believable moisture. Never make the food look more glossy, plastic, artificial, CGI-like or overprocessed as a side effect of an unrelated edit.
 
 When adding a new element, specify exact position, scale and visual priority using concrete words: small, discreet, secondary, aligned, below, above, left, right, centered, corner.
 
@@ -518,7 +614,8 @@ Return only the final edit prompt in English (with any visual text kept in its o
     return { prompt: fallback, usouFallback: true };
   }
   if (!texto) return { prompt: fallback, usouFallback: true };
-  return { prompt: texto, usouFallback: false };
+  const reforcado = reforcarComidaRealista(texto, { contexto: pedidoUsuario, fluxo: "edicao" });
+  return { prompt: reforcado, usouFallback: false };
 }
 
 // Fallback determinístico em português pro caminho gpt-image-2 (usado só
@@ -527,7 +624,7 @@ Return only the final edit prompt in English (with any visual text kept in its o
 // corretamente (testado ao vivo, sem os erros de digitação que o Flux
 // Kontext às vezes introduz em textos não relacionados ao pedido).
 function fallbackAjusteCirurgicoPortugues(pedidoUsuario: string): string {
-  return `Aplique somente esta alteração: ${pedidoUsuario}. Preserve exatamente todo o restante da arte original, incluindo composição geral, enquadramento, proporção da arte, produto, formato do produto, cor do produto, textura do produto, fundo, iluminação, sombras, reflexos, paleta de cores, estilo visual aprovado, tipografia, hierarquia visual, todos os textos existentes, preço, telefone/WhatsApp, endereço, CTA, nome da marca, logo, cores da logo, formato da logo, proporção da logo, posição da logo, nitidez da logo e identidade visual da marca, a menos que o pedido tenha citado explicitamente um desses elementos. Não recrie a arte inteira e não mude nenhum elemento que não tenha sido pedido.`;
+  return `Aplique somente esta alteração: ${pedidoUsuario}. Preserve exatamente todo o restante da arte original, incluindo composição geral, enquadramento, proporção da arte, produto, formato do produto, cor do produto, textura do produto, fundo, iluminação, sombras, reflexos, paleta de cores, estilo visual aprovado, tipografia, hierarquia visual, todos os textos existentes, preço, telefone/WhatsApp, endereço, CTA, nome da marca, logo, cores da logo, formato da logo, proporção da logo, posição da logo, nitidez da logo e identidade visual da marca, a menos que o pedido tenha citado explicitamente um desses elementos. Preserve o formato/proporção original da imagem (não mude para outro formato a menos que o usuário peça explicitamente). Não recrie a arte inteira e não mude nenhum elemento que não tenha sido pedido. ${FOOD_CONDITIONAL_HINT}`;
 }
 
 // Variante de montarPromptAjuste em PORTUGUÊS, para quando o provider de
@@ -616,6 +713,12 @@ Se o usuário pedir bandeiras, ícones ou selos, eles devem ser pequenos, propor
 Regra para ajustes de design (ex: "deixa mais clean", "mais premium", "mais elegante", "menos chamativo", "mais profissional"):
 Ajuste apenas os elementos necessários para alcançar esse refinamento, preservando a estrutura da arte. Não mude o conceito inteiro. Não troque a paleta inteira sem necessidade. Não apague textos, logo ou produto. Ajustes de estilo devem ser sutis e controlados: melhorar equilíbrio, reduzir exageros, refinar sombras, suavizar efeitos, melhorar contraste, limpar poluição visual, manter identidade visual. Não transforme um ajuste de estilo em uma nova criação.
 
+Regra de formato/proporção (obrigatória):
+Preserve o formato e a proporção (aspect ratio) da imagem original. Nunca mude o formato da arte por conta própria — só mude se o usuário pedir explicitamente (ex: "transforma em feed", "quero em story", "muda para quadrado"). Inclua no prompt final: "Preserve the original aspect ratio and output format of the attached image. Do not change the composition format unless the user explicitly requests a new format."
+
+Regra para comida (obrigatória quando houver alimento na arte):
+Se a arte contiver comida, bebida, carne, açougue, açaí, sobremesa ou qualquer alimento, preserve o realismo fotográfico do alimento. Não deixe a comida mais brilhante, plástica, artificial, com cara de CGI ou render 3D, mesmo que o ajuste peça "mais premium" ou "mais chamativo". A comida deve continuar com textura real, cores naturais e aparência crível.
+
 Formato ideal do prompt de ajuste:
 "Aplique somente esta alteração: [descrição específica do ajuste]. Preserve exatamente todo o restante da arte original, incluindo [lista dos elementos protegidos relevantes]. Não altere [elementos que costumam ser afetados indevidamente]."
 
@@ -643,7 +746,8 @@ Instruções finais:
     return { prompt: fallback, usouFallback: true };
   }
   if (!texto) return { prompt: fallback, usouFallback: true };
-  return { prompt: texto, usouFallback: false };
+  const reforcado = reforcarComidaRealista(texto, { contexto: `${promptAnterior} ${pedidoUsuario}`, fluxo: "edicao" });
+  return { prompt: reforcado, usouFallback: false };
 }
 
 // Variante de montarPromptEdicaoDireta em PORTUGUÊS, para o mesmo caso de
@@ -677,6 +781,10 @@ Se o pedido for adicionar um elemento (texto, bandeira, ícone, selo), defina po
 
 Se o pedido for de refinamento de estilo ("mais clean", "mais premium", "mais elegante"), ajuste só o necessário para esse refinamento — não troque o conceito, a paleta inteira, nem apague texto, logo ou produto.
 
+Regra de formato/proporção (obrigatória): preserve o formato e a proporção (aspect ratio) do design original; só mude se o usuário pedir explicitamente (ex: "transforma em feed", "quero em story"). Inclua no prompt final: "Preserve the original aspect ratio and output format of the attached image. Do not change the composition format unless the user explicitly requests a new format."
+
+Regra para comida (obrigatória se houver alimento): se o design tiver comida, carne, bebida ou qualquer alimento, preserve o realismo fotográfico — textura real, cores naturais, sem deixar mais brilhante, plástico, artificial ou com cara de IA/CGI, mesmo em pedidos de "mais premium"/"mais chamativo".
+
 Formato ideal: "Aplique somente esta alteração: [ajuste específico]. Preserve exatamente todo o restante do design original, incluindo [elementos protegidos relevantes]. Não altere [elementos que costumam ser afetados indevidamente]."
 
 Retorne apenas o prompt final de ajuste, sem aspas ao redor de tudo, sem explicações, sem comentários e sem mencionar modelo de IA.`,
@@ -690,7 +798,8 @@ Retorne apenas o prompt final de ajuste, sem aspas ao redor de tudo, sem explica
     return { prompt: fallback, usouFallback: true };
   }
   if (!texto) return { prompt: fallback, usouFallback: true };
-  return { prompt: texto, usouFallback: false };
+  const reforcado = reforcarComidaRealista(texto, { contexto: pedidoUsuario, fluxo: "edicao" });
+  return { prompt: reforcado, usouFallback: false };
 }
 
 export type TipoPedidoAjuste = "ajuste" | "nova-criacao" | "ambiguo";
@@ -907,10 +1016,10 @@ function descreverPedidoArteExistente(
 }
 
 const PROMPT_BASE_MELHORIA_RECOMPOSITIVA =
-  "Use the uploaded artwork as the main reference for content, product, brand and sales message. Create a clearly improved version of the same advertising campaign. Preserve all important commercial information exactly, including product names, prices, phone number, address, CTA, brand name and logo. Keep the same sales intent and main message, but do not copy the original layout rigidly. Improve the composition noticeably. You may reorganize the layout, hierarchy, spacing, background, product placement, price treatment, typography and visual balance as needed to make the artwork stronger. Preserve the campaign, not the exact structure. Keep the original format/aspect ratio unless the user explicitly asks to change it. The result must look noticeably better and more professionally designed, not just brighter or slightly polished. Do not invent new information, do not change prices, do not change the logo, and do not turn it into a completely different campaign.";
+  `Use the uploaded artwork as the main reference for content, product, brand and sales message. Create a clearly improved version of the same advertising campaign. Preserve all important commercial information exactly, including product names, prices, phone number, address, CTA, brand name and logo. Keep the same sales intent and main message, but do not copy the original layout rigidly. Improve the composition noticeably. You may reorganize the layout, hierarchy, spacing, background, product placement, price treatment, typography and visual balance as needed to make the artwork stronger. Preserve the campaign, not the exact structure. Preserve the original aspect ratio and output format of the attached image. Keep the same image format/proportion as the original uploaded design. Do not change the composition format unless the user explicitly requests a new format. The result must look noticeably better and more professionally designed, not just brighter or slightly polished. Do not invent new information, do not change prices, do not change the logo, and do not turn it into a completely different campaign. ${FOOD_CONDITIONAL_HINT}`;
 
 const PROMPT_BASE_NOVA_VERSAO =
-  "Use the uploaded artwork as a content and brand reference, not as a layout template. Create a completely new advertising design using the same commercial information, products, logo, prices, contact details and main offer. Do not copy the original layout. Create a substantially different composition. Preserve the information, not the structure. Reimagine the visual concept with a new hierarchy, new background, new product arrangement, new price treatment, new graphic language and a fresh advertising direction. Keep the original format/aspect ratio unless the user explicitly asks to change it. The new design must look clearly different from the original while preserving the same sales intent and all commercial information. Keep all product names, prices, phone number, address, CTA, logo and brand identity accurate. Do not invent new commercial information.";
+  `Use the uploaded artwork as a content and brand reference, not as a layout template. Create a completely new advertising design using the same commercial information, products, logo, prices, contact details and main offer. Do not copy the original layout. Create a substantially different composition. Preserve the information, not the structure. Reimagine the visual concept with a new hierarchy, new background, new product arrangement, new price treatment, new graphic language and a fresh advertising direction. Preserve the original aspect ratio and output format of the attached image. Keep the same image format/proportion as the original uploaded design. Do not change the composition format unless the user explicitly requests a new format. The new design must look clearly different from the original while preserving the same sales intent and all commercial information. Keep all product names, prices, phone number, address, CTA, logo and brand identity accurate. Do not invent new commercial information. ${FOOD_CONDITIONAL_HINT}`;
 
 function fallbackTransformarArteExistente(
   req: Pick<ArteExistenteRequest, "modoTransformacao" | "instrucaoUsuario">,
@@ -988,5 +1097,9 @@ export async function montarPromptMelhorarArteExistente(
     return { prompt: fallback, usouFallback: true };
   }
   if (!texto) return { prompt: fallback, usouFallback: true };
-  return { prompt: texto, usouFallback: false };
+  const reforcado = reforcarComidaRealista(texto, {
+    contexto: `${req.direcao ?? ""} ${req.instrucaoUsuario ?? ""}`,
+    fluxo: req.modoTransformacao === "melhoria_recompositiva" ? "melhoria" : "nova_versao",
+  });
+  return { prompt: reforcado, usouFallback: false };
 }

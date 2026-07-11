@@ -86,64 +86,71 @@ export default function ResultadoView({
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* Arte em destaque */}
-      <div className={`card overflow-hidden w-full ${ratioClass} bg-[var(--accent-soft)]`}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={arteAtual.imagem_gerada_url}
-          alt={nomeProjeto}
-          className="w-full h-full object-contain"
-        />
+    <div className="result-layout flex flex-col gap-5">
+      {/* Coluna esquerda: preview em destaque + miniaturas. No mobile isso
+          é só o topo de uma coluna única (result-layout não vira grid
+          abaixo de 1024px) — no desktop é a coluna maior à esquerda. */}
+      <div className="flex flex-col gap-3 min-w-0">
+        <div className={`card overflow-hidden w-full ${ratioClass} bg-[var(--accent-soft)] lg:max-h-[calc(100vh-140px)] mx-auto`}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={arteAtual.imagem_gerada_url}
+            alt={nomeProjeto}
+            className="w-full h-full object-contain"
+          />
+        </div>
+
+        {/* Miniaturas das variações */}
+        {artes.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {artes.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => setSelecionada(a.id)}
+                className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 ${
+                  a.id === selecionada ? "border-[var(--accent)]" : "border-transparent"
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={a.imagem_gerada_url} alt="" className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Miniaturas das variações */}
-      {artes.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {artes.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => setSelecionada(a.id)}
-              className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 ${
-                a.id === selecionada ? "border-[var(--accent)]" : "border-transparent"
-              }`}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={a.imagem_gerada_url} alt="" className="w-full h-full object-cover" />
-            </button>
-          ))}
+      {/* Coluna direita: ações principais + ajuste. */}
+      <div className="flex flex-col gap-5 min-w-0">
+        {/* Download */}
+        <button
+          onClick={() =>
+            baixarArte(arteAtual.imagem_gerada_url, `${nomeProjeto || "arte"}-${projectId.slice(0, 6)}.png`)
+          }
+          className="btn btn-primary btn-block"
+        >
+          ⬇ Baixar esta arte
+        </button>
+
+        {/* Nova variação a partir do mesmo briefing */}
+        <button
+          onClick={gerarNovaVariacao}
+          disabled={gerandoVariacao}
+          className="btn btn-outline btn-block"
+        >
+          {gerandoVariacao ? <GerandoMensagem mensagens={["Gerando nova variação…", "Explorando outro ângulo…"]} /> : "🔁 Gerar outra variação (1 crédito)"}
+        </button>
+        {erroVariacao && <p className="text-sm text-[var(--danger)]">{erroVariacao}</p>}
+
+        {/* Ajuste em linguagem natural — mini conversa: se o pedido for
+            ambíguo, o usuário consegue responder a pergunta de esclarecimento
+            em vez de ficar preso sem campo pra continuar. */}
+        <div className="card p-4">
+          <h3 className="font-semibold text-sm mb-1">Quer ajustar algo?</h3>
+          <p className="text-xs text-[var(--muted)] mb-3">
+            Escreva com suas palavras. Cada ajuste confirmado usa 1 crédito.
+          </p>
+          <AjusteConversa key={resetAjusteKey} onConfirmar={aplicarAjuste} sugestoes={sugestoes} />
         </div>
-      )}
-
-      {/* Download */}
-      <button
-        onClick={() =>
-          baixarArte(arteAtual.imagem_gerada_url, `${nomeProjeto || "arte"}-${projectId.slice(0, 6)}.png`)
-        }
-        className="btn btn-primary btn-block"
-      >
-        ⬇ Baixar esta arte
-      </button>
-
-      {/* Nova variação a partir do mesmo briefing */}
-      <button
-        onClick={gerarNovaVariacao}
-        disabled={gerandoVariacao}
-        className="btn btn-outline btn-block"
-      >
-        {gerandoVariacao ? <GerandoMensagem mensagens={["Gerando nova variação…", "Explorando outro ângulo…"]} /> : "🔁 Gerar outra variação (1 crédito)"}
-      </button>
-      {erroVariacao && <p className="text-sm text-[var(--danger)]">{erroVariacao}</p>}
-
-      {/* Ajuste em linguagem natural — mini conversa: se o pedido for
-          ambíguo, o usuário consegue responder a pergunta de esclarecimento
-          em vez de ficar preso sem campo pra continuar. */}
-      <div className="card p-4">
-        <h3 className="font-semibold text-sm mb-1">Quer ajustar algo?</h3>
-        <p className="text-xs text-[var(--muted)] mb-3">
-          Escreva com suas palavras. Cada ajuste confirmado usa 1 crédito.
-        </p>
-        <AjusteConversa key={resetAjusteKey} onConfirmar={aplicarAjuste} sugestoes={sugestoes} />
       </div>
     </div>
   );

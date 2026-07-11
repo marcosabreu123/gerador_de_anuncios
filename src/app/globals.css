@@ -99,12 +99,84 @@ body {
   }
 }
 
-/* Container mobile-first: coluna estreita centralizada */
+/* Container mobile-first: coluna estreita centralizada. Usado por telas
+   simples (dashboard, histórico, admin, login, editar, melhorar) — ganha
+   mais respiro em telas maiores, mas continua sendo UM container central,
+   não um grid. Os fluxos com layout de colunas de verdade (criação e
+   resultado) usam .creation-shell/.result-shell, abaixo. */
 .app-shell {
   width: 100%;
   max-width: 480px;
   margin-inline: auto;
   padding-inline: 20px;
+}
+@media (min-width: 768px) {
+  .app-shell {
+    max-width: 640px;
+  }
+}
+@media (min-width: 1024px) {
+  .app-shell {
+    max-width: 860px;
+    padding-inline: 32px;
+  }
+}
+@media (min-width: 1440px) {
+  .app-shell {
+    max-width: 1000px;
+  }
+}
+
+/* ---------- Layout desktop real: criação ---------- */
+/* Mobile: comportamento idêntico ao .app-shell (coluna única, sem grid). */
+.creation-shell {
+  width: 100%;
+  max-width: 480px;
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+@media (min-width: 1024px) {
+  .creation-shell {
+    max-width: 1180px;
+    padding-inline: 24px;
+  }
+  /* Sem align-items aqui de propósito: os itens do grid precisam esticar
+     (stretch, o padrão) pra a coluna central herdar a altura total — é
+     disso que ChatWizard depende pro scroll interno funcionar. */
+  .creation-layout {
+    display: grid;
+    grid-template-columns: 260px minmax(480px, 1fr);
+    gap: 24px;
+  }
+}
+@media (min-width: 1440px) {
+  .creation-shell {
+    max-width: 1320px;
+  }
+  .creation-layout {
+    grid-template-columns: 280px minmax(560px, 1fr);
+    gap: 32px;
+  }
+}
+
+/* ---------- Layout desktop real: resultado ---------- */
+.result-shell {
+  width: 100%;
+  max-width: 480px;
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+@media (min-width: 1024px) {
+  .result-shell {
+    max-width: 1100px;
+    padding-inline: 24px;
+  }
+  .result-layout {
+    display: grid;
+    grid-template-columns: minmax(420px, 640px) 360px;
+    gap: 32px;
+    align-items: start;
+  }
 }
 
 /* Foco visível consistente (acessibilidade) — nunca depende só de cor. */

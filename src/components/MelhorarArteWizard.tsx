@@ -222,27 +222,31 @@ export default function MelhorarArteWizard() {
         <div className="card p-4 flex flex-col gap-3">
           <h3 className="font-semibold text-sm">O que você quer fazer com essa arte?</h3>
 
-          <button
-            type="button"
-            onClick={() => escolherModo("melhoria_recompositiva")}
-            className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl border border-transparent hover:border-[var(--accent)] active:scale-[0.99] transition"
-          >
-            <p className="font-semibold text-sm">Melhorar esta arte</p>
-            <p className="text-xs text-[var(--muted)] mt-0.5">
-              Mesma campanha e informações, com uma composição visivelmente melhor.
-            </p>
-          </button>
+          {/* Coluna única no mobile, 2 colunas quando há espaço (desktop) —
+              só o agrupamento visual muda, nenhum handler foi alterado. */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => escolherModo("melhoria_recompositiva")}
+              className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl border border-transparent hover:border-[var(--accent)] active:scale-[0.99] transition"
+            >
+              <p className="font-semibold text-sm">Melhorar esta arte</p>
+              <p className="text-xs text-[var(--muted)] mt-0.5">
+                Mesma campanha e informações, com uma composição visivelmente melhor.
+              </p>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => escolherModo("nova_versao_criativa")}
-            className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl border border-transparent hover:border-[var(--accent)] active:scale-[0.99] transition"
-          >
-            <p className="font-semibold text-sm">Criar uma nova versão</p>
-            <p className="text-xs text-[var(--muted)] mt-0.5">
-              Usar as mesmas informações, mas criar um novo design.
-            </p>
-          </button>
+            <button
+              type="button"
+              onClick={() => escolherModo("nova_versao_criativa")}
+              className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl border border-transparent hover:border-[var(--accent)] active:scale-[0.99] transition"
+            >
+              <p className="font-semibold text-sm">Criar uma nova versão</p>
+              <p className="text-xs text-[var(--muted)] mt-0.5">
+                Usar as mesmas informações, mas criar um novo design.
+              </p>
+            </button>
+          </div>
         </div>
       )}
 
@@ -251,7 +255,7 @@ export default function MelhorarArteWizard() {
           <h3 className="font-semibold text-sm">
             {modo === "melhoria_recompositiva" ? "Quer melhorar em qual direção?" : "Qual direção você quer para essa nova versão?"}
           </h3>
-          <div className="flex flex-col gap-2 mt-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3 items-start">
             {(modo === "melhoria_recompositiva" ? DIRECOES_MELHORAR : DIRECOES_NOVA_VERSAO).map((opcao) =>
               opcao.descricao ? (
                 <button

@@ -37,7 +37,7 @@ export default async function ResultadoPage({
   return (
     <>
       <AppHeader creditos={perfil.creditos_disponiveis} isAdmin={perfil.is_admin} />
-      <main className="app-shell flex-1 py-6">
+      <main className="result-shell flex-1 py-6">
         <div className="flex items-center justify-between mb-4">
           <Link href="/dashboard" className="text-sm text-[var(--muted)]">
             ← Voltar
