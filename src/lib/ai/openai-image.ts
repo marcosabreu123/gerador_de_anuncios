@@ -1,4 +1,5 @@
 import OpenAI, { toFile } from "openai";
+import sharp from "sharp";
 import { IMAGE_MODEL } from "./models";
 
 // Imagem gerada pela OpenAI (bytes inline em base64). Carrega o prompt que a
@@ -41,10 +42,24 @@ function getClient(): OpenAI {
   return new OpenAI({ apiKey, timeout: 180_000 });
 }
 
-function extensaoDoMime(mime: string): string {
-  if (mime.includes("png")) return "png";
-  if (mime.includes("webp")) return "webp";
-  return "jpg";
+// Limite de lado da imagem de entrada — fotos de celular (12MP+) não trazem
+// nenhum ganho de qualidade pro modelo e só engordam o payload/tempo de upload.
+const MAX_LADO_ENTRADA = 2048;
+
+// Reconverte qualquer imagem anexada (produto/logo/referência) para um PNG
+// RGB limpo antes de mandar pra OpenAI. Existe porque fotos de celular às
+// vezes chegam em variações que o endpoint de edição rejeita direto com
+// "Invalid image file or mode" (ex.: JPEG em CMYK, câmeras/apps que geram
+// perfis de cor incomuns) — decodificar e reexportar via sharp normaliza
+// tudo isso pro mesmo formato, além de já corrigir a rotação pelo EXIF antes
+// de descartar os metadados.
+async function normalizarImagemEntrada(base64: string): Promise<Buffer> {
+  const bytesOriginais = Buffer.from(base64, "base64");
+  return sharp(bytesOriginais)
+    .rotate()
+    .resize({ width: MAX_LADO_ENTRADA, height: MAX_LADO_ENTRADA, fit: "inside", withoutEnlargement: true })
+    .png()
+    .toBuffer();
 }
 
 // A API de imagem da OpenAI não tem parte estruturada de texto por imagem
@@ -78,11 +93,10 @@ async function gerarUma(
           model: modelo,
           prompt: promptFinal,
           image: await Promise.all(
-            imagens.map((img, i) =>
-              toFile(Buffer.from(img.base64, "base64"), `${img.tipo}-${i}.${extensaoDoMime(img.mimeType)}`, {
-                type: img.mimeType,
-              }),
-            ),
+            imagens.map(async (img, i) => {
+              const bytesNormalizados = await normalizarImagemEntrada(img.base64);
+              return toFile(bytesNormalizados, `${img.tipo}-${i}.png`, { type: "image/png" });
+            }),
           ),
           size: tamanho,
           quality: qualidade,
