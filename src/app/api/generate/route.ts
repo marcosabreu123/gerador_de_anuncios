@@ -17,7 +17,11 @@ import {
 } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Com imagem anexada (produto/logo/referência), gerarVariacoes usa
+// images.edit em vez de images.generate — mesmo caminho lento documentado em
+// /api/adjust e /api/edit-design (~79-93s medido ao vivo). 120s dá a mesma
+// folga usada lá; 60s cortava a function antes da OpenAI responder.
+export const maxDuration = 120;
 
 interface Body {
   imagens?: ImagemAnexo[]; // fotos de produto/referência/logotipo anexadas na conversa

@@ -16,7 +16,12 @@ import type {
 } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// gerarVariacoes sempre recebe ao menos 1 imagem aqui (arte original no
+// fluxo "arte existente", ou anexos do briefing no fluxo normal), então
+// sempre usa o caminho lento images.edit (~79-93s medido ao vivo, ver
+// /api/adjust e /api/edit-design). 120s evita cortar a function antes da
+// OpenAI responder.
+export const maxDuration = 120;
 
 // Gera mais uma variação do MESMO projeto/briefing (não um ajuste pontual):
 // reaproveita o briefing e as imagens anexadas originalmente, monta um novo
