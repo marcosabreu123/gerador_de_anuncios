@@ -56,12 +56,37 @@ const DIRECOES_MELHORAR: OpcaoDirecao[] = [
   { label: "Deixar a IA decidir", valor: "ia_decide" },
 ];
 
+// Mesmo conjunto de direções do modo "Melhorar" (+ Personalizado) — mantém a
+// interface consistente entre as duas telas. O que muda de verdade é o
+// comportamento interno (ver DESCRICAO_DIRECAO_NOVA_VERSAO e
+// SYSTEM_NOVA_VERSAO_CRIATIVA em prompt-builder.ts): aqui cada direção pede
+// uma campanha nova, nunca uma evolução da composição existente.
 const DIRECOES_NOVA_VERSAO: OpcaoDirecao[] = [
-  { label: "Mais premium", valor: "premium" },
-  { label: "Mais clean", valor: "clean" },
-  { label: "Mais chamativa", valor: "chamativa" },
-  { label: "Mais moderna", valor: "moderna" },
-  { label: "Mais divertida", valor: "divertida" },
+  {
+    label: "Mais profissional",
+    valor: "profissional",
+    descricao: "Nova campanha com melhor organização, melhor hierarquia e acabamento profissional. Não copia a composição atual — cria um layout completamente novo.",
+  },
+  {
+    label: "Mais premium",
+    valor: "premium",
+    descricao: "Campanha totalmente nova com aparência sofisticada. Nova direção de arte, nova composição, novo layout — visual digno de grandes marcas.",
+  },
+  {
+    label: "Mais clean",
+    valor: "clean",
+    descricao: "Campanha totalmente nova com poucos elementos e muito espaço negativo. Layout completamente diferente, com grande foco no produto.",
+  },
+  {
+    label: "Mais chamativo",
+    valor: "chamativa",
+    descricao: "Campanha totalmente nova muito mais voltada para conversão: maior impacto, mais força comercial e maior destaque para preço e oferta.",
+  },
+  {
+    label: "Menos cara de IA",
+    valor: "menos_ia",
+    descricao: "Nova campanha com direção extremamente natural — sem brilhos exagerados, sem efeitos artificiais e sem aparência genérica de IA. A composição também é nova.",
+  },
   { label: "Deixar a IA decidir", valor: "ia_decide" },
   { label: "Personalizado", valor: "personalizado" },
 ];

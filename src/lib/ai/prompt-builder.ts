@@ -1034,16 +1034,41 @@ const DESCRICAO_DIRECAO: Record<Exclude<DirecaoTransformacao, "personalizado">, 
   ia_decide: "deixar a IA decidir a melhor direção",
 };
 
+// Mesmas chaves de direção do modo "melhorar" (ver DESCRICAO_DIRECAO acima),
+// mas com a linguagem virada pra "campanha nova" — usada só quando
+// modoTransformacao é nova_versao_criativa (ver descreverPedidoArteExistente
+// logo abaixo). Nunca reutilizar DESCRICAO_DIRECAO aqui: aquela fala em
+// "melhorar"/"reduzir"/"elevar" o que já existe, e é exatamente essa
+// linguagem que fazia o modelo tratar "nova versão" como uma evolução da
+// mesma composição em vez de uma campanha nova.
+const DESCRICAO_DIRECAO_NOVA_VERSAO: Record<Exclude<DirecaoTransformacao, "personalizado">, string> = {
+  profissional:
+    "nova campanha com melhor organização, melhor hierarquia e acabamento profissional — não copiar a composição atual, criar um layout completamente novo",
+  clean:
+    "campanha totalmente nova com poucos elementos, muito espaço negativo, layout completamente diferente e grande foco no produto",
+  premium:
+    "campanha totalmente nova com aparência sofisticada: nova direção de arte, nova composição, novo layout, visual digno de grandes marcas",
+  chamativa:
+    "campanha totalmente nova muito mais voltada para conversão: maior impacto, mais força comercial, maior destaque para preço e oferta — nunca reutilizar a composição anterior",
+  moderna: "campanha totalmente nova com linguagem visual contemporânea — layout, grid e composição inteiramente novos",
+  divertida: "campanha totalmente nova com tom descontraído e energético — layout, grid e composição inteiramente novos",
+  menos_ia:
+    "nova campanha com direção extremamente natural, sem brilhos exagerados, sem efeitos artificiais e sem aparência genérica de IA — a composição também deve ser nova",
+  ia_decide: "a IA escolhe automaticamente uma direção criativa completamente diferente da arte original",
+};
+
 function descreverPedidoArteExistente(
   req: Pick<ArteExistenteRequest, "modoTransformacao" | "direcao" | "instrucaoUsuario">,
 ): string {
+  const ehNovaVersao = req.modoTransformacao === "nova_versao_criativa";
   const linhas: string[] = [
-    req.modoTransformacao === "melhoria_recompositiva"
-      ? "O lojista quer MELHORAR a arte existente: mesma campanha, mesmas informações, mas uma composição visivelmente melhor — pode reorganizar layout, hierarquia e distribuição dos elementos, não é só clarear ou polir a mesma peça."
-      : "O lojista quer CRIAR UMA NOVA VERSÃO da arte existente: mesmas informações, mas um design visivelmente diferente.",
+    ehNovaVersao
+      ? "O lojista quer CRIAR UMA NOVA VERSÃO da arte existente — isso NÃO é uma evolução da mesma peça (isso é o modo \"melhorar\", que segue outro fluxo). A arte enviada serve só como fonte de produto, preço, promoção, logo, telefone, endereço, CTA e identidade da campanha. A composição, o grid, a hierarquia e a direção de arte devem ser recriados do zero, como se outro diretor de arte tivesse recebido o mesmo briefing sem nunca ver a arte original."
+      : "O lojista quer MELHORAR a arte existente: mesma campanha, mesmas informações, mas uma composição visivelmente melhor — pode reorganizar layout, hierarquia e distribuição dos elementos, não é só clarear ou polir a mesma peça.",
   ];
   if (req.direcao && req.direcao !== "personalizado") {
-    linhas.push(`Direção desejada: ${DESCRICAO_DIRECAO[req.direcao]}.`);
+    const descricoes = ehNovaVersao ? DESCRICAO_DIRECAO_NOVA_VERSAO : DESCRICAO_DIRECAO;
+    linhas.push(`Direção desejada: ${descricoes[req.direcao]}.`);
   }
   if (req.instrucaoUsuario?.trim()) {
     linhas.push(`Instrução específica do lojista: ${req.instrucaoUsuario.trim()}`);
@@ -1055,7 +1080,7 @@ const PROMPT_BASE_MELHORIA_RECOMPOSITIVA =
   `Use the uploaded artwork as the main reference for content, product, brand and sales message. Create a clearly improved version of the same advertising campaign. Preserve all important commercial information exactly, including product names, prices, phone number, address, CTA, brand name and logo. Keep the same sales intent and main message, but do not copy the original layout rigidly. Improve the composition noticeably. You may reorganize the layout, hierarchy, spacing, background, product placement, price treatment, typography and visual balance as needed to make the artwork stronger. Preserve the campaign, not the exact structure. Preserve the original aspect ratio and output format of the attached image. Keep the same image format/proportion as the original uploaded design. Do not change the composition format unless the user explicitly requests a new format. The result must look noticeably better and more professionally designed, not just brighter or slightly polished. Do not invent new information, do not change prices, do not change the logo, and do not turn it into a completely different campaign. ${FOOD_CONDITIONAL_HINT}`;
 
 const PROMPT_BASE_NOVA_VERSAO =
-  `Use the uploaded artwork as a content and brand reference, not as a layout template. Create a completely new advertising design using the same commercial information, products, logo, prices, contact details and main offer. Do not copy the original layout. Create a substantially different composition. Preserve the information, not the structure. Reimagine the visual concept with a new hierarchy, new background, new product arrangement, new price treatment, new graphic language and a fresh advertising direction. Preserve the original aspect ratio and output format of the attached image. Keep the same image format/proportion as the original uploaded design. Do not change the composition format unless the user explicitly requests a new format. The new design must look clearly different from the original while preserving the same sales intent and all commercial information. Keep all product names, prices, phone number, address, CTA, logo and brand identity accurate. Do not invent new commercial information. ${FOOD_CONDITIONAL_HINT}`;
+  `Use the uploaded artwork only as a source of campaign information, not as a layout or composition reference. Preserve only the product, price, promotion/offer, logo, phone number, address, CTA and brand identity of the campaign. Every other visual aspect must be reinvented — this is not a refinement of the existing design, it is a brand new campaign. Creating a genuinely new visual solution is mandatory. Significantly change the composition, grid, framing, hierarchy, product position, text position, price position, the relationship between image and typography, background, art direction and graphic language. The new artwork must look like it was created by a different art director who received the same briefing but never saw the original artwork. Someone comparing both artworks side by side must immediately recognize them as different campaigns for the same product. Never just rearrange small elements. Never just swap shadows, colors or fonts while keeping the same composition. Create a new campaign using exactly the same information. Preserve the original aspect ratio and output format of the attached image. Keep the same image format/proportion as the original uploaded design. Do not change the composition format unless the user explicitly requests a new format. Keep all product names, prices, phone number, address, CTA, logo and brand identity accurate. Do not invent new commercial information. ${FOOD_CONDITIONAL_HINT}`;
 
 function fallbackTransformarArteExistente(
   req: Pick<ArteExistenteRequest, "modoTransformacao" | "instrucaoUsuario">,
@@ -1086,19 +1111,23 @@ Antes de finalizar, confira este checklist (corrija o prompt antes de responder 
 
 A saída deve ser apenas o prompt final em INGLÊS (o modelo de imagem segue instrução de direção de arte com mais consistência em inglês), sem explicações, sem comentários e sem aspas ao redor de tudo.`;
 
-const SYSTEM_NOVA_VERSAO_CRIATIVA = `Você escreve prompts para o GPT Image criar uma NOVA versão de uma arte publicitária existente, usando a arte enviada só como referência de conteúdo e marca. Grau de liberdade criativa: ALTO.
+const SYSTEM_NOVA_VERSAO_CRIATIVA = `Você escreve prompts para o GPT Image criar uma campanha TOTALMENTE NOVA a partir de uma arte publicitária existente, usando a arte enviada apenas como fonte de informações da campanha — nunca como referência de composição. Grau de liberdade criativa: MÁXIMO.
 
-Preserve apenas: produtos anunciados, nomes dos produtos, preços, volumes, marca, logo, telefone, endereço, CTA, mensagem comercial principal e informações comerciais importantes.
+Este modo é fundamentalmente diferente do modo "melhorar" (que evolui a mesma composição, mantendo layout e organização geral). Aqui, a arte enviada não deve ser utilizada como referência de composição. Ela deve servir apenas para preservar: produto, informações, preços, promoção/oferta, CTA, telefone, endereço, logo e identidade da campanha. Todo o restante deve ser reinventado.
 
-NÃO preserve obrigatoriamente: layout original, estrutura dos blocos, posição dos produtos, fundo, estilo dos cards, posição da logo, composição, hierarquia visual, tratamento dos preços ou linguagem gráfica.
+É obrigatório criar uma nova solução visual. Altere significativamente: composição, grid, enquadramento, hierarquia, posição do produto, posição dos textos, posição do preço, relação entre imagem e tipografia, fundo, direção de arte e linguagem gráfica.
 
-Regra obrigatória: o prompt final precisa deixar EXPLÍCITO que o modelo não deve copiar o layout original. Inclua sempre, adaptado ao contexto, estas 5 frases: "Do not copy the original layout.", "Use the uploaded artwork only as a content and brand reference, not as a layout template.", "Create a substantially different composition.", "Preserve the information, not the structure.", "The new design must look clearly different from the original."
+A nova arte deve parecer criada por outro diretor de arte, que recebeu exatamente o mesmo briefing mas nunca viu a arte original. Quem comparar as duas artes lado a lado deve perceber imediatamente que são campanhas diferentes para o mesmo produto.
+
+Nunca apenas reorganize pequenos elementos. Nunca apenas troque sombras, cores ou fontes mantendo a mesma composição — isso é o comportamento do modo "melhorar", NÃO deste modo. Se o resultado ficar parecido com uma versão apenas polida da arte original, você falhou.
+
+Regra obrigatória: o prompt final precisa deixar EXPLÍCITO que o modelo não deve usar a arte original como referência de composição. Inclua sempre, adaptado ao contexto, estas frases: "Use the uploaded artwork only as a source of campaign information, not as a layout or composition reference.", "Every other visual aspect must be reinvented — this is not a refinement of the existing design.", "Significantly change the composition, grid, framing, hierarchy, product position, text position, price position, background, art direction and graphic language.", "The new artwork must look like it was created by a different art director for the same product.", "Never just rearrange small elements or swap shadows, colors or fonts alone."
 
 Prompt-base (adapte ao pedido, não copie literalmente): "${PROMPT_BASE_NOVA_VERSAO}"
 
-Se o lojista pedir uma direção específica (mais premium, mais clean, mais chamativa, mais moderna, mais divertida, ou deixar a IA decidir), incorpore isso na nova direção criativa, sempre com grau de liberdade ALTO — o resultado precisa parecer visivelmente diferente do original.
+Se o lojista pedir uma direção específica (mais profissional, mais premium, mais clean, mais chamativa, menos cara de IA, ou deixar a IA decidir), incorpore isso na nova direção criativa — a direção pedida nunca reduz a exigência de recriar a composição inteira do zero.
 
-Antes de finalizar, confira este checklist (corrija o prompt antes de responder se qualquer resposta for "não"): o prompt proíbe copiar o layout? Pede composição substancialmente diferente? Deixa claro que preserva informação, não estrutura? Evita repetir a posição dos elementos originais?
+Antes de finalizar, confira este checklist (corrija o prompt antes de responder se qualquer resposta for "não"): o prompt proíbe usar a arte original como referência de composição? Exige mudança significativa de grid/hierarquia/posições? Deixa claro que é uma campanha nova, não uma evolução da mesma peça? Evita qualquer linguagem de "manter o layout", "preservar a organização" ou "composição visivelmente melhor" (isso é do modo melhorar, não deste)?
 
 A saída deve ser apenas o prompt final em INGLÊS, sem explicações, sem comentários e sem aspas ao redor de tudo.`;
 
