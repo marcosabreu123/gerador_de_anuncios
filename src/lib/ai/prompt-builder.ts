@@ -221,6 +221,77 @@ export function reforcarComidaRealista(
 const FOOD_CONDITIONAL_HINT =
   "If the artwork contains any food, drink or edible product, it must remain photorealistic and natural — real texture, natural colors, believable moisture — never plastic, glossy, waxy, CGI-like, oversaturated or AI-looking.";
 
+// ==== Padrão de acabamento profissional (regra GLOBAL, sempre ativa) ====
+// Vale em TODOS os fluxos de imagem. Existe porque "sem cara de IA" estava só
+// pedido dentro do SYSTEM (ou seja, dependia do modelo de texto lembrar de
+// escrever isso no prompt final) — aqui é DETERMINÍSTICO, concatenado ao
+// prompt final igual ao modo comida realista, sempre em inglês (idioma do
+// modelo de imagem).
+//
+// Traduz "feito no CorelDRAW/Photoshop" em PROPRIEDADES OBSERVÁVEIS: dizer o
+// nome do software não significa nada pro modelo de imagem — o que ele
+// entende é alinhamento em grid, borda nítida, preenchimento chapado,
+// entrelinha consistente e a lista explícita de artefatos a evitar.
+const DESIGNER_GRADE_REQUIREMENTS =
+  "PROFESSIONAL DESIGN EXECUTION (mandatory): The final image must look like a real advertising piece built by a human graphic designer in professional design software (Adobe Photoshop / CorelDRAW), never like an AI-generated picture. Layout discipline: every element aligned to a consistent invisible grid, deliberate and even margins, consistent padding inside boxes and badges, true horizontal and vertical alignment, nothing tilted, drifting or optically off-balance. Graphic elements (price badges, boxes, bars, seals, dividers, icons) must be clean and flat with crisp sharp edges and solid evenly filled colors — no fake 3D bevel, no plastic gloss, no heavy blurred drop shadows, no glow. Typography: real typographic hierarchy, consistent baselines, correct letter spacing and line spacing, complete and correctly spelled words, sharp and perfectly legible edges — never warped, melted, stretched, duplicated, cut off or broken across lines. Color: a controlled and limited palette applied consistently, flat clean fills, smooth transitions without banding or muddy areas. Compositing: the product must be cut out with a clean natural edge and integrated with a believable contact shadow and matching light direction — never looking pasted on top of the background. Strictly avoid every typical AI artifact: garbled or nonsense text, invented letterforms, misspelled words, deformed or reinvented logos, duplicated or extra objects, impossible reflections, inconsistent light directions, plastic or waxy sheen, over-smoothed surfaces, random floating artifacts, watermark-like marks, oversaturated artificial glow, dreamlike haze, unnecessary bokeh and mushy symmetric filler detail. The result must hold up when placed side by side with a real agency-made advertising piece. IMPORTANT SCOPE: this design discipline applies to the GRAPHIC layer (layout, typography, shapes, finishing). Photographic elements — the product itself, food, people — must stay photorealistic; never turn the product into a flat illustration, cartoon or vector drawing.";
+
+// Versão leve para fluxos que EDITAM uma arte pronta (ajuste cirúrgico,
+// edição direta). O bloco completo acima não serve aqui: ele pede disciplina
+// de composição na peça inteira, o que empurraria o modelo a redesenhar tudo
+// — exatamente o que o ajuste cirúrgico nunca pode fazer. Este reforça o
+// mesmo padrão só para o que for adicionado/alterado, e protege o resto.
+const DESIGNER_GRADE_EDIT_HINT =
+  "Keep professional design execution: any element you add or change must match the existing piece in alignment, spacing, edge sharpness and typographic quality — clean crisp edges, solid even fills, complete correctly spelled words, consistent baselines. Do not introduce AI artifacts: no garbled or warped text, no deformed logo, no duplicated objects, no plastic sheen, no artificial glow, no random floating elements. Do not degrade the sharpness, legibility or alignment of existing text, logo or graphic elements that were not part of the request.";
+
+// Aplicado ao prompt final de fluxos que COMPÕEM uma peça (criação,
+// melhoria, nova versão). Idempotente. Sempre chamado ANTES do bloco de
+// comida realista, pra que o de comida continue sendo o último (posição mais
+// forte) — realismo de alimento vence acabamento gráfico em caso de conflito.
+export function aplicarPadraoDesigner(prompt: string): string {
+  if (prompt.includes("PROFESSIONAL DESIGN EXECUTION")) return prompt;
+  return `${prompt}\n\n${DESIGNER_GRADE_REQUIREMENTS}`;
+}
+
+// ==== Modo overlay: a imagem é uma "chapa limpa", sem texto ====
+// Quando o texto é composto pelo app como vetor real (ver src/lib/overlay/),
+// o modelo de imagem NÃO pode escrever nada — qualquer letra que ele desenhe
+// vai brigar visualmente com a tipografia de verdade sobreposta depois. Além
+// de proibir texto, reserva a área inferior da peça: sem isso o modelo põe
+// detalhe importante justamente onde o texto vai entrar.
+const OVERLAY_CLEAN_PLATE_REQUIREMENTS =
+  "CLEAN PLATE — NO TEXT (mandatory, overrides any other instruction about text): Render absolutely no text, no letters, no numbers, no words, no logos, no watermarks, no price tags, no written badges, no signage and no captions anywhere in this image. This artwork is a background plate: all typography is composed on top of it afterwards by the application. Place the product in the upper portion of the frame as the hero. Keep the lower 40% of the image visually calm and uncluttered — a simple, low-detail, smoothly lit area (background, surface, gradient or soft shadow) with no important product detail, no busy pattern and no small scattered objects, so that text placed there stays fully legible. Do not draw empty frames, boxes, banners or placeholder shapes where text would go: leave that area as clean finished composition.";
+
+// Idempotente, mesmo padrão dos demais blocos determinísticos.
+export function aplicarChapaLimpaOverlay(prompt: string): string {
+  if (prompt.includes("CLEAN PLATE — NO TEXT")) return prompt;
+  return `${prompt}\n\n${OVERLAY_CLEAN_PLATE_REQUIREMENTS}`;
+}
+
+// Overlay é opt-in explícito: briefing sem o campo (projetos criados antes
+// do overlay existir) mantém o comportamento antigo de texto pela IA.
+function usaOverlay(b: BriefingCompleto): boolean {
+  return b.modoTexto === "overlay";
+}
+
+// Ponto ÚNICO que define a ordem dos blocos determinísticos no prompt de
+// criação. A ordem importa: acabamento profissional primeiro, chapa limpa
+// (quando overlay) em seguida, e comida realista sempre por último — última
+// posição é a mais forte, e realismo de alimento precisa vencer qualquer
+// instrução de estilo (ver FOOD_REALISM_REQUIREMENTS).
+function finalizarPromptCriacao(prompt: string, b: BriefingCompleto): string {
+  const comDesign = aplicarPadraoDesigner(prompt);
+  const comChapa = usaOverlay(b) ? aplicarChapaLimpaOverlay(comDesign) : comDesign;
+  return aplicarComidaRealista(comChapa, b);
+}
+
+// Aplicado ao prompt final dos fluxos de EDIÇÃO de arte pronta. Idempotente.
+export function reforcarPadraoDesignerEdicao(prompt: string): string {
+  if (prompt.includes("PROFESSIONAL DESIGN EXECUTION") || prompt.includes("Keep professional design execution")) {
+    return prompt;
+  }
+  return `${prompt}\n\n${DESIGNER_GRADE_EDIT_HINT}`;
+}
+
 // A "IA de conversa" transforma o briefing coletado pelo agente
 // conversacional (src/lib/ai/agente-conversa.ts) num prompt visual
 // estruturado em português, pronto para o Gemini. O usuário NUNCA escreve
@@ -314,6 +385,9 @@ Quando houver foto de produto anexada, inclua também estas restrições: sem ap
 
 ## Uma única direção criativa, bem equilibrada
 Gere UMA peça só, mas pensada com cuidado: equilibre sofisticação editorial (composição elegante, espaço negativo, tratamento conceitual) com clareza comercial (produto e oferta legíveis rapidamente, preço bem visível). Não é pra escolher um extremo — é pra acertar o meio-termo profissional que vende sem parecer panfleto.
+
+## Acabamento técnico é garantido pelo sistema (não gaste o prompt com isso)
+O sistema SEMPRE anexa automaticamente ao seu prompt final um bloco técnico de acabamento profissional (alinhamento em grid, margens consistentes, bordas nítidas, preenchimento chapado, tipografia com entrelinha correta, recorte limpo do produto e a lista completa de artefatos de IA a evitar). Você não precisa reescrever essas regras técnicas — elas chegam ao modelo de imagem de qualquer forma. Use o seu espaço para o que só você pode definir: conceito visual, atmosfera, composição, luz, paleta, hierarquia e a ideia criativa da peça.
 
 ## Formato de saída — APENAS JSON, sem markdown, sem texto fora do JSON:
 {"variacoes": ["prompt completo da peça final, em um parágrafo corrido, sem títulos, sem aspas internas, sem explicações"]}`;
@@ -417,6 +491,14 @@ function briefingParaTexto(b: BriefingCompleto): string {
   }
 
   const c = b.conteudoAnuncio;
+  if (c && usaOverlay(b)) {
+    // No modo overlay o texto abaixo é só CONTEXTO (pra você entender a
+    // campanha e reservar espaço) — ele será impresso pelo app depois, como
+    // tipografia vetorial. A imagem tem que sair sem nenhuma letra.
+    linhas.push(
+      "ATENÇÃO — modo overlay ativado: a peça NÃO pode conter nenhum texto, letra, número, logo ou selo escrito. A tipografia é composta pelo aplicativo depois, por cima da imagem. O conteúdo textual abaixo serve apenas como contexto da campanha e para você reservar uma área inferior limpa e sem detalhe importante onde o texto será colocado.",
+    );
+  }
   if (c) {
     linhas.push("Conteúdo textual do anúncio (organize por esta hierarquia, do mais pro menos importante):");
     if (c.headline) linhas.push(`- Headline (principal): ${c.headline}`);
@@ -483,7 +565,7 @@ export function montarPromptFallback(b: BriefingCompleto): string {
     partes.push(`Tom da comunicação: ${OBJETIVOS_MARKETING_HINT[b.objetivoMarketing]}.`);
   }
   partes.push(`Composição pronta para ${fmt.descricao}, fugindo de layout de template óbvio, com no máximo 3 blocos de texto principais, sem estética de panfleto barato, sem fundo vermelho/laranja saturado genérico, sem amarelo neon e sem excesso de texto.`);
-  return aplicarComidaRealista(partes.join(" "), b);
+  return finalizarPromptCriacao(partes.join(" "), b);
 }
 
 function montarPromptsFallback(b: BriefingCompleto): string[] {
@@ -522,7 +604,10 @@ export async function montarPrompt(b: BriefingCompleto): Promise<PromptsGerados>
       ? j.variacoes.filter((p: unknown): p is string => typeof p === "string" && p.trim().length > 0)
       : [];
     if (prompts.length === 0) return { prompts: montarPromptsFallback(b), usouFallback: true };
-    return { prompts: prompts.map((p: string) => aplicarComidaRealista(p, b)), usouFallback: false };
+    return {
+      prompts: prompts.map((p: string) => finalizarPromptCriacao(p, b)),
+      usouFallback: false,
+    };
   } catch (e) {
     console.error("[prompt-builder] OpenAI falhou, usando fallback:", e);
     return { prompts: montarPromptsFallback(b), usouFallback: true };
@@ -535,7 +620,7 @@ export async function montarPrompt(b: BriefingCompleto): Promise<PromptsGerados>
 // que deve aparecer na arte fica entre aspas, sempre no idioma original do
 // usuário (nunca traduzido) — só a INSTRUÇÃO de edição em si é em inglês.
 function fallbackAjusteCirurgico(pedidoUsuario: string): string {
-  return `Make a precise local edit only. Apply exactly this change: "${pedidoUsuario}". Any text that must appear in the image must stay exactly as written above, in its original language — do not translate, rewrite, or correct it. Preserve the original artwork exactly, including composition, product, background, lighting, color palette, existing text, price, phone number, address, typography, logo, logo colors, logo proportions, logo position and brand identity, unless explicitly requested otherwise. Preserve the original aspect ratio and output format of the attached image; do not change the composition format unless explicitly requested. Do not redraw the artwork and do not change any element that was not explicitly requested. ${FOOD_CONDITIONAL_HINT}`;
+  return `Make a precise local edit only. Apply exactly this change: "${pedidoUsuario}". Any text that must appear in the image must stay exactly as written above, in its original language — do not translate, rewrite, or correct it. Preserve the original artwork exactly, including composition, product, background, lighting, color palette, existing text, price, phone number, address, typography, logo, logo colors, logo proportions, logo position and brand identity, unless explicitly requested otherwise. Preserve the original aspect ratio and output format of the attached image; do not change the composition format unless explicitly requested. Do not redraw the artwork and do not change any element that was not explicitly requested. ${FOOD_CONDITIONAL_HINT} ${DESIGNER_GRADE_EDIT_HINT}`;
 }
 
 // Reinterpreta um pedido de ajuste em linguagem natural sobre uma arte já
@@ -594,7 +679,10 @@ Return only the final edit prompt in English (with any visual text kept in its o
     return { prompt: fallback, usouFallback: true };
   }
   if (!texto) return { prompt: fallback, usouFallback: true };
-  const reforcado = reforcarComidaRealista(texto, { contexto: `${promptAnterior} ${pedidoUsuario}`, fluxo: "edicao" });
+  const reforcado = reforcarComidaRealista(reforcarPadraoDesignerEdicao(texto), {
+    contexto: `${promptAnterior} ${pedidoUsuario}`,
+    fluxo: "edicao",
+  });
   return { prompt: reforcado, usouFallback: false };
 }
 
@@ -650,7 +738,10 @@ Return only the final edit prompt in English (with any visual text kept in its o
     return { prompt: fallback, usouFallback: true };
   }
   if (!texto) return { prompt: fallback, usouFallback: true };
-  const reforcado = reforcarComidaRealista(texto, { contexto: pedidoUsuario, fluxo: "edicao" });
+  const reforcado = reforcarComidaRealista(reforcarPadraoDesignerEdicao(texto), {
+    contexto: pedidoUsuario,
+    fluxo: "edicao",
+  });
   return { prompt: reforcado, usouFallback: false };
 }
 
@@ -660,7 +751,7 @@ Return only the final edit prompt in English (with any visual text kept in its o
 // corretamente (testado ao vivo, sem os erros de digitação que o Flux
 // Kontext às vezes introduz em textos não relacionados ao pedido).
 function fallbackAjusteCirurgicoPortugues(pedidoUsuario: string): string {
-  return `Aplique somente esta alteração: ${pedidoUsuario}. Preserve exatamente todo o restante da arte original, incluindo composição geral, enquadramento, proporção da arte, produto, formato do produto, cor do produto, textura do produto, fundo, iluminação, sombras, reflexos, paleta de cores, estilo visual aprovado, tipografia, hierarquia visual, todos os textos existentes, preço, telefone/WhatsApp, endereço, CTA, nome da marca, logo, cores da logo, formato da logo, proporção da logo, posição da logo, nitidez da logo e identidade visual da marca, a menos que o pedido tenha citado explicitamente um desses elementos. Preserve o formato/proporção original da imagem (não mude para outro formato a menos que o usuário peça explicitamente). Não recrie a arte inteira e não mude nenhum elemento que não tenha sido pedido. ${FOOD_CONDITIONAL_HINT}`;
+  return `Aplique somente esta alteração: ${pedidoUsuario}. Preserve exatamente todo o restante da arte original, incluindo composição geral, enquadramento, proporção da arte, produto, formato do produto, cor do produto, textura do produto, fundo, iluminação, sombras, reflexos, paleta de cores, estilo visual aprovado, tipografia, hierarquia visual, todos os textos existentes, preço, telefone/WhatsApp, endereço, CTA, nome da marca, logo, cores da logo, formato da logo, proporção da logo, posição da logo, nitidez da logo e identidade visual da marca, a menos que o pedido tenha citado explicitamente um desses elementos. Preserve o formato/proporção original da imagem (não mude para outro formato a menos que o usuário peça explicitamente). Não recrie a arte inteira e não mude nenhum elemento que não tenha sido pedido. ${FOOD_CONDITIONAL_HINT} ${DESIGNER_GRADE_EDIT_HINT}`;
 }
 
 // Variante de montarPromptAjuste em PORTUGUÊS, para quando o provider de
@@ -782,7 +873,10 @@ Instruções finais:
     return { prompt: fallback, usouFallback: true };
   }
   if (!texto) return { prompt: fallback, usouFallback: true };
-  const reforcado = reforcarComidaRealista(texto, { contexto: `${promptAnterior} ${pedidoUsuario}`, fluxo: "edicao" });
+  const reforcado = reforcarComidaRealista(reforcarPadraoDesignerEdicao(texto), {
+    contexto: `${promptAnterior} ${pedidoUsuario}`,
+    fluxo: "edicao",
+  });
   return { prompt: reforcado, usouFallback: false };
 }
 
@@ -834,7 +928,10 @@ Retorne apenas o prompt final de ajuste, sem aspas ao redor de tudo, sem explica
     return { prompt: fallback, usouFallback: true };
   }
   if (!texto) return { prompt: fallback, usouFallback: true };
-  const reforcado = reforcarComidaRealista(texto, { contexto: pedidoUsuario, fluxo: "edicao" });
+  const reforcado = reforcarComidaRealista(reforcarPadraoDesignerEdicao(texto), {
+    contexto: pedidoUsuario,
+    fluxo: "edicao",
+  });
   return { prompt: reforcado, usouFallback: false };
 }
 
@@ -1088,7 +1185,7 @@ function fallbackTransformarArteExistente(
   const base =
     req.modoTransformacao === "melhoria_recompositiva" ? PROMPT_BASE_MELHORIA_RECOMPOSITIVA : PROMPT_BASE_NOVA_VERSAO;
   const instrucao = req.instrucaoUsuario?.trim();
-  return instrucao ? `${base} ${instrucao}.` : base;
+  return aplicarPadraoDesigner(instrucao ? `${base} ${instrucao}.` : base);
 }
 
 const SYSTEM_MELHORIA_RECOMPOSITIVA = `Você escreve prompts para o GPT Image melhorar uma arte publicitária existente. Grau de liberdade criativa: MÉDIO. Isso NÃO é um ajuste cirúrgico (ajuste cirúrgico já existe no fluxo de editar detalhe) — o resultado precisa parecer uma versão claramente melhorada, não a mesma arte apenas mais clara ou com contraste ajustado.
@@ -1162,7 +1259,7 @@ export async function montarPromptMelhorarArteExistente(
     return { prompt: fallback, usouFallback: true };
   }
   if (!texto) return { prompt: fallback, usouFallback: true };
-  const reforcado = reforcarComidaRealista(texto, {
+  const reforcado = reforcarComidaRealista(aplicarPadraoDesigner(texto), {
     contexto: `${req.direcao ?? ""} ${req.instrucaoUsuario ?? ""}`,
     fluxo: req.modoTransformacao === "melhoria_recompositiva" ? "melhoria" : "nova_versao",
   });

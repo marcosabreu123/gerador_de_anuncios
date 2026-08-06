@@ -4,6 +4,7 @@ import { debitarCredito, estornarCredito } from "@/lib/credits";
 import { montarPrompt } from "@/lib/ai/prompt-builder";
 import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { uploadImagem } from "@/lib/storage";
+import { aplicarOverlay } from "@/lib/overlay/render";
 import { IMAGE_MODEL, qualidadeParaEtapa, TAMANHO_POR_FORMATO } from "@/lib/ai/models";
 import { normalizarBriefing } from "@/lib/ai/normalizar-briefing";
 import {
@@ -107,12 +108,27 @@ export async function POST(request: NextRequest) {
     const qualidade = qualidadeParaEtapa("rascunho"); // rascunho = medium (mais rápido, 2 variações em paralelo)
 
     // 3) Gera as variações — uma por direção criativa distinta.
-    const imagens = await gerarVariacoes({
+    const geradas = await gerarVariacoes({
       prompts,
       imagens: entradas,
       tamanho: TAMANHO_POR_FORMATO[formato],
       qualidade,
     });
+
+    // 3b) Modo overlay: a imagem veio como chapa limpa (sem texto, ver
+    // OVERLAY_CLEAN_PLATE_REQUIREMENTS) e a tipografia é composta aqui como
+    // vetor real. Feito antes do upload pra que o que vai pro Storage já
+    // seja a arte final — download, histórico e ajuste seguem inalterados.
+    const conteudoOverlay = body.briefing.conteudoAnuncio;
+    const imagens =
+      body.briefing.modoTexto === "overlay" && conteudoOverlay
+        ? await Promise.all(
+            geradas.map(async (img) => ({
+              ...img,
+              base64: await aplicarOverlay(img.base64, conteudoOverlay, formato),
+            })),
+          )
+        : geradas;
 
     // 4) Cria o projeto (guarda a transcrição da conversa + anexos para auditoria).
     const tipoArte =

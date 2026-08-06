@@ -22,6 +22,7 @@ import type {
   ContratoAgente,
   ImagemAnexo,
   MensagemChat,
+  ModoTexto,
   ModoUsoConteudo,
   TipoImagemAnexo,
 } from "@/lib/types";
@@ -33,7 +34,7 @@ const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
 // "conteudo" nunca chamam a IA sozinhos — só quando "conteudo" é enviado é
 // que a primeira mensagem consolidada (objetivo/formato/estilo/cores +
 // conteúdo) vai pro modelo, decidindo o bloco de segmento.
-type Fase = "conversa" | "materiais" | "card_principal" | "conteudo" | "card_segmento" | "observacao";
+type Fase = "conversa" | "materiais" | "card_principal" | "conteudo" | "modo_texto" | "card_segmento" | "observacao";
 
 // Primeira pergunta é fixa (não gasta chamada à IA) — já entra no formato do
 // contrato do agente pra manter o histórico consistente (ver agente-conversa.ts).
@@ -98,6 +99,11 @@ export default function ChatWizard() {
   // são mesclados com briefingParcial (extração/composição da IA) na hora
   // de gerar (ver gerar()).
   const [briefingFront, setBriefingFront] = useState<Partial<BriefingCompleto>>({});
+  // A mensagem consolidada (card principal + conteúdo) fica pendente até o
+  // lojista escolher quem desenha o texto — só então vai pro modelo, numa
+  // única chamada (a escolha de overlay não precisa passar pela IA, é uma
+  // decisão de renderização do app).
+  const [mensagemConteudoPendente, setMensagemConteudoPendente] = useState("");
   const [respostasCardPrincipal, setRespostasCardPrincipal] = useState("");
   const [conteudoTexto, setConteudoTexto] = useState("");
   const [observacao, setObservacao] = useState("");
@@ -184,8 +190,14 @@ export default function ChatWizard() {
     const textoUsuario = conteudoTexto.trim();
     if (!textoUsuario) return;
     const linha = formatarConteudoComposicao(modo, textoUsuario);
-    const mensagemConsolidada = `${respostasCardPrincipal}\n${linha}`;
-    enviarMensagem(mensagemConsolidada, (c) => setFase(c.grupos.length > 0 ? "card_segmento" : "observacao"));
+    setMensagemConteudoPendente(`${respostasCardPrincipal}\n${linha}`);
+    setFase("modo_texto");
+  }
+
+  function onEscolherModoTexto(modoTexto: ModoTexto) {
+    if (enviando) return;
+    setBriefingFront((prev) => ({ ...prev, modoTexto }));
+    enviarMensagem(mensagemConteudoPendente, (c) => setFase(c.grupos.length > 0 ? "card_segmento" : "observacao"));
   }
 
   function onEnviarCardSegmento(texto: string, selecoes: Record<string, string>) {
@@ -399,6 +411,41 @@ export default function ChatWizard() {
                 </button>
               </div>
             )}
+          </div>
+        ) : fase === "modo_texto" ? (
+          <div className="card p-4 flex flex-col gap-3">
+            <div>
+              <h3 className="font-semibold text-sm">Como o texto deve aparecer na arte?</h3>
+              <p className="text-xs text-[var(--muted)] mt-1">
+                Essa escolha muda bastante o acabamento do texto — o resto da arte continua igual.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => onEscolherModoTexto("overlay")}
+                disabled={enviando}
+                className="text-left bg-[var(--accent-soft)] px-4 py-3 rounded-xl border border-[var(--accent)]"
+              >
+                <p className="font-semibold text-sm">
+                  ✅ Texto perfeito garantido <span className="text-xs font-normal text-[var(--accent)]">(recomendado)</span>
+                </p>
+                <p className="text-xs text-[var(--muted)] mt-0.5">
+                  O texto é escrito pelo app com tipografia profissional: preço, WhatsApp e endereço saem sempre nítidos e sem erro de escrita.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => onEscolherModoTexto("ia")}
+                disabled={enviando}
+                className="text-left bg-[var(--surface-muted)] px-4 py-3 rounded-xl"
+              >
+                <p className="font-semibold text-sm">Texto integrado pela IA</p>
+                <p className="text-xs text-[var(--muted)] mt-0.5">
+                  A IA desenha o texto dentro da cena, o que pode ficar mais criativo — mas às vezes sai com letra torta ou palavra errada.
+                </p>
+              </button>
+            </div>
           </div>
         ) : fase === "card_segmento" && contrato?.grupos?.length ? (
           <CardBoundary
