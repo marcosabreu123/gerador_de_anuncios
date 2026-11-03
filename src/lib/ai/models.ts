@@ -18,25 +18,32 @@ export const IMAGE_MODEL = "gpt-image-2";
 
 export type QualidadeImagem = "low" | "medium" | "high";
 
-// Qualidade da imagem final.
+// Criar uma arte e editar uma arte pronta são trabalhos diferentes, e medimos
+// que pedem qualidades diferentes.
 //
-// Era "low" fixo, por medo de estourar o antigo teto de 60s da function. Com
-// 120s o medo não se sustenta: medido no comparativo de modelos, "low" levou
-// 11s e "medium" 31s, ambos bem dentro do teto.
+// CRIAÇÃO usa "medium". Em "low" o modelo desenha a tipografia do zero e erra
+// o detalhe fino: no mesmo briefing e com o mesmo prompt, "low" imprimiu o
+// preço com vírgula dupla ("R$ 39,,90") e "medium" saiu limpo. Preço errado é
+// o defeito mais caro que uma peça de anúncio pode ter.
 //
-// O padrão subiu para "medium" porque "low" erra tipografia fina. No mesmo
-// briefing e com o mesmo prompt, "low" imprimiu o preço com vírgula dupla
-// ("R$ 39,,90") enquanto "medium" saiu limpo — e preço errado é o defeito mais
-// caro possível numa peça de anúncio.
+// EDIÇÃO fica em "low". Aqui o modelo não inventa tipografia, ele copia a que
+// já está na imagem — e num comparativo de sete modelos de edição, trocando o
+// preço da mesma arte, gpt-image-2 em "low" foi o que mais preservou o resto
+// (erro médio de 8,3 contra 11,2 do segundo colocado) e o único cuja tipografia
+// do selo ficou indistinguível da original. Pagar mais não compraria nada.
 //
-// Custo por imagem: low US$ 0,02, medium US$ 0,07, high US$ 0,19. Num pacote
-// de 10 imagens a US$ 0,07, a API custa cerca de R$ 3,90 contra R$ 34,90 de
-// receita. Para voltar ao anterior, IMAGE_QUALITY=low.
-export type Etapa = "rascunho" | "final";
+// Custo por imagem: low US$ 0,02, medium US$ 0,07, high US$ 0,19.
+// IMAGE_QUALITY e IMAGE_QUALITY_EDICAO sobrescrevem cada um.
+export type Etapa = "rascunho" | "final" | "edicao";
 
-export function qualidadeParaEtapa(_etapa: Etapa): QualidadeImagem {
-  const bruto = (process.env.IMAGE_QUALITY ?? "").trim();
-  return bruto === "low" || bruto === "medium" || bruto === "high" ? bruto : "medium";
+function daEnv(nome: string, padrao: QualidadeImagem): QualidadeImagem {
+  const bruto = (process.env[nome] ?? "").trim();
+  return bruto === "low" || bruto === "medium" || bruto === "high" ? bruto : padrao;
+}
+
+export function qualidadeParaEtapa(etapa: Etapa): QualidadeImagem {
+  if (etapa === "edicao") return daEnv("IMAGE_QUALITY_EDICAO", "low");
+  return daEnv("IMAGE_QUALITY", "medium");
 }
 
 // Tamanho (WIDTHxHEIGHT) por formato — gpt-image-2 aceita resoluções

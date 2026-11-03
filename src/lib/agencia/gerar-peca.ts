@@ -182,7 +182,9 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
   });
 
   // 2) Imagem
-  const qualidade = qualidadeParaEtapa("final");
+  // Editar uma arte pronta custa menos que criar uma: o modelo copia a
+  // tipografia que já está lá em vez de desenhar do zero. Ver models.ts.
+  const qualidade = qualidadeParaEtapa(transformandoArte ? "edicao" : "final");
   const inicioImagem = Date.now();
   let imagens;
   try {
