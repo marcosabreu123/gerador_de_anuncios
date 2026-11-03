@@ -252,48 +252,17 @@ export function aplicarPadraoDesigner(prompt: string): string {
   return `${prompt}\n\n${DESIGNER_GRADE_REQUIREMENTS}`;
 }
 
-// ==== Modo overlay: a imagem é uma "chapa limpa", sem texto ====
-// Quando o texto é composto pelo app como vetor real (ver src/lib/overlay/),
-// o modelo de imagem NÃO pode escrever nada — qualquer letra que ele desenhe
-// vai brigar visualmente com a tipografia de verdade sobreposta depois. Além
-// de proibir texto, reserva a área inferior da peça: sem isso o modelo põe
-// detalhe importante justamente onde o texto vai entrar.
-const OVERLAY_CLEAN_PLATE_REQUIREMENTS =
-  "CLEAN PLATE — NO TEXT (mandatory, overrides any other instruction about text): Render absolutely no text, no letters, no numbers, no words, no watermarks, no price tags, no written badges, no signage and no captions anywhere in this image. This artwork is a background plate: all typography is composed on top of it afterwards by the application. Place the product in the upper portion of the frame as the hero. Keep the lower 40% of the image visually calm and uncluttered — a simple, low-detail, smoothly lit area (background, surface, gradient or soft shadow) with no important product detail, no busy pattern and no small scattered objects, so that text placed there stays fully legible. Do not draw empty frames, boxes, banners or placeholder shapes where text would go: leave that area as clean finished composition.";
-
-// Sem logo anexada, nada de marca pode aparecer — inventar logo é um dos
-// artefatos que o projeto inteiro combate.
-const OVERLAY_SEM_LOGO = "Do not draw any logo or brand mark: none was provided.";
-
-// Com logo anexada, ela é a ÚNICA exceção à proibição de texto (logo quase
-// sempre contém o nome da marca). Fica restrita à metade superior de
-// propósito: a área inferior é onde o app imprime a tipografia depois, e
-// logo ali embaixo colidiria com o texto composto.
-const OVERLAY_COM_LOGO =
-  "The single exception to the no-text rule is the brand logo provided as an attached image: reproduce it faithfully — exact shape, proportions, lettering and colors, never redrawn, restyled, recolored, distorted or re-lettered — placed small and discreet in the UPPER portion of the frame. Never place the logo in the lower 40% of the image, which is reserved for typography composed afterwards. Do not invent any other logo, brand mark, slogan or written element.";
-
-// Idempotente, mesmo padrão dos demais blocos determinísticos.
-export function aplicarChapaLimpaOverlay(prompt: string, temLogotipo: boolean): string {
-  if (prompt.includes("CLEAN PLATE — NO TEXT")) return prompt;
-  const excecaoLogo = temLogotipo ? OVERLAY_COM_LOGO : OVERLAY_SEM_LOGO;
-  return `${prompt}\n\n${OVERLAY_CLEAN_PLATE_REQUIREMENTS} ${excecaoLogo}`;
-}
-
-// Overlay é opt-in explícito: briefing sem o campo (projetos criados antes
-// do overlay existir) mantém o comportamento antigo de texto pela IA.
-function usaOverlay(b: BriefingCompleto): boolean {
-  return b.modoTexto === "overlay";
-}
-
 // Ponto ÚNICO que define a ordem dos blocos determinísticos no prompt de
-// criação. A ordem importa: acabamento profissional primeiro, chapa limpa
-// (quando overlay) em seguida, e comida realista sempre por último — última
-// posição é a mais forte, e realismo de alimento precisa vencer qualquer
-// instrução de estilo (ver FOOD_REALISM_REQUIREMENTS).
+// criação. A ordem importa: acabamento profissional primeiro e comida
+// realista sempre por último — última posição é a mais forte, e realismo de
+// alimento precisa vencer qualquer instrução de estilo (ver
+// FOOD_REALISM_REQUIREMENTS).
+//
+// Houve aqui um terceiro bloco, do modo overlay (imagem sem texto, com a
+// tipografia composta depois pelo app). Removido na virada para operação de
+// agência: o texto voltou a ser desenhado pelo próprio modelo de imagem.
 function finalizarPromptCriacao(prompt: string, b: BriefingCompleto): string {
-  const comDesign = aplicarPadraoDesigner(prompt);
-  const comChapa = usaOverlay(b) ? aplicarChapaLimpaOverlay(comDesign, b.temLogotipo === true) : comDesign;
-  return aplicarComidaRealista(comChapa, b);
+  return aplicarComidaRealista(aplicarPadraoDesigner(prompt), b);
 }
 
 // Aplicado ao prompt final dos fluxos de EDIÇÃO de arte pronta. Idempotente.
@@ -472,9 +441,7 @@ function briefingParaTexto(b: BriefingCompleto): string {
   if (b.temReferencia) linhas.push("Há uma imagem de referência de estilo anexada — inspire-se nela.");
   if (b.temLogotipo)
     linhas.push(
-      usaOverlay(b)
-        ? "Há um logotipo anexado — inclua-o como assinatura pequena e discreta, obrigatoriamente na metade SUPERIOR da peça (a área inferior é reservada para a tipografia que o app compõe depois)."
-        : "Há um logotipo anexado — inclua-o como assinatura pequena, posicionada onde a composição ficar mais equilibrada (decisão sua de direção de arte, não precisa ser sempre no rodapé).",
+      "Há um logotipo anexado — inclua-o como assinatura pequena, posicionada onde a composição ficar mais equilibrada (decisão sua de direção de arte, não precisa ser sempre no rodapé).",
     );
   if (b.publicoTom) linhas.push(`Público/tom: ${b.publicoTom}`);
   if (b.conceito) linhas.push(`Ângulo criativo/conceito: ${b.conceito}`);
@@ -505,16 +472,6 @@ function briefingParaTexto(b: BriefingCompleto): string {
   }
 
   const c = b.conteudoAnuncio;
-  if (c && usaOverlay(b)) {
-    // No modo overlay o texto abaixo é só CONTEXTO (pra você entender a
-    // campanha e reservar espaço) — ele será impresso pelo app depois, como
-    // tipografia vetorial. A imagem tem que sair sem nenhuma letra.
-    linhas.push(
-      b.temLogotipo
-        ? "ATENÇÃO — modo overlay ativado: a peça NÃO pode conter nenhum texto, letra, número ou selo escrito, com UMA exceção: o logotipo anexado, que deve aparecer pequeno e discreto na METADE SUPERIOR da arte (nunca embaixo). A tipografia é composta pelo aplicativo depois, por cima da imagem. O conteúdo textual abaixo serve apenas como contexto da campanha e para você reservar uma área inferior limpa e sem detalhe importante onde o texto será colocado."
-        : "ATENÇÃO — modo overlay ativado: a peça NÃO pode conter nenhum texto, letra, número, logo ou selo escrito. A tipografia é composta pelo aplicativo depois, por cima da imagem. O conteúdo textual abaixo serve apenas como contexto da campanha e para você reservar uma área inferior limpa e sem detalhe importante onde o texto será colocado.",
-    );
-  }
   if (c) {
     linhas.push("Conteúdo textual do anúncio (organize por esta hierarquia, do mais pro menos importante):");
     if (c.headline) linhas.push(`- Headline (principal): ${c.headline}`);

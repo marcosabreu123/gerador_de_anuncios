@@ -202,9 +202,8 @@ export function pecaParaBriefing(
     estiloComunicacao: "ia_decide",
     intensidadeVisual: "ia_decide",
     nivelProducaoVisual: "premium-editorial",
-    // Sem overlay: o texto volta a ser desenhado pelo modelo de imagem, como
-    // o operador pediu na remodelagem.
-    modoTexto: "ia",
+
+
     modoComidaRealista: textoEnvolveComida(contextoComida),
     conteudoComposicao: { textoUsuario: peca.conteudo, modoUso: "melhorar_ideia" },
     conteudoAnuncio: {

@@ -1,115 +1,148 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
-import AppHeader from "@/components/AppHeader";
-import FlowCard from "@/components/FlowCard";
-import type { ImageRow } from "@/lib/types";
+import AgenciaHeader from "@/components/AgenciaHeader";
+import { mesAtual, resumoPorCliente, totalizar } from "@/lib/agencia/relatorio";
+import { formatarBRL } from "@/lib/agencia/types";
+
+// Painel dos sócios. Substitui o dashboard do lojista do modelo antigo (que
+// mostrava os três fluxos de criação e o saldo de créditos de quem estava
+// logado) — aqui o que importa é quanto cada cliente deu de receita, custo e
+// margem no mês.
 
 export default async function DashboardPage() {
-  const { authId, perfil } = await requireUser();
-  const supabase = await createClient();
+  const { perfil } = await requireUser();
+  const periodo = mesAtual();
+  const resumos = await resumoPorCliente(periodo);
+  const totais = totalizar(resumos);
 
-  const { data: recentes } = await supabase
-    .from("images")
-    .select("id, project_id, imagem_gerada_url, created_at, status")
-    .eq("user_id", authId)
-    .not("imagem_gerada_url", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(6);
-
-  const imagens = (recentes ?? []) as Pick<
-    ImageRow,
-    "id" | "project_id" | "imagem_gerada_url" | "created_at" | "status"
-  >[];
-
-  const semCredito = !perfil.is_admin && perfil.creditos_disponiveis <= 0;
+  const comMovimento = resumos.filter((r) => r.geracoes > 0 || r.receita_brl > 0 || r.pecas_entregues > 0);
 
   return (
     <>
-      <AppHeader creditos={perfil.creditos_disponiveis} isAdmin={perfil.is_admin} />
-      <main className="app-shell flex-1 py-6">
-        <div className="mb-6">
-          <h1 className="text-xl font-bold">
-            Olá{perfil.nome ? `, ${perfil.nome.split(" ")[0]}` : ""} 👋
-          </h1>
-          <p className="text-sm text-[var(--muted)] mt-1">
-            {perfil.is_admin ? (
-              <>Você tem créditos ilimitados (admin).</>
-            ) : (
-              <>
-                Você tem{" "}
-                <strong className="text-[var(--foreground)]">
-                  {perfil.creditos_disponiveis} crédito{perfil.creditos_disponiveis === 1 ? "" : "s"}
-                </strong>
-                . Cada arte usa 1 crédito.
-              </>
-            )}
-          </p>
-        </div>
-
-        {semCredito ? (
-          <div className="card p-5 text-center border-dashed">
-            <p className="font-semibold">Seus créditos acabaram</p>
+      <AgenciaHeader nome={perfil.nome ?? perfil.email} />
+      <main className="app-shell py-6 flex flex-col gap-6">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Painel do mês</h1>
             <p className="text-sm text-[var(--muted)] mt-1">
-              Em breve você poderá comprar mais. Por enquanto, fale com o suporte.
+              Receita confirmada, custo real de API e margem por cliente.
             </p>
           </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <FlowCard
-              href="/novo"
-              icon="✨"
-              title="Criar nova arte"
-              description="Comece do zero com ajuda da IA."
-              destaque
-            />
-            <FlowCard
-              href="/editar"
-              icon="✏️"
-              title="Editar detalhe de uma arte"
-              description="Altere preço, texto, logo, fundo ou outro ponto específico."
-            />
-            <FlowCard
-              href="/melhorar"
-              icon="🎨"
-              title="Melhorar ou recriar uma arte"
-              description="Envie uma arte pronta para melhorar o visual ou criar uma nova versão."
-            />
-          </div>
-        )}
-
-        <div className="flex items-center justify-between mt-10 mb-3">
-          <h2 className="font-semibold">Suas artes recentes</h2>
-          {imagens.length > 0 && (
-            <Link href="/historico" className="text-sm text-[var(--accent)] font-semibold">
-              Ver tudo
-            </Link>
-          )}
+          <Link href="/clientes" className="btn btn-primary">
+            Clientes
+          </Link>
         </div>
 
-        {imagens.length === 0 ? (
-          <p className="text-sm text-[var(--muted)] py-8 text-center">
-            Você ainda não criou nenhuma arte. Comece agora! ✨
-          </p>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {imagens.map((img) => (
-              <Link
-                key={img.id}
-                href={`/resultado/${img.project_id}`}
-                className="card card-interactive overflow-hidden aspect-square block"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={img.imagem_gerada_url!}
-                  alt="Arte gerada"
-                  className="w-full h-full object-cover"
-                />
-              </Link>
-            ))}
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Indicador titulo="Receita" valor={formatarBRL(totais.receita_brl)} ajuda="Pagamentos confirmados no mês" />
+          <Indicador titulo="Custo de API" valor={formatarBRL(totais.custo_brl)} ajuda="Inclui gerações que falharam" />
+          <Indicador
+            titulo="Margem"
+            valor={formatarBRL(totais.margem_brl)}
+            ajuda="Receita menos custo de API — ainda sem contar mão de obra"
+            destaque={totais.margem_brl >= 0 ? "ok" : "alerta"}
+          />
+          <Indicador titulo="Peças entregues" valor={String(totais.pecas_entregues)} ajuda="Peças geradas ou aprovadas" />
+        </section>
+
+        <section className="card p-4 flex flex-col gap-2">
+          <h2 className="font-semibold">Os dois números que decidem a margem</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
+            <div className="bg-[var(--surface-muted)] rounded-xl p-3">
+              <p className="text-xs text-[var(--muted)]">Custo médio por peça entregue</p>
+              <p className="text-xl font-bold">{formatarBRL(totais.custo_medio_por_peca)}</p>
+              <p className="text-xs text-[var(--muted)] mt-1">
+                {totais.pecas_entregues > 0
+                  ? `${(totais.geracoes / totais.pecas_entregues).toFixed(1)} geração(ões) por peça — quanto mais perto de 1, menos retrabalho.`
+                  : "Sem peças entregues ainda."}
+              </p>
+            </div>
+            <div className="bg-[var(--surface-muted)] rounded-xl p-3">
+              <p className="text-xs text-[var(--muted)]">Tempo humano por peça</p>
+              <p className="text-xl font-bold">{totais.tempo_medio_por_peca_min.toFixed(1)} min</p>
+              <p className="text-xs text-[var(--muted)] mt-1">
+                Num pacote de 10 imagens por {formatarBRL(34.9)}, é o tempo de gente que aperta a conta — não a API.
+              </p>
+            </div>
           </div>
-        )}
+        </section>
+
+        <section className="card p-4 flex flex-col gap-3">
+          <h2 className="font-semibold">Por cliente</h2>
+          {comMovimento.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">Nenhum movimento neste mês ainda.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[var(--muted)]">
+                    <th className="py-2 font-medium">Cliente</th>
+                    <th className="py-2 font-medium text-right">Peças</th>
+                    <th className="py-2 font-medium text-right">Ger./peça</th>
+                    <th className="py-2 font-medium text-right">Custo</th>
+                    <th className="py-2 font-medium text-right">Receita</th>
+                    <th className="py-2 font-medium text-right">Margem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comMovimento.map((r) => (
+                    <tr key={r.cliente_id} className="border-t border-[var(--border)]">
+                      <td className="py-2">
+                        <Link href={`/clientes/${r.cliente_id}`} className="hover:underline">
+                          {r.cliente_nome}
+                        </Link>
+                      </td>
+                      <td className="py-2 text-right">{r.pecas_entregues}</td>
+                      <td className="py-2 text-right">
+                        {r.geracoes_por_peca > 0 ? r.geracoes_por_peca.toFixed(1) : "—"}
+                      </td>
+                      <td className="py-2 text-right">{formatarBRL(r.custo_brl)}</td>
+                      <td className="py-2 text-right">{formatarBRL(r.receita_brl)}</td>
+                      <td
+                        className={`py-2 text-right font-semibold ${
+                          r.margem_brl < 0 ? "text-[var(--danger)]" : ""
+                        }`}
+                      >
+                        {formatarBRL(r.margem_brl)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="text-xs text-[var(--muted)]">
+            A margem acima considera só o custo de API. O custo de mão de obra entra pelo tempo por peça,
+            no painel acima.
+          </p>
+        </section>
       </main>
     </>
+  );
+}
+
+function Indicador({
+  titulo,
+  valor,
+  ajuda,
+  destaque,
+}: {
+  titulo: string;
+  valor: string;
+  ajuda: string;
+  destaque?: "ok" | "alerta";
+}) {
+  return (
+    <div className="card p-4">
+      <p className="text-xs text-[var(--muted)]">{titulo}</p>
+      <p
+        className={`text-2xl font-bold mt-1 ${
+          destaque === "alerta" ? "text-[var(--danger)]" : destaque === "ok" ? "text-[var(--success)]" : ""
+        }`}
+      >
+        {valor}
+      </p>
+      <p className="text-[11px] text-[var(--muted)] mt-1">{ajuda}</p>
+    </div>
   );
 }

@@ -357,14 +357,6 @@ export type SubmodoAcougue = "produto_cru_fresco" | "pronto_para_consumo" | "cli
 // mas nunca pode inventar dado comercial novo (preço, telefone, endereço...).
 export type ModoUsoConteudo = "usar_exatamente" | "melhorar_ideia";
 
-// Quem desenha o texto da arte.
-// "overlay" (padrão): o modelo de imagem gera a peça SEM texto nenhum e o
-// app compõe a tipografia por cima como vetor real (ver src/lib/overlay/) —
-// texto sempre nítido, sem palavra torta/inventada, com acento correto.
-// "ia": comportamento anterior, o modelo de imagem escreve o texto dentro da
-// própria imagem — composição mais orgânica, mas sujeita a erro de texto.
-export type ModoTexto = "overlay" | "ia";
-
 export interface ConteudoOtimizado {
   titulo?: string;
   apoio?: string;
@@ -408,11 +400,6 @@ export interface BriefingCompleto {
   preferenciaCores?: PreferenciaCores;
   coresMarca?: string;
   conteudoComposicao?: ConteudoComposicao;
-  // Ausente = "ia" (comportamento anterior). O fluxo de criação novo sempre
-  // grava o valor explicitamente, com "overlay" pré-selecionado — assim
-  // projetos antigos já salvos no banco continuam gerando variações do mesmo
-  // jeito que geravam quando foram criados.
-  modoTexto?: ModoTexto;
   nivelVisual?: NivelVisual;
   nivelProducaoVisual?: NivelProducaoVisual;
   direcaoArte?: DirecaoArte;

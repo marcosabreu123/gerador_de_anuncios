@@ -27,16 +27,16 @@ export default async function HistoricoPage() {
       <main className="app-shell flex-1 py-6">
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold">Histórico</h1>
-          <Link href="/novo" className="text-sm text-[var(--accent)] font-semibold">
-            + Nova arte
+          <Link href="/clientes" className="text-sm text-[var(--accent)] font-semibold">
+            + Novo pedido
           </Link>
         </div>
 
         {imagens.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-sm text-[var(--muted)]">Você ainda não gerou nenhuma arte.</p>
-            <Link href="/novo" className="btn btn-primary mt-4 inline-flex">
-              Criar primeira arte
+            <Link href="/clientes" className="btn btn-primary mt-4 inline-flex">
+              Ir para clientes
             </Link>
           </div>
         ) : (

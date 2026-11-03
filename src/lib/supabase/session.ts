@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // Rotas que exigem usuário autenticado.
-const ROTAS_PROTEGIDAS = ["/dashboard", "/novo", "/editar", "/resultado", "/historico"];
+const ROTAS_PROTEGIDAS = ["/dashboard", "/clientes", "/pedidos", "/editar", "/melhorar", "/resultado", "/historico", "/admin"];
 
 // Refresh da sessão em cada request + guarda de rotas protegidas.
 export async function updateSession(request: NextRequest) {

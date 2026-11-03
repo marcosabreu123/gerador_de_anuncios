@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", "set PATH=C:\\Users\\Windows\\tools\\node-v24.18.0-win-x64;%PATH% && cd /d C:\\Users\\Windows\\Desktop\\perfumaria-estoque && npm run dev"],
+      "port": 3000
+    }
+  ]
+}

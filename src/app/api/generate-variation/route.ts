@@ -4,7 +4,6 @@ import { debitarCredito, estornarCredito } from "@/lib/credits";
 import { montarPrompt, montarPromptMelhorarArteExistente } from "@/lib/ai/prompt-builder";
 import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { uploadImagem } from "@/lib/storage";
-import { aplicarOverlay } from "@/lib/overlay/render";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
 import { formatoMaisProximo, formatoPedidoExplicitamente, medirDimensoes } from "@/lib/image-dimensions";
 import type {
@@ -166,14 +165,7 @@ export async function POST(request: NextRequest) {
       qualidade,
     });
 
-    // Se o projeto foi criado no modo overlay, a nova variação também sai
-    // como chapa limpa (o prompt proíbe texto) — sem compor a tipografia
-    // aqui, a variação sairia com a área de texto vazia.
-    const conteudoOverlay = briefing.conteudoAnuncio;
-    const imagemFinal =
-      briefing.modoTexto === "overlay" && conteudoOverlay
-        ? { ...imagens[0], base64: await aplicarOverlay(imagens[0].base64, conteudoOverlay, formato) }
-        : imagens[0];
+    const imagemFinal = imagens[0];
 
     const urlProduto = imagensAnexadas.find((i) => i.tipo === "produto")?.url ?? null;
     const urlGerada = await uploadImagem(user.id, imagemFinal, "geradas");
