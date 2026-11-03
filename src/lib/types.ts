@@ -2,6 +2,26 @@
 
 export type Plano = "free" | "pro";
 
+// Papel na operação da agência. Default no banco é 'sem_acesso': acesso é
+// concedido explicitamente, nunca presumido — as contas do modelo antigo
+// (lojistas do self-service) continuam autenticando e não podem entrar.
+export type PapelUsuario = "socio" | "colaborador" | "sem_acesso";
+
+export const PAPEIS: Record<PapelUsuario, { label: string; descricao: string }> = {
+  socio: {
+    label: "Sócio",
+    descricao: "Acesso total: painel, custos, pacotes, pagamentos e configurações.",
+  },
+  colaborador: {
+    label: "Colaborador",
+    descricao: "Só produção: vê os clientes e gera as artes. Nenhum dado financeiro.",
+  },
+  sem_acesso: {
+    label: "Sem acesso",
+    descricao: "Autentica mas não entra na ferramenta.",
+  },
+};
+
 export interface UserRow {
   id: string;
   nome: string | null;
@@ -9,6 +29,9 @@ export interface UserRow {
   plano: Plano;
   creditos_disponiveis: number;
   is_admin: boolean;
+  papel: PapelUsuario;
+  ativo: boolean;
+  convidado_por: string | null;
   created_at: string;
 }
 

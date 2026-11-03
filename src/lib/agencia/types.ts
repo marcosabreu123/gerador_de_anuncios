@@ -1,3 +1,5 @@
+import type { EstiloComunicacao, Formato, IntensidadeVisual } from "@/lib/types";
+
 // Tipos do modelo de agência — espelham supabase/schema-agencia.sql.
 //
 // Diferença central para src/lib/types.ts (modelo antigo): lá, "user" era ao
@@ -116,6 +118,24 @@ export interface PecaPlanejada {
 export interface PlanoPedido {
   resumo: string;
   pecas: PecaPlanejada[];
+}
+
+// ==== Geração manual (o fluxo de produção) ====
+// O operador escreve/fala o que precisa e ajusta os controles; o agente lê o
+// perfil do cliente (brand kit, nicho, materiais) e monta a direção de arte.
+//
+// Substituiu o planejamento automático de lote, que decidia sozinho quantas
+// peças fazer e o que cada uma diria. Na prática isso engessava: quem conhece
+// o cliente é o operador, e ele quer pedir exatamente o que precisa.
+export interface BriefingPecaManual {
+  prompt: string;
+  formato: Formato;
+  estilo?: EstiloComunicacao;
+  intensidade?: IntensidadeVisual;
+  // Índice e total da leva: quando se pede mais de uma imagem, cada peça
+  // recebe instrução de buscar uma direção criativa diferente das irmãs.
+  variacao: number;
+  total: number;
 }
 
 export interface Pedido {

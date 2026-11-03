@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { ehSocio, requireOperador } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import AgenciaHeader from "@/components/AgenciaHeader";
 import PecasDoPedido from "@/components/PecasDoPedido";
@@ -8,7 +8,7 @@ import { formatarBRL, type Cliente, type Peca, type Pedido } from "@/lib/agencia
 
 export default async function PedidoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { perfil } = await requireUser();
+  const { perfil } = await requireOperador();
   const supabase = await createClient();
 
   const { data: pedidoRaw } = await supabase.from("pedidos").select("*").eq("id", id).maybeSingle();
@@ -30,7 +30,7 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
 
   return (
     <>
-      <AgenciaHeader nome={perfil.nome ?? perfil.email} />
+      <AgenciaHeader nome={perfil.nome ?? perfil.email} papel={perfil.papel} />
       <main className="app-shell py-6 flex flex-col gap-4">
         <div>
           {cliente && (
@@ -40,7 +40,8 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
           )}
           <h1 className="text-2xl font-bold tracking-tight mt-1">{pedido.titulo ?? "Pedido"}</h1>
           <p className="text-sm text-[var(--muted)]">
-            {entregues} de {pecas.length} peça(s) pronta(s) · custo do lote {formatarBRL(custoLote)}
+            {entregues} de {pecas.length} peça(s) pronta(s)
+            {ehSocio(perfil) && ` · custo do lote ${formatarBRL(custoLote)}`}
           </p>
         </div>
 

@@ -1,11 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { montarPrompt } from "@/lib/ai/prompt-builder";
-import { montarContextoCliente, pecaParaBriefing } from "@/lib/ai/agente-pedido";
+import { materiaisDisponiveis, pedidoManualParaBriefing } from "@/lib/ai/agente-pedido";
 import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
 import { custoImagemUSD, custoTextoUSD, registrarGeracao } from "./custo";
 import { consumirImagemComoWorker } from "./pacotes";
-import type { BrandKit, Cliente, PecaPlanejada, Referencia } from "./types";
+import type { BrandKit, BriefingPecaManual, Cliente, Referencia } from "./types";
 import type { Formato } from "@/lib/types";
 
 // Produção de UMA peça, do briefing à imagem salva. Roda no worker da fila
@@ -96,13 +96,15 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
     if (e) entradas.push(e);
   }
 
-  const planejada = (peca.briefing ?? {}) as PecaPlanejada;
-  const formato = ((peca.briefing as Record<string, unknown>)?.formato as Formato) ?? "feed-4-5";
+  const manual = (peca.briefing ?? {}) as BriefingPecaManual;
+  const formato: Formato = manual.formato ?? "feed-4-5";
 
-  const briefing = pecaParaBriefing(planejada, cliente as Cliente, (brandKit as BrandKit) ?? null, {
-    formato,
+  const briefing = pedidoManualParaBriefing(manual, cliente as Cliente, (brandKit as BrandKit) ?? null, {
+    // O que de fato foi anexado manda, não o que o cadastro promete: se a
+    // referência não baixou, o prompt não pode prometer foto ao modelo.
     temFotoProduto: entradas.some((e) => e.tipo === "produto"),
     temLogotipo: entradas.some((e) => e.tipo === "logotipo"),
+    temReferencia: materiaisDisponiveis(referencias).temReferencia,
   });
 
   // 1) Prompt (custo de texto)
@@ -200,5 +202,3 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
 
   return { imagemUrl, promptUsado: imagens[0].promptUsado, saldoRestante };
 }
-
-export { montarContextoCliente };

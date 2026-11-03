@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { UserRow } from "@/lib/types";
 
 // Retorna o usuário autenticado + sua row em public.users.
-// Se a row ainda não existir (trigger não rodou), provisiona na hora.
+// Se a row ainda não existir (trigger não rodou), provisiona na hora — e aí
+// ela nasce com papel 'sem_acesso' (default da coluna), nunca com acesso.
 // Redireciona para /login se não houver sessão.
 export async function requireUser(): Promise<{ authId: string; email: string; perfil: UserRow }> {
   const supabase = await createClient();
@@ -26,7 +27,6 @@ export async function requireUser(): Promise<{ authId: string; email: string; pe
         id: user.id,
         email: user.email,
         nome: (user.user_metadata?.nome as string) ?? null,
-        creditos_disponiveis: 10,
       })
       .select("*")
       .single();
@@ -36,10 +36,38 @@ export async function requireUser(): Promise<{ authId: string; email: string; pe
   return { authId: user.id, email: user.email!, perfil: perfil as UserRow };
 }
 
-// Como requireUser(), mas exige is_admin = true — usado nas telas internas
-// de administração. Redireciona lojistas comuns para o dashboard.
+// Acesso à operação (clientes e geração). Vale para sócio e colaborador.
+//
+// Barra explicitamente quem não tem papel: as contas do modelo antigo
+// (lojistas do tempo do self-service) continuam autenticando no Supabase, e
+// sem esta checagem entrariam direto na ferramenta interna.
+export async function requireOperador() {
+  const resultado = await requireUser();
+  const { papel, ativo } = resultado.perfil;
+  if (!ativo || (papel !== "socio" && papel !== "colaborador")) {
+    redirect("/sem-acesso");
+  }
+  return resultado;
+}
+
+// Acesso de gestão: painel, custo, pacotes, pagamentos e configurações.
+// Só sócio. Colaborador que tentar abrir uma dessas telas volta para a área
+// que lhe cabe, em vez de ver um erro seco.
+export async function requireSocio() {
+  const resultado = await requireOperador();
+  if (resultado.perfil.papel !== "socio") {
+    redirect("/clientes");
+  }
+  return resultado;
+}
+
+// Mantido porque as telas legadas (/admin, /historico) ainda usam is_admin.
 export async function requireAdmin() {
   const resultado = await requireUser();
   if (!resultado.perfil.is_admin) redirect("/dashboard");
   return resultado;
+}
+
+export function ehSocio(perfil: Pick<UserRow, "papel">): boolean {
+  return perfil.papel === "socio";
 }

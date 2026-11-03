@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth";
+import { requireSocio } from "@/lib/auth";
 import AgenciaHeader from "@/components/AgenciaHeader";
 import { mesAtual, resumoPorCliente, totalizar } from "@/lib/agencia/relatorio";
 import { formatarBRL } from "@/lib/agencia/types";
@@ -10,7 +10,7 @@ import { formatarBRL } from "@/lib/agencia/types";
 // margem no mês.
 
 export default async function DashboardPage() {
-  const { perfil } = await requireUser();
+  const { perfil } = await requireSocio();
   const periodo = mesAtual();
   const resumos = await resumoPorCliente(periodo);
   const totais = totalizar(resumos);
@@ -19,7 +19,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <AgenciaHeader nome={perfil.nome ?? perfil.email} />
+      <AgenciaHeader nome={perfil.nome ?? perfil.email} papel={perfil.papel} />
       <main className="app-shell py-6 flex flex-col gap-6">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>

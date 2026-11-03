@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { ehSocio, requireOperador } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import AgenciaHeader from "@/components/AgenciaHeader";
 import { saldoDoCliente } from "@/lib/agencia/pacotes";
@@ -25,12 +25,16 @@ import {
 
 export default async function ClientePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { perfil } = await requireUser();
+  const { perfil } = await requireOperador();
   const supabase = await createClient();
 
   const { data: clienteRaw } = await supabase.from("clientes").select("*").eq("id", id).maybeSingle();
   if (!clienteRaw) notFound();
   const cliente = clienteRaw as Cliente;
+  // Colaborador produz, mas não vê nem mexe em dinheiro: pacote vendido,
+  // valor e pagamento são gestão. O saldo em imagens ele vê, porque é
+  // informação operacional — precisa saber se pode gerar.
+  const gestao = ehSocio(perfil);
 
   const [{ data: brandKitRaw }, { data: referenciasRaw }, { data: pagamentosRaw }, { data: pedidosRaw }, saldo] =
     await Promise.all([
@@ -48,7 +52,7 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
 
   return (
     <>
-      <AgenciaHeader nome={perfil.nome ?? perfil.email} />
+      <AgenciaHeader nome={perfil.nome ?? perfil.email} papel={perfil.papel} />
       <main className="app-shell py-6 flex flex-col gap-6">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
@@ -62,7 +66,7 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
             <span className="badge" title="Imagens disponíveis no pacote">
               {saldo.disponivel} img
             </span>
-            <Link href={`/clientes/${id}/novo-pedido`} className="btn btn-primary">
+            <Link href={`/clientes/${id}/nova-geracao`} className="btn btn-primary">
               Novo pedido
             </Link>
           </div>
@@ -72,7 +76,9 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
           <div className="card p-4 border-l-4 border-l-[var(--danger)]">
             <p className="font-semibold text-sm">Cliente sem saldo</p>
             <p className="text-sm text-[var(--muted)] mt-0.5">
-              Venda um pacote antes de produzir — ou aprove o lote forçando, se ele já combinou o pagamento.
+              {gestao
+                ? "Venda um pacote antes de produzir — ou gere mesmo assim, se ele já combinou o pagamento."
+                : "Avise um sócio para lançar o pacote. Sem saldo, a geração fica bloqueada."}
             </p>
           </div>
         )}
@@ -230,7 +236,8 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
           </form>
         </section>
 
-        {/* ---------------- Pacotes e pagamentos ---------------- */}
+        {/* ---------------- Pacotes e pagamentos (só gestão) ---------------- */}
+        {gestao && (
         <section className="card p-4 flex flex-col gap-3">
           <h2 className="font-semibold">Pacotes e pagamentos</h2>
 
@@ -291,6 +298,7 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
             </button>
           </form>
         </section>
+        )}
 
         {/* ---------------- Dados cadastrais ---------------- */}
         <form action={atualizarCliente} className="card p-4 flex flex-col gap-3">

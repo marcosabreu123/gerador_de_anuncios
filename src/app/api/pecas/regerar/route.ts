@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { enfileirar } from "@/lib/agencia/fila";
-import type { PecaPlanejada } from "@/lib/agencia/types";
+import type { BriefingPecaManual } from "@/lib/agencia/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -39,16 +39,16 @@ export async function POST(request: NextRequest) {
 
   const instrucao = body.instrucao?.trim();
   if (instrucao) {
-    const briefing = (peca.briefing ?? {}) as PecaPlanejada & Record<string, unknown>;
-    // Acumula os ajustes em vez de substituir: o segundo pedido não deve
+    const briefing = (peca.briefing ?? {}) as BriefingPecaManual;
+    // O ajuste entra no próprio prompt e ACUMULA: o segundo pedido não pode
     // apagar o primeiro ("mais escuro" + "preço maior" valem juntos).
-    const anteriores = typeof briefing.observacoes === "string" ? briefing.observacoes : "";
+    const promptAtual = briefing.prompt ?? "";
     await supabase
       .from("pecas")
       .update({
         briefing: {
           ...briefing,
-          observacoes: anteriores ? `${anteriores} | ${instrucao}` : instrucao,
+          prompt: `${promptAtual}\n\nAjuste pedido: ${instrucao}`.trim(),
         },
       })
       .eq("id", peca.id);
