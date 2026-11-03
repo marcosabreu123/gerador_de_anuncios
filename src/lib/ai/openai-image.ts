@@ -1,5 +1,4 @@
 import OpenAI, { toFile } from "openai";
-import sharp from "sharp";
 import { IMAGE_MODEL } from "./models";
 
 // Imagem gerada pela OpenAI (bytes inline em base64). Carrega o prompt que a
@@ -46,6 +45,12 @@ function getClient(): OpenAI {
 // nenhum ganho de qualidade pro modelo e só engordam o payload/tempo de upload.
 const MAX_LADO_ENTRADA = 2048;
 
+function extensaoDoMime(mime: string): string {
+  if (mime.includes("png")) return "png";
+  if (mime.includes("webp")) return "webp";
+  return "jpg";
+}
+
 // Reconverte qualquer imagem anexada (produto/logo/referência) para um PNG
 // RGB limpo antes de mandar pra OpenAI. Existe porque fotos de celular às
 // vezes chegam em variações que o endpoint de edição rejeita direto com
@@ -53,13 +58,47 @@ const MAX_LADO_ENTRADA = 2048;
 // perfis de cor incomuns) — decodificar e reexportar via sharp normaliza
 // tudo isso pro mesmo formato, além de já corrigir a rotação pelo EXIF antes
 // de descartar os metadados.
-async function normalizarImagemEntrada(base64: string): Promise<Buffer> {
+//
+// IMPORTANTE — o sharp é OPCIONAL aqui, carregado sob demanda.
+// Ele é um binário nativo e já derrubou este app inteiro em produção: na
+// Vercel a libvips não subia junto e TODA rota que o importava respondia
+// HTTP 500 na partida, inclusive as que nem usavam normalização. Uma
+// melhoria de borda não pode ter esse poder. Se o sharp não carregar, a
+// imagem segue no formato original: o pior caso volta a ser a OpenAI
+// recusar um CMYK esquisito — exatamente o comportamento anterior — em vez
+// do produto inteiro parar de funcionar.
+type FabricaSharp = (typeof import("sharp"))["default"];
+let sharpCache: FabricaSharp | null | undefined;
+
+async function carregarSharp(): Promise<FabricaSharp | null> {
+  if (sharpCache !== undefined) return sharpCache;
+  try {
+    sharpCache = (await import("sharp")).default;
+  } catch (e) {
+    console.error("[openai-image] sharp indisponível, seguindo sem normalizar:", e);
+    sharpCache = null;
+  }
+  return sharpCache;
+}
+
+async function normalizarImagemEntrada(base64: string): Promise<{ bytes: Buffer; normalizou: boolean }> {
   const bytesOriginais = Buffer.from(base64, "base64");
-  return sharp(bytesOriginais)
-    .rotate()
-    .resize({ width: MAX_LADO_ENTRADA, height: MAX_LADO_ENTRADA, fit: "inside", withoutEnlargement: true })
-    .png()
-    .toBuffer();
+  const sharp = await carregarSharp();
+  if (!sharp) return { bytes: bytesOriginais, normalizou: false };
+
+  try {
+    const bytes = await sharp(bytesOriginais)
+      .rotate()
+      .resize({ width: MAX_LADO_ENTRADA, height: MAX_LADO_ENTRADA, fit: "inside", withoutEnlargement: true })
+      .png()
+      .toBuffer();
+    return { bytes, normalizou: true };
+  } catch (e) {
+    // Arquivo que nem o sharp decodifica: manda como veio e deixa a OpenAI
+    // decidir, em vez de falhar a peça aqui.
+    console.error("[openai-image] falha ao normalizar, enviando original:", e);
+    return { bytes: bytesOriginais, normalizou: false };
+  }
 }
 
 // A API de imagem da OpenAI não tem parte estruturada de texto por imagem
@@ -94,8 +133,13 @@ async function gerarUma(
           prompt: promptFinal,
           image: await Promise.all(
             imagens.map(async (img, i) => {
-              const bytesNormalizados = await normalizarImagemEntrada(img.base64);
-              return toFile(bytesNormalizados, `${img.tipo}-${i}.png`, { type: "image/png" });
+              const { bytes, normalizou } = await normalizarImagemEntrada(img.base64);
+              // Sem normalização o arquivo continua no formato original, então
+              // nome e mime precisam refletir isso — rotular um JPEG como PNG
+              // faria a própria OpenAI recusar.
+              const ext = normalizou ? "png" : extensaoDoMime(img.mimeType);
+              const tipo = normalizou ? "image/png" : img.mimeType;
+              return toFile(bytes, `${img.tipo}-${i}.${ext}`, { type: tipo });
             }),
           ),
           size: tamanho,
