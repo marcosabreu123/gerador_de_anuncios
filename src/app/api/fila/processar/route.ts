@@ -6,15 +6,19 @@ import { gerarPeca } from "@/lib/agencia/gerar-peca";
 import { devolverImagem } from "@/lib/agencia/pacotes";
 
 export const runtime = "nodejs";
-// Cada peça leva 40-90s (gpt-image-2 medido ao vivo neste projeto). 300s dá
-// espaço para 2-3 peças por invocação sem risco de ser morto no meio.
-export const maxDuration = 300;
+// 120s é o teto que este projeto aceita: medido em produção, 300 fazia a
+// função falhar na partida (HTTP 500 imediato) enquanto 60 e 120 respondiam
+// normalmente. É o mesmo valor já usado em /api/adjust.
+export const maxDuration = 120;
 
 // Orçamento de tempo próprio, abaixo do maxDuration: o worker para de pegar
 // job novo quando o tempo restante não comporta mais uma peça. Sem isso a
 // plataforma mataria o processo no meio de uma geração — e aí a peça ficaria
 // travada em "gerando" com o crédito já gasto na OpenAI.
-const ORCAMENTO_MS = 230_000;
+//
+// Com 120s de teto e uma peça levando 40-90s, cabe UMA peça por invocação.
+// O cron roda a cada minuto, então um lote de 5 leva cerca de 5 minutos.
+const ORCAMENTO_MS = 100_000;
 const RESERVA_POR_PECA_MS = 95_000;
 
 // Worker da fila. Acionado pelo cron da Vercel (ver vercel.json) e também
@@ -30,7 +34,12 @@ export async function POST(request: NextRequest) {
   const destravados = await destravarJobsAbandonados();
   const processados: { jobId: string; tipo: string; ok: boolean; erro?: string }[] = [];
 
-  while (Date.now() - inicio < ORCAMENTO_MS - RESERVA_POR_PECA_MS) {
+  // A primeira iteração sempre roda: com o orçamento apertado de 120s, a
+  // checagem de tempo sozinha nunca liberaria nem uma peça, e a fila ficaria
+  // parada para sempre.
+  let primeiraRodada = true;
+  while (primeiraRodada || Date.now() - inicio < ORCAMENTO_MS - RESERVA_POR_PECA_MS) {
+    primeiraRodada = false;
     const job = await reservarProximoJob();
     if (!job) break;
 
