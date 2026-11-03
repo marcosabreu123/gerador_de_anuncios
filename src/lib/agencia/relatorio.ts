@@ -25,7 +25,7 @@ export async function resumoPorCliente(periodo: PeriodoRelatorio): Promise<Resum
       supabase.from("clientes").select("id, nome"),
       supabase
         .from("geracoes")
-        .select("cliente_id, custo_brl")
+        .select("cliente_id, custo_brl, tipo")
         .gte("created_at", periodo.inicio)
         .lte("created_at", periodo.fim),
       supabase
@@ -59,7 +59,11 @@ export async function resumoPorCliente(periodo: PeriodoRelatorio): Promise<Resum
   for (const g of geracoes ?? []) {
     const alvo = g.cliente_id ? porCliente.get(g.cliente_id) : null;
     if (!alvo) continue;
-    alvo.geracoes += 1;
+    // O custo soma TUDO (texto, imagem e transcrição), mas a contagem de
+    // "gerações" conta só imagem: é a imagem que representa uma tentativa de
+    // arte. Contando todas as chamadas, uma peça que acerta de primeira já
+    // marcava 2,0 (um prompt + uma imagem) e parecia retrabalho.
+    if (g.tipo === "imagem") alvo.geracoes += 1;
     alvo.custo_brl += Number(g.custo_brl ?? 0);
   }
 
@@ -78,9 +82,9 @@ export async function resumoPorCliente(periodo: PeriodoRelatorio): Promise<Resum
   }
 
   for (const resumo of porCliente.values()) {
-    // O multiplicador que decide a margem: quantas chamadas de API foram
-    // precisas por peça entregue. Perto de 1 = acertou de primeira; 3+ = o
-    // briefing ou o brand kit do cliente precisa de ajuste.
+    // O multiplicador que decide a margem: quantas IMAGENS foram precisas por
+    // peça entregue. 1 = acertou de primeira; 3+ = o briefing ou o brand kit
+    // do cliente precisa de ajuste, porque cada tentativa extra sai da margem.
     resumo.geracoes_por_peca =
       resumo.pecas_entregues > 0 ? resumo.geracoes / resumo.pecas_entregues : 0;
     resumo.margem_brl = resumo.receita_brl - resumo.custo_brl;

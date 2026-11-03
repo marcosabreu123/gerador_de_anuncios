@@ -53,7 +53,7 @@ export default async function DashboardPage() {
               <p className="text-xl font-bold">{formatarBRL(totais.custo_medio_por_peca)}</p>
               <p className="text-xs text-[var(--muted)] mt-1">
                 {totais.pecas_entregues > 0
-                  ? `${(totais.geracoes / totais.pecas_entregues).toFixed(1)} geração(ões) por peça — quanto mais perto de 1, menos retrabalho.`
+                  ? `${(totais.geracoes / totais.pecas_entregues).toFixed(1)} imagem(ns) geradas por peça entregue — 1 é acertar de primeira.`
                   : "Sem peças entregues ainda."}
               </p>
             </div>
@@ -78,7 +78,7 @@ export default async function DashboardPage() {
                   <tr className="text-left text-[var(--muted)]">
                     <th className="py-2 font-medium">Cliente</th>
                     <th className="py-2 font-medium text-right">Peças</th>
-                    <th className="py-2 font-medium text-right">Ger./peça</th>
+                    <th className="py-2 font-medium text-right" title="Imagens geradas por peça entregue — 1 é acertar de primeira">Img/peça</th>
                     <th className="py-2 font-medium text-right">Custo</th>
                     <th className="py-2 font-medium text-right">Receita</th>
                     <th className="py-2 font-medium text-right">Margem</th>
