@@ -6,6 +6,7 @@ import AgenciaHeader from "@/components/AgenciaHeader";
 import UploadMaterial from "@/components/UploadMaterial";
 import { saldoDoCliente } from "@/lib/agencia/pacotes";
 import {
+  alternarArquivoCliente,
   atualizarCliente,
   confirmarPagamento,
   removerReferencia,
@@ -81,12 +82,17 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
             <p className="text-sm text-[var(--muted)]">{cliente.nicho ?? "Nicho não informado"}</p>
           </div>
           <div className="flex items-center gap-2">
+            {!cliente.ativo && <span className="badge">arquivado</span>}
             <span className="badge" title="Imagens disponíveis no pacote">
               {saldo.disponivel} img
             </span>
-            <Link href={`/clientes/${id}/nova-geracao`} className="btn btn-primary">
-              Novo pedido
-            </Link>
+            {/* Cliente arquivado não recebe pedido novo: reative antes, para
+                não produzir no lugar errado por engano. */}
+            {cliente.ativo && (
+              <Link href={`/clientes/${id}/nova-geracao`} className="btn btn-primary">
+                Novo pedido
+              </Link>
+            )}
           </div>
         </div>
 
@@ -363,6 +369,22 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
             Salvar dados
           </button>
         </form>
+
+        {/* Arquivar é decisão comercial (o cliente saiu), então fica com o
+            sócio. Não apaga nada: o histórico continua valendo no relatório. */}
+        {gestao && (
+          <form action={alternarArquivoCliente} className="flex items-center gap-3 flex-wrap">
+            <input type="hidden" name="id" value={id} />
+            <button type="submit" className="btn btn-outline text-sm">
+              {cliente.ativo ? "Arquivar cliente" : "Reativar cliente"}
+            </button>
+            <span className="text-xs text-[var(--muted)]">
+              {cliente.ativo
+                ? "Some da lista de clientes ativos. Pedidos, peças e pacotes continuam guardados."
+                : "Este cliente está arquivado — volta para a lista de ativos."}
+            </span>
+          </form>
+        )}
       </main>
     </>
   );

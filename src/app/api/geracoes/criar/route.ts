@@ -126,10 +126,18 @@ export async function POST(request: NextRequest) {
 
   const { data: cliente } = await supabase
     .from("clientes")
-    .select("id, nome")
+    .select("id, nome, ativo")
     .eq("id", clienteId)
     .maybeSingle();
   if (!cliente) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+  // A tela já esconde o botão, mas a regra vale aqui também: a rota é o que
+  // de fato gasta API, e um link antigo não pode produzir para quem saiu.
+  if (!cliente.ativo) {
+    return NextResponse.json(
+      { error: "Este cliente está arquivado. Reative antes de produzir." },
+      { status: 409 },
+    );
+  }
 
   // Confere saldo antes de produzir. Colaborador não pode furar o saldo: a
   // decisão de produzir fiado é comercial, então fica com o sócio.

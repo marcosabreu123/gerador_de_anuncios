@@ -20,12 +20,17 @@ export interface ClienteCard {
 // cliente é eventual, achar cliente é o tempo todo.
 export default function ListaClientes({ clientes }: { clientes: ClienteCard[] }) {
   const [busca, setBusca] = useState("");
-  const [filtro, setFiltro] = useState<"todos" | "sem_saldo" | "em_producao">("todos");
+  const [filtro, setFiltro] = useState<"todos" | "sem_saldo" | "em_producao" | "arquivados">(
+    "todos",
+  );
   const [formAberto, setFormAberto] = useState(false);
 
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return clientes.filter((c) => {
+      // Arquivado só aparece em "Arquivados": cliente que saiu não ocupa a
+      // grade de quem está sendo atendido hoje.
+      if (filtro === "arquivados" ? c.ativo : !c.ativo) return false;
       if (filtro === "sem_saldo" && c.saldo > 0) return false;
       if (filtro === "em_producao" && !c.temPedidoEmAndamento) return false;
       if (!termo) return true;
@@ -35,8 +40,10 @@ export default function ListaClientes({ clientes }: { clientes: ClienteCard[] })
     });
   }, [clientes, busca, filtro]);
 
-  const semSaldo = clientes.filter((c) => c.saldo === 0).length;
-  const emProducao = clientes.filter((c) => c.temPedidoEmAndamento).length;
+  const ativos = clientes.filter((c) => c.ativo);
+  const semSaldo = ativos.filter((c) => c.saldo === 0).length;
+  const emProducao = ativos.filter((c) => c.temPedidoEmAndamento).length;
+  const arquivados = clientes.length - ativos.length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -60,7 +67,7 @@ export default function ListaClientes({ clientes }: { clientes: ClienteCard[] })
           de quem gerencia dezenas de contas. */}
       <div className="flex flex-wrap gap-2">
         <Chip ativo={filtro === "todos"} onClick={() => setFiltro("todos")}>
-          Todos ({clientes.length})
+          Todos ({ativos.length})
         </Chip>
         <Chip ativo={filtro === "em_producao"} onClick={() => setFiltro("em_producao")}>
           Em produção ({emProducao})
@@ -68,6 +75,11 @@ export default function ListaClientes({ clientes }: { clientes: ClienteCard[] })
         <Chip ativo={filtro === "sem_saldo"} onClick={() => setFiltro("sem_saldo")}>
           Sem saldo ({semSaldo})
         </Chip>
+        {arquivados > 0 && (
+          <Chip ativo={filtro === "arquivados"} onClick={() => setFiltro("arquivados")}>
+            Arquivados ({arquivados})
+          </Chip>
+        )}
       </div>
 
       {formAberto && (

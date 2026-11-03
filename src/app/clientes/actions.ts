@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { requireOperador, requireSocio } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { PACOTE_ENTRADA } from "@/lib/agencia/pacotes";
 
@@ -28,7 +28,7 @@ function listaDeLinhas(form: FormData, campo: string): string[] {
 }
 
 export async function criarCliente(form: FormData) {
-  const { authId } = await requireUser();
+  const { authId } = await requireOperador();
   const supabase = await createClient();
 
   const nome = texto(form, "nome");
@@ -52,7 +52,7 @@ export async function criarCliente(form: FormData) {
 }
 
 export async function atualizarCliente(form: FormData) {
-  await requireUser();
+  await requireOperador();
   const supabase = await createClient();
   const id = texto(form, "id");
   if (!id) return;
@@ -73,7 +73,7 @@ export async function atualizarCliente(form: FormData) {
 }
 
 export async function salvarBrandKit(form: FormData) {
-  await requireUser();
+  await requireOperador();
   const supabase = await createClient();
   const clienteId = texto(form, "cliente_id");
   if (!clienteId) return;
@@ -101,7 +101,7 @@ export async function salvarBrandKit(form: FormData) {
 }
 
 export async function adicionarReferencia(form: FormData) {
-  await requireUser();
+  await requireOperador();
   const supabase = await createClient();
   const clienteId = texto(form, "cliente_id");
   const url = texto(form, "url");
@@ -118,7 +118,7 @@ export async function adicionarReferencia(form: FormData) {
 }
 
 export async function removerReferencia(form: FormData) {
-  await requireUser();
+  await requireOperador();
   const supabase = await createClient();
   const id = texto(form, "id");
   const clienteId = texto(form, "cliente_id");
@@ -132,7 +132,7 @@ export async function removerReferencia(form: FormData) {
 // no controle manual os dois acontecem juntos (cliente paga o Pix e o saldo
 // entra). Quando houver gateway, o pagamento passa a nascer "pendente".
 export async function venderPacote(form: FormData) {
-  const { authId } = await requireUser();
+  const { authId } = await requireSocio();
   const supabase = await createClient();
   const clienteId = texto(form, "cliente_id");
   if (!clienteId) return;
@@ -172,7 +172,7 @@ export async function venderPacote(form: FormData) {
 }
 
 export async function confirmarPagamento(form: FormData) {
-  await requireUser();
+  await requireSocio();
   const supabase = await createClient();
   const id = texto(form, "id");
   const clienteId = texto(form, "cliente_id");
@@ -191,7 +191,7 @@ export async function confirmarPagamento(form: FormData) {
 // de R$ 34,90 por 10 imagens fecha a conta — custo de API quase nunca é o
 // gargalo, tempo de gente é.
 export async function registrarTempoPeca(form: FormData) {
-  await requireUser();
+  await requireOperador();
   const supabase = await createClient();
   const id = texto(form, "id");
   const pedidoId = texto(form, "pedido_id");
@@ -207,7 +207,7 @@ export async function registrarTempoPeca(form: FormData) {
 }
 
 export async function aprovarPeca(form: FormData) {
-  await requireUser();
+  await requireOperador();
   const supabase = await createClient();
   const id = texto(form, "id");
   const pedidoId = texto(form, "pedido_id");
@@ -234,4 +234,32 @@ export async function aprovarPeca(form: FormData) {
 
   if (pedidoId) revalidatePath(`/pedidos/${pedidoId}`);
   if (clienteId) revalidatePath(`/clientes/${clienteId}`);
+}
+
+// Arquiva ou reativa um cliente. Para uma carteira de dezenas de empresas, a
+// lista precisa mostrar quem está ativo hoje — cliente que saiu não pode
+// continuar ocupando a grade nem aparecer como opção de pedido.
+//
+// Arquivar NÃO apaga nada: pedidos, peças, pacotes e o custo já registrado
+// continuam de pé, porque o histórico é o que sustenta o relatório do mês.
+export async function alternarArquivoCliente(form: FormData) {
+  await requireSocio();
+  const supabase = await createClient();
+  const id = texto(form, "id");
+  if (!id) return;
+
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("ativo")
+    .eq("id", id)
+    .maybeSingle();
+  if (!cliente) return;
+
+  await supabase
+    .from("clientes")
+    .update({ ativo: !cliente.ativo, updated_at: new Date().toISOString() })
+    .eq("id", id);
+
+  revalidatePath("/clientes");
+  revalidatePath(`/clientes/${id}`);
 }
