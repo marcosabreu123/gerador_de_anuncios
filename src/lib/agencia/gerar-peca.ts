@@ -9,6 +9,7 @@ import {
   materiaisDisponiveis,
   pedidoManualParaBriefing,
 } from "@/lib/ai/agente-pedido";
+import { montarPromptDiretorArte } from "@/lib/ai/diretor-arte";
 import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
 import { custoImagemUSD, custoTextoUSD, registrarGeracao } from "./custo";
@@ -157,7 +158,12 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
             .filter(Boolean)
             .join("\n\n"),
         }).then((r) => ({ prompts: [r.prompt], uso: r.uso }))
-      : await montarPrompt(briefing);
+      : await criarComDiretorArte(manual, cliente as Cliente, (brandKit as BrandKit) ?? null, {
+          temFotoProduto: entradas.some((e) => e.tipo === "produto"),
+          temLogotipo: entradas.some((e) => e.tipo === "logotipo"),
+          temReferencia: materiaisDisponiveis(referencias).temReferencia,
+          briefingLegado: briefing,
+        });
 
   // Tokens reais quando a chamada respondeu; a estimativa só entra quando o
   // prompt veio do fallback determinístico (sem chamada, logo sem custo real).
@@ -254,4 +260,37 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
   }
 
   return { imagemUrl, promptUsado: imagens[0].promptUsado, saldoRestante };
+}
+
+// Criação do zero pelo diretor de arte. O prompt antigo (montarPrompt) fica
+// como rede: se o diretor falhar — API fora, JSON quebrado, ficha vazia — a
+// peça ainda sai, em vez de o cliente ficar sem entrega.
+async function criarComDiretorArte(
+  manual: BriefingPecaManual,
+  cliente: Cliente,
+  brandKit: BrandKit | null,
+  ctx: {
+    temFotoProduto: boolean;
+    temLogotipo: boolean;
+    temReferencia: boolean;
+    briefingLegado: Parameters<typeof montarPrompt>[0];
+  },
+): Promise<{ prompts: string[]; uso?: { modelo: string; entrada: number; saida: number } }> {
+  try {
+    const r = await montarPromptDiretorArte({
+      empresa: cliente.nome,
+      nicho: cliente.nicho,
+      pedido: manual.prompt,
+      identidade: identidadeParaInstrucao(cliente, brandKit),
+      formato: manual.formato ?? "feed-4-5",
+      temFotoProduto: ctx.temFotoProduto,
+      temLogotipo: ctx.temLogotipo,
+      temReferencia: ctx.temReferencia,
+      variacao: { indice: manual.variacao ?? 0, total: manual.total ?? 1 },
+    });
+    return { prompts: [r.prompt], uso: r.uso };
+  } catch (e) {
+    console.error("[gerar-peca] diretor de arte falhou, usando o montador antigo:", e);
+    return montarPrompt(ctx.briefingLegado);
+  }
 }
