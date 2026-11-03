@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { enfileirar } from "@/lib/agencia/fila";
 import type { BriefingPecaManual } from "@/lib/agencia/types";
@@ -38,20 +38,36 @@ export async function POST(request: NextRequest) {
   if (!peca) return NextResponse.json({ error: "Peça não encontrada." }, { status: 404 });
 
   const instrucao = body.instrucao?.trim();
+  const briefing = (peca.briefing ?? {}) as BriefingPecaManual;
+
   if (instrucao) {
-    const briefing = (peca.briefing ?? {}) as BriefingPecaManual;
     // O ajuste entra no próprio prompt e ACUMULA: o segundo pedido não pode
     // apagar o primeiro ("mais escuro" + "preço maior" valem juntos).
     const promptAtual = briefing.prompt ?? "";
+    const promptAcumulado = `${promptAtual}\n\nAjuste pedido: ${instrucao}`.trim();
+
+    // Com a arte já entregue na mão, ajustar é EDITAR aquela imagem, não
+    // produzir outra: o operador pediu "o preço maior", não uma arte nova.
+    // Aponta sempre para a imagem ATUAL da peça, então o segundo ajuste parte
+    // do resultado do primeiro. Sem imagem (peça que falhou antes de gerar)
+    // não há o que editar, e ela volta pelo caminho de criação com o ajuste
+    // embutido no prompt.
+    const ajuste: Partial<BriefingPecaManual> = peca.imagem_url
+      ? { ajusteSobreUrl: peca.imagem_url as string, instrucaoAjuste: instrucao }
+      : {};
+
     await supabase
       .from("pecas")
-      .update({
-        briefing: {
-          ...briefing,
-          prompt: `${promptAtual}\n\nAjuste pedido: ${instrucao}`.trim(),
-        },
-      })
+      .update({ briefing: { ...briefing, ...ajuste, prompt: promptAcumulado } })
       .eq("id", peca.id);
+  } else if (briefing.ajusteSobreUrl || briefing.instrucaoAjuste) {
+    // "Tentar de novo" sem instrução: refazer, não repetir o ajuste anterior.
+    // Sem limpar, uma peça que falhou depois de um ajuste voltaria editando a
+    // imagem velha com o pedido velho.
+    const limpo = { ...briefing };
+    delete limpo.ajusteSobreUrl;
+    delete limpo.instrucaoAjuste;
+    await supabase.from("pecas").update({ briefing: limpo }).eq("id", peca.id);
   }
 
   await supabase.from("pecas").update({ status: "pendente", erro: null }).eq("id", peca.id);
@@ -62,17 +78,21 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ ok: true, pecaId: peca.id });
 }
 
+// Mesma mecânica de /api/geracoes/criar: dentro de `after()` porque um `void
+// fetch` solto morre junto com a instância assim que a resposta sai.
 function dispararWorker(request: NextRequest) {
-  try {
-    const base = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : new URL(request.url).origin;
-    const segredo = process.env.CRON_SECRET;
-    void fetch(`${base}/api/fila/processar`, {
+  const base = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : new URL(request.url).origin;
+  const segredo = process.env.CRON_SECRET;
+
+  after(async () => {
+    await fetch(`${base}/api/fila/processar`, {
       method: "POST",
       headers: segredo ? { authorization: `Bearer ${segredo}` } : {},
-    }).catch(() => {});
-  } catch {
-    // O cron é a garantia; isso aqui só adianta.
-  }
+      signal: AbortSignal.timeout(3000),
+    }).catch(() => {
+      // Esperado: o abort. A tela do pedido e o cron insistem depois.
+    });
+  });
 }

@@ -718,20 +718,20 @@ Return only the final edit prompt in English (with any visual text kept in its o
   return { prompt: reforcado, usouFallback: false };
 }
 
-// Fallback determinístico em português pro caminho gpt-image-2 (usado só
-// quando ENABLE_FLUX_EDIT=false, ver models.ts) — gpt-image-2 segue
-// instrução em português com fidelidade alta, incluindo texto renderizado
-// corretamente (testado ao vivo, sem os erros de digitação que o Flux
-// Kontext às vezes introduz em textos não relacionados ao pedido).
+// Fallback determinístico em português para o caminho gpt-image-2, usado
+// quando a chamada ao montador de prompt falha. gpt-image-2 segue instrução
+// em português com fidelidade alta, incluindo texto renderizado corretamente
+// (testado ao vivo).
 function fallbackAjusteCirurgicoPortugues(pedidoUsuario: string): string {
   return `Aplique somente esta alteração: ${pedidoUsuario}. Preserve exatamente todo o restante da arte original, incluindo composição geral, enquadramento, proporção da arte, produto, formato do produto, cor do produto, textura do produto, fundo, iluminação, sombras, reflexos, paleta de cores, estilo visual aprovado, tipografia, hierarquia visual, todos os textos existentes, preço, telefone/WhatsApp, endereço, CTA, nome da marca, logo, cores da logo, formato da logo, proporção da logo, posição da logo, nitidez da logo e identidade visual da marca, a menos que o pedido tenha citado explicitamente um desses elementos. Preserve o formato/proporção original da imagem (não mude para outro formato a menos que o usuário peça explicitamente). Não recrie a arte inteira e não mude nenhum elemento que não tenha sido pedido. ${FOOD_CONDITIONAL_HINT} ${DESIGNER_GRADE_EDIT_HINT}`;
 }
 
-// Variante de montarPromptAjuste em PORTUGUÊS, para quando o provider de
-// ajuste é gpt-image-2 em vez do Flux Kontext (ver ENABLE_FLUX_EDIT em
-// models.ts). Mesma exigência de edição cirúrgica — só muda o idioma de
-// saída, porque gpt-image-2 não tem o mesmo ganho de fidelidade com inglês
-// que o Flux Kontext tem.
+// Prompt do botão "Ajustar": o operador está olhando uma peça entregue e
+// pediu uma mudança pontual. Exige edição cirúrgica — muda só o que ele
+// citou e preserva todo o resto da arte.
+//
+// Em português porque é gpt-image-2 que executa a edição, e ele não tem o
+// ganho de fidelidade com inglês que outros modelos de edição têm.
 export async function montarPromptAjusteGptImage(
   promptAnterior: string,
   pedidoUsuario: string,
@@ -853,9 +853,9 @@ Instruções finais:
   return { prompt: reforcado, usouFallback: false };
 }
 
-// Variante de montarPromptEdicaoDireta em PORTUGUÊS, para o mesmo caso de
-// ENABLE_FLUX_EDIT=false — usada pelo fluxo /editar (design pronto enviado
-// pelo lojista, sem prompt anterior nosso).
+// Variante de montarPromptEdicaoDireta em PORTUGUÊS, para editar um design
+// pronto sem prompt anterior nosso. Sem uso no fluxo atual — a edição de arte
+// enviada passa por montarPromptMelhorarArteExistente.
 export async function montarPromptEdicaoDiretaGptImage(pedidoUsuario: string): Promise<PromptGerado> {
   const apiKey = process.env.OPENAI_API_KEY;
   const fallback = fallbackAjusteCirurgicoPortugues(pedidoUsuario);

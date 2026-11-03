@@ -1,5 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { montarPrompt, montarPromptMelhorarArteExistente } from "@/lib/ai/prompt-builder";
+import {
+  montarPrompt,
+  montarPromptAjusteGptImage,
+  montarPromptMelhorarArteExistente,
+} from "@/lib/ai/prompt-builder";
 import { materiaisDisponiveis, pedidoManualParaBriefing } from "@/lib/ai/agente-pedido";
 import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
@@ -107,27 +111,40 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
     temReferencia: materiaisDisponiveis(referencias).temReferencia,
   });
 
-  // Arte-base: o operador subiu uma peça pronta e quer melhorá-la ou
-  // recriá-la. Entra como imagem de entrada e troca o montador de prompt —
-  // montarPromptMelhorarArteExistente já sabe exigir mudança real de
-  // composição em vez de só clarear a mesma arte.
-  const transformandoArte = Boolean(manual.arteBaseUrl);
-  if (manual.arteBaseUrl) {
-    const base = await baixarComoEntrada(manual.arteBaseUrl, "base");
-    if (!base) throw new Error("Não consegui ler a arte enviada como base.");
+  // Três caminhos possíveis, nesta ordem de precedência:
+  //
+  // 1. Ajuste cirúrgico — o operador clicou "Ajustar" numa peça entregue e
+  //    pediu uma mudança pontual. Edita AQUELA imagem e preserva o resto.
+  // 2. Arte-base — ele subiu uma peça pronta para melhorar ou recriar.
+  // 3. Criação do zero, a partir do briefing do cliente.
+  //
+  // O ajuste vem primeiro porque é o mais específico: a peça de um ajuste
+  // pode ter nascido de uma arte-base, e nesse caso o que vale é a imagem que
+  // ele está olhando agora, não a que originou a peça.
+  const ajustando = Boolean(manual.ajusteSobreUrl && manual.instrucaoAjuste);
+  const urlDeEntrada = ajustando ? manual.ajusteSobreUrl : manual.arteBaseUrl;
+  const transformandoArte = Boolean(urlDeEntrada);
+
+  if (urlDeEntrada) {
+    const base = await baixarComoEntrada(urlDeEntrada, "base");
+    if (!base) throw new Error("Não consegui ler a arte usada como base.");
     // A arte-base vai na frente: é a referência principal da geração.
     entradas.unshift(base);
   }
 
   // 1) Prompt (custo de texto)
   const inicioPrompt = Date.now();
-  const { prompts } = transformandoArte
-    ? await montarPromptMelhorarArteExistente({
-        modoTransformacao: manual.modoTransformacao ?? "melhoria_recompositiva",
-        direcao: "personalizado",
-        instrucaoUsuario: manual.prompt,
-      }).then((r) => ({ prompts: [r.prompt] }))
-    : await montarPrompt(briefing);
+  const { prompts } = ajustando
+    ? await montarPromptAjusteGptImage(peca.prompt_usado ?? "", manual.instrucaoAjuste!).then((r) => ({
+        prompts: [r.prompt],
+      }))
+    : transformandoArte
+      ? await montarPromptMelhorarArteExistente({
+          modoTransformacao: manual.modoTransformacao ?? "melhoria_recompositiva",
+          direcao: "personalizado",
+          instrucaoUsuario: manual.prompt,
+        }).then((r) => ({ prompts: [r.prompt] }))
+      : await montarPrompt(briefing);
   await registrarGeracao({
     tipo: "texto",
     modelo: "gpt-5.4",

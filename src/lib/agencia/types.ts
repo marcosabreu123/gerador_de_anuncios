@@ -143,6 +143,14 @@ export interface BriefingPecaManual {
   // melhoria_recompositiva: mesma campanha, composição claramente melhor.
   // nova_versao_criativa: mesmas informações, design recriado do zero.
   modoTransformacao?: "melhoria_recompositiva" | "nova_versao_criativa";
+  // Ajuste cirúrgico pedido no botão "Ajustar" da peça já entregue. Guarda a
+  // arte que o operador está olhando e só o que ele pediu para mudar, porque
+  // aqui a geração NÃO recria a peça: edita aquela imagem e preserva o resto.
+  //
+  // Sem isso, "deixa o preço maior" devolvia uma arte completamente outra —
+  // o botão prometia ajuste e entregava recriação.
+  ajusteSobreUrl?: string;
+  instrucaoAjuste?: string;
   // Índice e total da leva: quando se pede mais de uma imagem, cada peça
   // recebe instrução de buscar uma direção criativa diferente das irmãs.
   variacao: number;
