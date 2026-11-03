@@ -43,3 +43,6 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# Config local do Claude Code (caminhos absolutos da maquina)
+.claude/
