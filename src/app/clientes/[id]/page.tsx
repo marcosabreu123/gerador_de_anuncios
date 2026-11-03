@@ -3,9 +3,9 @@ import { notFound } from "next/navigation";
 import { ehSocio, requireOperador } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import AgenciaHeader from "@/components/AgenciaHeader";
+import UploadMaterial from "@/components/UploadMaterial";
 import { saldoDoCliente } from "@/lib/agencia/pacotes";
 import {
-  adicionarReferencia,
   atualizarCliente,
   confirmarPagamento,
   removerReferencia,
@@ -18,6 +18,7 @@ import {
   type BrandKit,
   type Cliente,
   type Pagamento,
+  type Peca,
   type Pedido,
   type Referencia,
   type TipoReferencia,
@@ -36,18 +37,35 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
   // informação operacional — precisa saber se pode gerar.
   const gestao = ehSocio(perfil);
 
-  const [{ data: brandKitRaw }, { data: referenciasRaw }, { data: pagamentosRaw }, { data: pedidosRaw }, saldo] =
-    await Promise.all([
-      supabase.from("brand_kits").select("*").eq("cliente_id", id).maybeSingle(),
-      supabase.from("referencias").select("*").eq("cliente_id", id).order("created_at", { ascending: false }),
-      supabase.from("pagamentos").select("*").eq("cliente_id", id).order("created_at", { ascending: false }),
-      supabase.from("pedidos").select("*").eq("cliente_id", id).order("created_at", { ascending: false }).limit(10),
-      saldoDoCliente(id),
-    ]);
+  const [
+    { data: brandKitRaw },
+    { data: referenciasRaw },
+    { data: pagamentosRaw },
+    { data: pedidosRaw },
+    { data: artesRaw },
+    saldo,
+  ] = await Promise.all([
+    supabase.from("brand_kits").select("*").eq("cliente_id", id).maybeSingle(),
+    supabase.from("referencias").select("*").eq("cliente_id", id).order("created_at", { ascending: false }),
+    supabase.from("pagamentos").select("*").eq("cliente_id", id).order("created_at", { ascending: false }),
+    supabase.from("pedidos").select("*").eq("cliente_id", id).order("created_at", { ascending: false }).limit(10),
+    // Galeria do cliente: tudo que já foi entregue a ele. Antes isso só
+    // existia dentro de cada pedido, então para ver o histórico de uma
+    // empresa era preciso abrir pedido por pedido.
+    supabase
+      .from("pecas")
+      .select("id, pedido_id, titulo, imagem_url, status, created_at")
+      .eq("cliente_id", id)
+      .not("imagem_url", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(18),
+    saldoDoCliente(id),
+  ]);
 
   const brandKit = (brandKitRaw as BrandKit) ?? null;
   const referencias = (referenciasRaw ?? []) as Referencia[];
   const pagamentos = (pagamentosRaw ?? []) as Pagamento[];
+  const artes = (artesRaw ?? []) as Pick<Peca, "id" | "pedido_id" | "titulo" | "imagem_url" | "status" | "created_at">[];
   const pedidos = (pedidosRaw ?? []) as Pedido[];
 
   return (
@@ -81,6 +99,40 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
                 : "Avise um sócio para lançar o pacote. Sem saldo, a geração fica bloqueada."}
             </p>
           </div>
+        )}
+
+        {/* ---------------- Galeria ---------------- */}
+        {artes.length > 0 && (
+          <section className="card p-4 flex flex-col gap-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <h2 className="font-semibold">Artes deste cliente</h2>
+              <span className="text-xs text-[var(--muted)]">{artes.length} mais recentes</span>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+              {artes.map((arte) => (
+                <Link
+                  key={arte.id}
+                  href={`/pedidos/${arte.pedido_id}`}
+                  className="relative block"
+                  title={arte.titulo ?? "Arte"}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={arte.imagem_url!}
+                    alt={arte.titulo ?? "Arte"}
+                    className="w-full aspect-square object-cover rounded-lg"
+                  />
+                  {arte.status === "aprovada" && (
+                    <span
+                      className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[var(--success)]"
+                      title="Aprovada"
+                      aria-label="Aprovada"
+                    />
+                  )}
+                </Link>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* ---------------- Pedidos ---------------- */}
@@ -214,26 +266,7 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
             </ul>
           )}
 
-          <form action={adicionarReferencia} className="flex flex-col sm:flex-row gap-2 items-end">
-            <input type="hidden" name="cliente_id" value={id} />
-            <label className="flex flex-col gap-1 flex-1">
-              <span className="label">URL da imagem</span>
-              <input name="url" required className="input" placeholder="Cole o link da imagem" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="label">Tipo</span>
-              <select name="tipo" className="input">
-                {Object.entries(TIPOS_REFERENCIA).map(([valor, info]) => (
-                  <option key={valor} value={valor}>
-                    {info.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" className="btn btn-outline">
-              Adicionar
-            </button>
-          </form>
+          <UploadMaterial clienteId={id} />
         </section>
 
         {/* ---------------- Pacotes e pagamentos (só gestão) ---------------- */}

@@ -55,6 +55,8 @@ export async function POST(request: NextRequest) {
   let intensidade: IntensidadeVisual = "ia_decide";
   let origem: "audio" | "texto" = "texto";
   let forcarSemSaldo = false;
+  let arteBaseUrl: string | undefined;
+  let modoTransformacao: "melhoria_recompositiva" | "nova_versao_criativa" | undefined;
 
   const contentType = request.headers.get("content-type") ?? "";
 
@@ -67,6 +69,8 @@ export async function POST(request: NextRequest) {
       estilo = String(form.get("estilo") ?? "ia_decide") as EstiloComunicacao;
       intensidade = String(form.get("intensidade") ?? "ia_decide") as IntensidadeVisual;
       forcarSemSaldo = form.get("forcarSemSaldo") === "true";
+      arteBaseUrl = (form.get("arteBaseUrl") as string) || undefined;
+      modoTransformacao = (form.get("modoTransformacao") as typeof modoTransformacao) || undefined;
 
       const audio = form.get("audio");
       if (audio instanceof File && audio.size > 0) {
@@ -97,6 +101,8 @@ export async function POST(request: NextRequest) {
       estilo = (body.estilo as EstiloComunicacao) ?? "ia_decide";
       intensidade = (body.intensidade as IntensidadeVisual) ?? "ia_decide";
       forcarSemSaldo = body.forcarSemSaldo === true;
+      arteBaseUrl = (body.arteBaseUrl as string) || undefined;
+      modoTransformacao = (body.modoTransformacao as typeof modoTransformacao) || undefined;
     }
   } catch {
     return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
@@ -169,7 +175,15 @@ export async function POST(request: NextRequest) {
         cliente_id: clienteId,
         ordem: i,
         titulo: quantidade > 1 ? `Variação ${i + 1}` : "Arte",
-        briefing: { prompt, formato, estilo, intensidade, variacao: i, total: quantidade },
+        briefing: {
+          prompt,
+          formato,
+          estilo,
+          intensidade,
+          variacao: i,
+          total: quantidade,
+          ...(arteBaseUrl ? { arteBaseUrl, modoTransformacao: modoTransformacao ?? "melhoria_recompositiva" } : {}),
+        },
         status: "pendente",
       }));
 

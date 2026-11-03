@@ -47,6 +47,20 @@ function instrucaoDeVariacao(variacao: number, total: number): string | null {
   return `Esta é a peça ${variacao + 1} de ${total} do mesmo pedido. Proponha uma solução visual claramente distinta das outras: mude conceito, enquadramento, composição e hierarquia. Mesmas informações, direção criativa diferente.`;
 }
 
+// O prompt-builder espera um "produto" curto para montar a hierarquia da
+// peça. Em vez de gastar uma chamada de modelo só para extrair isso, usa o
+// começo do próprio pedido — que é onde o operador naturalmente diz o que
+// está anunciando ("promoção de hambúrguer artesanal no combo…"). O pedido
+// completo segue em descricaoProduto, então nada se perde.
+function resumirProduto(prompt: string): string {
+  const limpo = prompt.replace(/\s+/g, " ").trim();
+  // Corta na primeira pontuação forte: costuma separar o produto do resto
+  // das condições comerciais.
+  const primeiraParte = limpo.split(/[.;\n]|\s-\s/)[0] ?? limpo;
+  const base = primeiraParte.length >= 8 ? primeiraParte : limpo;
+  return base.length > 80 ? `${base.slice(0, 80).trim()}…` : base;
+}
+
 function inferirTipoPeca(texto: string): TipoPeca {
   const t = texto.toLowerCase();
   if (/lan[çc]amento|novidade|chegou|novo /.test(t)) return "lancamento";
@@ -73,9 +87,12 @@ export function pedidoManualParaBriefing(
 
   return {
     tipoPeca: inferirTipoPeca(manual.prompt),
-    // O nome do produto vem do próprio pedido: é o operador quem sabe o que
-    // está anunciando, e forçar um campo separado só criaria mais fricção.
-    nomeProduto: cliente.nome,
+    // O produto anunciado vem do PEDIDO, nunca do nome da empresa.
+    // Passar cliente.nome aqui fazia o prompt-builder montar
+    // "Produto: Burger do Zé" e o modelo tratar a loja como se fosse o
+    // produto da peça — a marca entra como assinatura, lá embaixo.
+    nomeProduto: resumirProduto(manual.prompt),
+    descricaoProduto: manual.prompt,
     segmentoDetectado: cliente.nicho ?? undefined,
     formato: manual.formato,
     objetivo: "instagram",

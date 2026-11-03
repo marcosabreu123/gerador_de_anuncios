@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { lerRespostaJSON } from "@/lib/fetch-json";
 import GerandoMensagem from "@/components/GerandoMensagem";
+import { enviarImagemParaStorage } from "@/lib/upload-storage";
 import type { EstiloComunicacao, Formato, IntensidadeVisual } from "@/lib/types";
 
 // Tela de produção. O operador escreve ou fala o pedido, ajusta os controles
@@ -58,6 +59,13 @@ export default function NovaGeracaoForm({
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [podeForcar, setPodeForcar] = useState(false);
+  // Arte pronta que o operador quer melhorar/recriar. Quando preenchida, a
+  // geração trabalha sobre ela em vez de criar do zero.
+  const [arteBaseUrl, setArteBaseUrl] = useState<string | null>(null);
+  const [modoTransformacao, setModoTransformacao] = useState<
+    "melhoria_recompositiva" | "nova_versao_criativa"
+  >("melhoria_recompositiva");
+  const [subindoArte, setSubindoArte] = useState(false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -106,12 +114,25 @@ export default function NovaGeracaoForm({
         form.append("estilo", estilo);
         form.append("intensidade", intensidade);
         if (forcarSemSaldo) form.append("forcarSemSaldo", "true");
+        if (arteBaseUrl) {
+          form.append("arteBaseUrl", arteBaseUrl);
+          form.append("modoTransformacao", modoTransformacao);
+        }
         res = await fetch("/api/geracoes/criar", { method: "POST", body: form });
       } else {
         res = await fetch("/api/geracoes/criar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clienteId, prompt, quantidade, formato, estilo, intensidade, forcarSemSaldo }),
+          body: JSON.stringify({
+            clienteId,
+            prompt,
+            quantidade,
+            formato,
+            estilo,
+            intensidade,
+            forcarSemSaldo,
+            ...(arteBaseUrl ? { arteBaseUrl, modoTransformacao } : {}),
+          }),
         });
       }
 
@@ -187,6 +208,78 @@ export default function NovaGeracaoForm({
           </button>
         )}
         {gravando && <span className="text-sm text-[var(--muted)] self-center">Gravando…</span>}
+      </div>
+
+      {/* Partir de uma arte pronta. Opcional e recolhido no visual, porque a
+          maioria das gerações é do zero — mas quando o cliente manda a peça
+          antiga e pede "melhora essa aí", é por aqui. */}
+      <div className="flex flex-col gap-2 border-t border-[var(--border)] pt-3">
+        <span className="label">Partir de uma arte pronta (opcional)</span>
+
+        {arteBaseUrl ? (
+          <div className="flex items-start gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={arteBaseUrl} alt="Arte base" className="w-20 rounded-lg" />
+            <div className="flex flex-col gap-2 flex-1">
+              <div className="flex flex-wrap gap-2">
+                <Opcao
+                  ativo={modoTransformacao === "melhoria_recompositiva"}
+                  onClick={() => setModoTransformacao("melhoria_recompositiva")}
+                >
+                  Melhorar esta arte
+                </Opcao>
+                <Opcao
+                  ativo={modoTransformacao === "nova_versao_criativa"}
+                  onClick={() => setModoTransformacao("nova_versao_criativa")}
+                >
+                  Criar nova versão
+                </Opcao>
+              </div>
+              <p className="text-xs text-[var(--muted)]">
+                {modoTransformacao === "melhoria_recompositiva"
+                  ? "Mesma campanha, composição visivelmente melhor."
+                  : "Mesmas informações, design recriado do zero."}
+              </p>
+              <button
+                type="button"
+                onClick={() => setArteBaseUrl(null)}
+                className="text-xs text-[var(--muted)] underline self-start"
+              >
+                Remover arte base
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <input
+              type="file"
+              accept="image/*"
+              id="arte-base"
+              className="hidden"
+              disabled={subindoArte}
+              onChange={async (e) => {
+                const arquivo = e.target.files?.[0];
+                if (!arquivo) return;
+                setSubindoArte(true);
+                setErro(null);
+                try {
+                  setArteBaseUrl(await enviarImagemParaStorage(arquivo, `artes-base/${clienteId}`));
+                } catch (err) {
+                  setErro(err instanceof Error ? err.message : "Falha ao enviar a arte.");
+                } finally {
+                  setSubindoArte(false);
+                  e.target.value = "";
+                }
+              }}
+            />
+            <label
+              htmlFor="arte-base"
+              className={`btn btn-outline self-start text-sm ${subindoArte ? "opacity-60 pointer-events-none" : ""}`}
+            >
+              {subindoArte ? "Enviando…" : "Enviar arte existente"}
+            </label>
+          </>
+        )}
       </div>
 
       <Grupo titulo="Quantas imagens">

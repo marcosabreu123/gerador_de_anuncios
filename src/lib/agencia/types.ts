@@ -132,6 +132,17 @@ export interface BriefingPecaManual {
   formato: Formato;
   estilo?: EstiloComunicacao;
   intensidade?: IntensidadeVisual;
+  // Arte pronta enviada pelo operador (a peça antiga do cliente, ou algo que
+  // ele mandou por WhatsApp). Quando presente, a geração deixa de criar do
+  // zero e passa a trabalhar sobre ela — ver modoTransformacao.
+  //
+  // Isso existia numa tela separada (/melhorar) que gerava imagem sem
+  // vincular a cliente nenhum, sem consumir pacote e sem aparecer no rateio.
+  // Trazido para cá, vira peça normal: cobra do pacote e registra custo.
+  arteBaseUrl?: string;
+  // melhoria_recompositiva: mesma campanha, composição claramente melhor.
+  // nova_versao_criativa: mesmas informações, design recriado do zero.
+  modoTransformacao?: "melhoria_recompositiva" | "nova_versao_criativa";
   // Índice e total da leva: quando se pede mais de uma imagem, cada peça
   // recebe instrução de buscar uma direção criativa diferente das irmãs.
   variacao: number;

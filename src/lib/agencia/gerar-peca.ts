@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { montarPrompt } from "@/lib/ai/prompt-builder";
+import { montarPrompt, montarPromptMelhorarArteExistente } from "@/lib/ai/prompt-builder";
 import { materiaisDisponiveis, pedidoManualParaBriefing } from "@/lib/ai/agente-pedido";
 import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
@@ -107,9 +107,27 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
     temReferencia: materiaisDisponiveis(referencias).temReferencia,
   });
 
+  // Arte-base: o operador subiu uma peça pronta e quer melhorá-la ou
+  // recriá-la. Entra como imagem de entrada e troca o montador de prompt —
+  // montarPromptMelhorarArteExistente já sabe exigir mudança real de
+  // composição em vez de só clarear a mesma arte.
+  const transformandoArte = Boolean(manual.arteBaseUrl);
+  if (manual.arteBaseUrl) {
+    const base = await baixarComoEntrada(manual.arteBaseUrl, "base");
+    if (!base) throw new Error("Não consegui ler a arte enviada como base.");
+    // A arte-base vai na frente: é a referência principal da geração.
+    entradas.unshift(base);
+  }
+
   // 1) Prompt (custo de texto)
   const inicioPrompt = Date.now();
-  const { prompts } = await montarPrompt(briefing);
+  const { prompts } = transformandoArte
+    ? await montarPromptMelhorarArteExistente({
+        modoTransformacao: manual.modoTransformacao ?? "melhoria_recompositiva",
+        direcao: "personalizado",
+        instrucaoUsuario: manual.prompt,
+      }).then((r) => ({ prompts: [r.prompt] }))
+    : await montarPrompt(briefing);
   await registrarGeracao({
     tipo: "texto",
     modelo: "gpt-5.4",

@@ -61,13 +61,6 @@ export async function requireSocio() {
   return resultado;
 }
 
-// Mantido porque as telas legadas (/admin, /historico) ainda usam is_admin.
-export async function requireAdmin() {
-  const resultado = await requireUser();
-  if (!resultado.perfil.is_admin) redirect("/dashboard");
-  return resultado;
-}
-
 export function ehSocio(perfil: Pick<UserRow, "papel">): boolean {
   return perfil.papel === "socio";
 }
