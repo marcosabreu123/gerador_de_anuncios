@@ -373,14 +373,41 @@ O sistema SEMPRE anexa automaticamente ao seu prompt final um bloco técnico de 
 ## Formato de saída — APENAS JSON, sem markdown, sem texto fora do JSON:
 {"variacoes": ["prompt completo da peça final, em um parágrafo corrido, sem títulos, sem aspas internas, sem explicações"]}`;
 
+// Tokens realmente consumidos na montagem do prompt. Sobe junto com o prompt
+// para o custo gravado em `geracoes` ser o que a OpenAI vai cobrar, e não uma
+// estimativa — o texto responde por perto de metade do custo de uma peça
+// (gpt-5.4 a US$ 2,5/1M entrada e US$ 10/1M saída contra US$ 0,02 da imagem em
+// qualidade low), então chutar aqui distorce a margem por cliente.
+export interface UsoTokens {
+  modelo: string;
+  entrada: number;
+  saida: number;
+}
+
 export interface PromptGerado {
   prompt: string;
   usouFallback: boolean;
+  uso?: UsoTokens;
 }
 
 export interface PromptsGerados {
   prompts: string[];
   usouFallback: boolean;
+  uso?: UsoTokens;
+}
+
+// Extrai o usage da resposta da OpenAI. Campo opcional no SDK, então sem ele
+// devolve undefined e o chamador cai na estimativa.
+function usoDaCompletion(
+  modelo: string,
+  usage: { prompt_tokens?: number; completion_tokens?: number } | undefined | null,
+): UsoTokens | undefined {
+  if (!usage) return undefined;
+  return {
+    modelo,
+    entrada: usage.prompt_tokens ?? 0,
+    saida: usage.completion_tokens ?? 0,
+  };
 }
 
 // Identidade estética (EstiloComunicacao) — NUNCA inclui impacto/energia
@@ -570,16 +597,18 @@ export async function montarPrompt(b: BriefingCompleto): Promise<PromptsGerados>
         { role: "user", content: briefingParaTexto(b) },
       ],
     });
+    const uso = usoDaCompletion(TEXT_PROMPT_BUILDER_MODEL, completion.usage);
     const texto = completion.choices[0]?.message?.content;
-    if (!texto) return { prompts: montarPromptsFallback(b), usouFallback: true };
+    if (!texto) return { prompts: montarPromptsFallback(b), usouFallback: true, uso };
     const j = JSON.parse(texto);
     const prompts = Array.isArray(j.variacoes)
       ? j.variacoes.filter((p: unknown): p is string => typeof p === "string" && p.trim().length > 0)
       : [];
-    if (prompts.length === 0) return { prompts: montarPromptsFallback(b), usouFallback: true };
+    if (prompts.length === 0) return { prompts: montarPromptsFallback(b), usouFallback: true, uso };
     return {
       prompts: prompts.map((p: string) => finalizarPromptCriacao(p, b)),
       usouFallback: false,
+      uso,
     };
   } catch (e) {
     console.error("[prompt-builder] OpenAI falhou, usando fallback:", e);
@@ -742,6 +771,7 @@ export async function montarPromptAjusteGptImage(
 
   const openai = new OpenAI({ apiKey, timeout: 15_000 });
   let texto: string | null | undefined;
+  let uso: UsoTokens | undefined;
   try {
     const completion = await criarCompletionComRetry(openai, {
       model: TEXT_ROUTER_MODEL,
@@ -841,16 +871,17 @@ Instruções finais:
       ],
     });
     texto = completion.choices[0]?.message?.content?.trim();
+    uso = usoDaCompletion(TEXT_ROUTER_MODEL, completion.usage);
   } catch (e) {
     console.error("[prompt-builder] ajuste gpt-image-2 falhou, usando fallback:", e);
     return { prompt: fallback, usouFallback: true };
   }
-  if (!texto) return { prompt: fallback, usouFallback: true };
+  if (!texto) return { prompt: fallback, usouFallback: true, uso };
   const reforcado = reforcarComidaRealista(reforcarPadraoDesignerEdicao(texto), {
     contexto: `${promptAnterior} ${pedidoUsuario}`,
     fluxo: "edicao",
   });
-  return { prompt: reforcado, usouFallback: false };
+  return { prompt: reforcado, usouFallback: false, uso };
 }
 
 // Variante de montarPromptEdicaoDireta em PORTUGUÊS, para editar um design
@@ -1217,6 +1248,7 @@ export async function montarPromptMelhorarArteExistente(
 
   const openai = new OpenAI({ apiKey, timeout: 25_000 });
   let texto: string | null | undefined;
+  let uso: UsoTokens | undefined;
   try {
     const completion = await criarCompletionComRetry(openai, {
       model: TEXT_PROMPT_BUILDER_MODEL,
@@ -1227,14 +1259,15 @@ export async function montarPromptMelhorarArteExistente(
       ],
     });
     texto = completion.choices[0]?.message?.content?.trim();
+    uso = usoDaCompletion(TEXT_PROMPT_BUILDER_MODEL, completion.usage);
   } catch (e) {
     console.error("[prompt-builder] transformar arte existente falhou, usando fallback:", e);
     return { prompt: fallback, usouFallback: true };
   }
-  if (!texto) return { prompt: fallback, usouFallback: true };
+  if (!texto) return { prompt: fallback, usouFallback: true, uso };
   const reforcado = reforcarComidaRealista(aplicarPadraoDesigner(texto), {
     contexto: `${req.direcao ?? ""} ${req.instrucaoUsuario ?? ""}`,
     fluxo: req.modoTransformacao === "melhoria_recompositiva" ? "melhoria" : "nova_versao",
   });
-  return { prompt: reforcado, usouFallback: false };
+  return { prompt: reforcado, usouFallback: false, uso };
 }

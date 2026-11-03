@@ -134,23 +134,29 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
 
   // 1) Prompt (custo de texto)
   const inicioPrompt = Date.now();
-  const { prompts } = ajustando
+  const { prompts, uso } = ajustando
     ? await montarPromptAjusteGptImage(peca.prompt_usado ?? "", manual.instrucaoAjuste!).then((r) => ({
         prompts: [r.prompt],
+        uso: r.uso,
       }))
     : transformandoArte
       ? await montarPromptMelhorarArteExistente({
           modoTransformacao: manual.modoTransformacao ?? "melhoria_recompositiva",
           direcao: "personalizado",
           instrucaoUsuario: manual.prompt,
-        }).then((r) => ({ prompts: [r.prompt] }))
+        }).then((r) => ({ prompts: [r.prompt], uso: r.uso }))
       : await montarPrompt(briefing);
+
+  // Tokens reais quando a chamada respondeu; a estimativa só entra quando o
+  // prompt veio do fallback determinístico (sem chamada, logo sem custo real).
+  const modeloTexto = uso?.modelo ?? "gpt-5.4";
   await registrarGeracao({
     tipo: "texto",
-    modelo: "gpt-5.4",
-    // O prompt-builder não devolve usage; estimativa conservadora até
-    // expormos o usage real por lá. Fica registrado para não sumir do rateio.
-    custoUsd: custoTextoUSD("gpt-5.4", 3000, 1200),
+    modelo: modeloTexto,
+    custoUsd: uso
+      ? custoTextoUSD(modeloTexto, uso.entrada, uso.saida)
+      : custoTextoUSD(modeloTexto, 3000, 1200),
+    usageRaw: uso ? { entrada: uso.entrada, saida: uso.saida, estimado: false } : { estimado: true },
     duracaoMs: Date.now() - inicioPrompt,
     pecaId: peca.id,
     pedidoId: peca.pedido_id,
