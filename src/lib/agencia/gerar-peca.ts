@@ -4,7 +4,11 @@ import {
   montarPromptAjusteGptImage,
   montarPromptMelhorarArteExistente,
 } from "@/lib/ai/prompt-builder";
-import { materiaisDisponiveis, pedidoManualParaBriefing } from "@/lib/ai/agente-pedido";
+import {
+  identidadeParaInstrucao,
+  materiaisDisponiveis,
+  pedidoManualParaBriefing,
+} from "@/lib/ai/agente-pedido";
 import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
 import { custoImagemUSD, custoTextoUSD, registrarGeracao } from "./custo";
@@ -143,7 +147,15 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
       ? await montarPromptMelhorarArteExistente({
           modoTransformacao: manual.modoTransformacao ?? "melhoria_recompositiva",
           direcao: "personalizado",
-          instrucaoUsuario: manual.prompt,
+          // A identidade do cliente vai junto: no modo "nova versão" a arte
+          // enviada vale só como fonte de informação da campanha, então sem
+          // isto a peça nova sairia sem a marca de quem está pagando.
+          instrucaoUsuario: [
+            manual.prompt,
+            identidadeParaInstrucao(cliente as Cliente, (brandKit as BrandKit) ?? null),
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
         }).then((r) => ({ prompts: [r.prompt], uso: r.uso }))
       : await montarPrompt(briefing);
 

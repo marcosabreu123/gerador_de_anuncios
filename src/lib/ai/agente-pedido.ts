@@ -174,3 +174,28 @@ export async function transcreverAudio(
     duracaoSegundos: (resposta as unknown as { duration?: number }).duration ?? null,
   };
 }
+
+// Identidade do cliente em texto corrido, para o caminho de arte-base.
+//
+// montarPromptMelhorarArteExistente não recebe briefing: ele trabalha sobre a
+// arte enviada. No modo "melhorar" isso basta, porque a própria arte carrega
+// cor, logo e fonte. No modo "nova versão" não — ali a arte vale só como fonte
+// de informação da campanha, e sem isto a peça nova sai sem a marca do cliente.
+export function identidadeParaInstrucao(
+  cliente: Cliente,
+  brandKit: BrandKit | null,
+): string {
+  const partes: string[] = [`Empresa: ${cliente.nome}`];
+  if (cliente.nicho?.trim()) partes.push(`Ramo: ${cliente.nicho.trim()}`);
+  if (brandKit?.cores_primarias?.trim()) {
+    partes.push(`Cores primárias da marca: ${brandKit.cores_primarias.trim()}`);
+  }
+  if (brandKit?.cores_secundarias?.trim()) {
+    partes.push(`Cores secundárias: ${brandKit.cores_secundarias.trim()}`);
+  }
+  partes.push(...regrasDoCliente(brandKit));
+  if (brandKit?.regras_proibidas?.length) {
+    partes.push(`Nunca usar: ${brandKit.regras_proibidas.join("; ")}`);
+  }
+  return partes.join("\n");
+}
