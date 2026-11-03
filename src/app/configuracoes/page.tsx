@@ -1,5 +1,5 @@
 import { requireSocio } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import AgenciaHeader from "@/components/AgenciaHeader";
 import NovoUsuarioForm from "@/components/NovoUsuarioForm";
 import { alterarAtivo, alterarPapel, enviarRedefinicaoSenha } from "./actions";
@@ -7,7 +7,10 @@ import { PAPEIS, type PapelUsuario, type UserRow } from "@/lib/types";
 
 export default async function ConfiguracoesPage() {
   const { perfil, authId } = await requireSocio();
-  const supabase = await createClient();
+  // RLS de public.users é "auth.uid() = id": com o client de sessão o sócio
+  // enxergaria só a própria linha e a tela de equipe viria vazia. O acesso
+  // já foi validado por requireSocio acima, então aqui vai o client admin.
+  const supabase = createAdminClient();
 
   const { data } = await supabase
     .from("users")

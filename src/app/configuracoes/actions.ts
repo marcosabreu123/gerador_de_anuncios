@@ -105,7 +105,9 @@ export async function alterarPapel(form: FormData) {
   // trancar fora da gestão por engano.
   if (id === authId && papel !== "socio") return;
 
-  const supabase = await createClient();
+  // Mesmo motivo da listagem: o RLS de users só deixa mexer na própria
+  // linha. requireSocio acima é quem autoriza esta operação.
+  const supabase = createAdminClient();
   await supabase.from("users").update({ papel }).eq("id", id);
   revalidatePath("/configuracoes");
 }
@@ -119,7 +121,7 @@ export async function alterarAtivo(form: FormData) {
   // Mesma trava: ninguém se desativa sozinho.
   if (id === authId && !ativo) return;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   await supabase.from("users").update({ ativo }).eq("id", id);
   revalidatePath("/configuracoes");
 }
