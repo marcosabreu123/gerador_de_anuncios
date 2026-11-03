@@ -9,9 +9,9 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Artes com IA — Anúncios profissionais em poucos cliques",
+  title: "Artes IA — Painel da agência",
   description:
-    "Transforme fotos simples de produtos em artes publicitárias prontas para vender no Instagram e WhatsApp.",
+    "Ferramenta interna de produção de artes publicitárias: clientes, pedidos em lote e controle de custo por cliente.",
 };
 
 export const viewport: Viewport = {
