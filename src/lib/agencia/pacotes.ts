@@ -15,17 +15,9 @@ export const PACOTE_ENTRADA = {
 // Consome 1 imagem do pacote ativo mais antigo do cliente (FIFO). Retorna o
 // saldo restante, ou -1 se não há pacote com saldo. Atômico via função SQL —
 // duas entregas simultâneas não podem consumir o mesmo último crédito.
-export async function consumirImagem(clienteId: string): Promise<number> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("consumir_imagem_pacote", { p_cliente: clienteId });
-  if (error) {
-    console.error("[pacotes] erro ao consumir imagem:", error);
-    throw new Error("Falha ao consumir imagem do pacote.");
-  }
-  return typeof data === "number" ? data : -1;
-}
-
-// Mesma operação, mas a partir do worker da fila (sem sessão de usuário).
+//
+// Client admin porque quem debita é sempre o worker da fila, que roda sem
+// sessão de usuário.
 export async function consumirImagemComoWorker(clienteId: string): Promise<number> {
   const supabase = createAdminClient();
   const { data, error } = await supabase.rpc("consumir_imagem_pacote", { p_cliente: clienteId });

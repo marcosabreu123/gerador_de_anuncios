@@ -12,6 +12,7 @@ import type { Peca } from "@/lib/agencia/types";
 // coisa, voltando quando o lote terminar.
 
 const INTERVALO_ATUALIZACAO_MS = 6000;
+const INTERVALO_CUTUCAO_MS = 30_000;
 
 export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedidoId: string }) {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
   const [erro, setErro] = useState<string | null>(null);
 
   const emAndamento = pecas.some((p) => p.status === "pendente" || p.status === "gerando");
+  const paradas = pecas.filter((p) => p.status === "pendente").length;
 
   // Só fica atualizando enquanto há trabalho em curso: lote concluído não
   // precisa de polling consumindo requisição à toa.
@@ -28,6 +30,28 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
     const timer = setInterval(() => router.refresh(), INTERVALO_ATUALIZACAO_MS);
     return () => clearInterval(timer);
   }, [emAndamento, router]);
+
+  // Enquanto houver peça parada na fila, esta tela chama o worker. É a forma
+  // mais confiável de o lote andar: o disparo feito pelo servidor na hora do
+  // pedido depende de a função sobreviver à resposta, e o cron só passa de
+  // minuto em minuto. Uma chamada por peça parada, porque cada invocação
+  // produz uma peça — assim um lote de 4 sai junto, não em 4 minutos.
+  //
+  // Chamar à toa é inofensivo: a reserva do job é atômica, então uma invocação
+  // que chega sem ter o que fazer volta na hora sem gastar nada.
+  useEffect(() => {
+    if (paradas === 0) return;
+
+    const cutucar = () => {
+      for (let i = 0; i < Math.min(paradas, 4); i += 1) {
+        void fetch("/api/fila/processar", { method: "POST" }).catch(() => {});
+      }
+    };
+
+    cutucar();
+    const timer = setInterval(cutucar, INTERVALO_CUTUCAO_MS);
+    return () => clearInterval(timer);
+  }, [paradas]);
 
   async function regerar(pecaId: string, texto?: string) {
     setErro(null);

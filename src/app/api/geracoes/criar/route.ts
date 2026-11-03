@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { materiaisDisponiveis, tituloDoPedido, transcreverAudio } from "@/lib/ai/agente-pedido";
 import { enfileirar } from "@/lib/agencia/fila";
@@ -195,8 +195,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Cutuca o worker para começar agora, sem esperar o próximo tique do
-    // cron. Se falhar, o cron pega em até um minuto — por isso não é erro.
-    dispararWorker(request);
+    // cron. Se falhar, a tela do pedido insiste e o cron pega em até um
+    // minuto — por isso não é erro.
+    dispararWorker(request, criadas.length);
 
     return NextResponse.json({
       pedidoId: pedido.id,
@@ -210,17 +211,35 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function dispararWorker(request: NextRequest) {
-  try {
-    const base = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : new URL(request.url).origin;
-    const segredo = process.env.CRON_SECRET;
-    void fetch(`${base}/api/fila/processar`, {
-      method: "POST",
-      headers: segredo ? { authorization: `Bearer ${segredo}` } : {},
-    }).catch(() => {});
-  } catch {
-    // O cron é a garantia; isto aqui só adianta.
-  }
+// Dispara uma invocação do worker por peça, para o lote começar agora e as
+// peças saírem em paralelo em vez de uma por tique do cron.
+//
+// Vai dentro de `after()` porque um `void fetch` solto não sobrevive ao fim da
+// função: a Vercel congela a instância assim que a resposta é enviada, e a
+// requisição morria antes de sair. Medido em produção — a peça só começava a
+// ser gerada quando o cron passava, 44s depois de ter sido enfileirada.
+//
+// O abort em 3s solta esta função sem matar o worker: a invocação do worker já
+// foi criada e segue até o fim por conta própria, porque uma Serverless
+// Function não é cancelada quando quem chamou desconecta.
+function dispararWorker(request: NextRequest, invocacoes: number) {
+  const base = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : new URL(request.url).origin;
+  const segredo = process.env.CRON_SECRET;
+
+  after(async () => {
+    await Promise.all(
+      Array.from({ length: invocacoes }, () =>
+        fetch(`${base}/api/fila/processar`, {
+          method: "POST",
+          headers: segredo ? { authorization: `Bearer ${segredo}` } : {},
+          signal: AbortSignal.timeout(3000),
+        }).catch(() => {
+          // Esperado: o abort acima. O worker já recebeu a chamada, e de
+          // todo jeito o cron e a própria tela do pedido insistem depois.
+        }),
+      ),
+    );
+  });
 }

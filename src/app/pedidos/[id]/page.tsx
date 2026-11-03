@@ -54,8 +54,10 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
 
         {pecas.length === 0 ? (
           <div className="card p-6 text-center">
-            <p className="font-semibold">Este pedido ainda não foi aprovado</p>
-            <p className="text-sm text-[var(--muted)] mt-1">Nenhuma peça foi produzida.</p>
+            <p className="font-semibold">Nenhuma peça neste pedido</p>
+            <p className="text-sm text-[var(--muted)] mt-1">
+              O pedido foi registrado, mas nada chegou a ser produzido.
+            </p>
           </div>
         ) : (
           <PecasDoPedido pecas={pecas} pedidoId={id} />

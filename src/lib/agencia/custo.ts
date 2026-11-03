@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { TipoGeracao } from "./types";
 
 // Instrumentação de custo. O modelo antigo contava "créditos" do lojista, que
@@ -72,9 +72,15 @@ export interface RegistroGeracao {
 // Grava uma geração. NUNCA lança: medir custo não pode derrubar a entrega da
 // imagem. Se o registro falhar, perdemos uma linha de relatório — se ele
 // derrubasse a request, perderíamos a peça e o crédito do cliente junto.
+//
+// Usa o client ADMIN, não o de sessão: quase toda geração acontece no worker
+// da fila, que roda a partir do cron e não tem auth.uid() para as policies de
+// `geracoes` avaliarem. Com o client de sessão o insert voltava 42501
+// (violates row-level security) e o catch abaixo engolia o erro — o rateio de
+// custo ficava zerado justamente no caminho que produz as peças.
 export async function registrarGeracao(registro: RegistroGeracao): Promise<void> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const cambio = cambioAtual();
     await supabase.from("geracoes").insert({
       peca_id: registro.pecaId ?? null,
