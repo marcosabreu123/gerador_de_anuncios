@@ -77,7 +77,8 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
   }
 
   // Com uma peça só o card deita: imagem de um lado, ações do outro. Em pé, ela
-  // ficaria perdida num canto da tela do PC.
+  // ficaria perdida num canto da tela do PC. A altura da arte acompanha a janela
+  // para ela caber inteira no notebook, sem precisar rolar.
   const unica = pecas.length === 1;
 
   return (
@@ -98,7 +99,7 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
           <div
             key={peca.id}
             className={`card p-3 min-w-0 ${
-              unica ? "grid grid-cols-1 lg:grid-cols-[minmax(0,480px)_minmax(0,1fr)] gap-5" : "flex flex-col gap-3"
+              unica ? "grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)] gap-5" : "flex flex-col gap-3"
             }`}
           >
             {peca.imagem_url ? (
@@ -109,7 +110,11 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
                 title="Ver em tamanho real"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={peca.imagem_url} alt={peca.titulo ?? "Peça"} className="w-full" />
+                <img
+                  src={peca.imagem_url}
+                  alt={peca.titulo ?? "Peça"}
+                  className={`w-full ${unica ? "lg:w-auto lg:max-w-[480px] lg:max-h-[calc(100dvh-12rem)]" : ""}`}
+                />
                 <span className="absolute top-2 right-2 flex items-center justify-center w-8 h-8 rounded-lg bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity">
                   <Maximize2 size={14} aria-hidden="true" />
                 </span>
@@ -117,8 +122,8 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
             ) : (
               <div
                 className={`w-full aspect-[4/5] rounded-[10px] flex items-center justify-center ${
-                  peca.status === "erro" ? "bg-[var(--surface-muted)]" : "esqueleto"
-                }`}
+                  unica ? "lg:w-[400px]" : ""
+                } ${peca.status === "erro" ? "bg-[var(--surface-muted)]" : "esqueleto"}`}
               >
                 <span className="text-sm text-[var(--muted)]">
                   {peca.status === "erro" ? "Falhou" : peca.status === "gerando" ? "Gerando…" : "Na fila…"}

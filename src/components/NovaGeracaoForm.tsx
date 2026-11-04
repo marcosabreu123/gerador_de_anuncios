@@ -388,8 +388,12 @@ export default function NovaGeracaoForm({
           ))}
         </Grupo>
 
-        {/* Prévia do que vai sair: quantas peças e em que proporção. */}
-        <div className="quadro flex items-center justify-center gap-2 h-32 px-3" aria-hidden="true">
+        {/* Prévia do que vai sair: quantas peças e em que proporção. Some em janela
+            baixa, senão empurra o botão de gerar para fora da tela. */}
+        <div
+          className="quadro flex items-center justify-center gap-2 h-32 px-3 [@media(max-height:820px)]:hidden"
+          aria-hidden="true"
+        >
           {Array.from({ length: quantidade }, (_, i) => (
             <span
               key={i}
