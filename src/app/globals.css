@@ -1,68 +1,95 @@
 @import "tailwindcss";
 
 :root {
-  /* Paleta estilo Apple — azul como cor funcional principal, base em
-     cinza/branco/preto. Gradiente reservado só para detalhes ligados à IA
-     (ver --gradiente-ia), nunca como cor de fundo geral. */
-  --background: #f5f5f7; /* nevoa */
+  /* Base neutra de propósito: quem tem cor nesta ferramenta são as artes dos
+     clientes. O gradiente (--gradiente-ia) fica só na marca e no botão de gerar,
+     nunca como fundo geral. */
+  color-scheme: light;
+  --background: #f6f6f7;
+  --sidebar-bg: #fbfbfc;
   --surface: #ffffff;
-  --surface-muted: #e8e8ec;
-  --foreground: #1d1d1f; /* tinta */
-  --muted: #6e6e73; /* tinta-suave */
-  --border: #d2d2d7; /* divisor */
-  --primary: #0071e3; /* azul */
+  --surface-muted: #f0f0f2;
+  --surface-hover: #e7e7ea;
+  --input-bg: #ffffff;
+  --foreground: #131316;
+  --muted: #62626b;
+  --border: rgba(19, 19, 22, 0.09);
+  --border-strong: rgba(19, 19, 22, 0.17);
+  --primary: #131316;
   --primary-foreground: #ffffff;
-  --accent: #0071e3; /* azul — mesma cor funcional principal */
-  --accent-soft: #e8f1fd; /* azul-suave */
-  --success: #2f7d4f;
-  --success-soft: #e4f1e8;
-  --danger: #b3261e;
-  --danger-soft: #fbeae7;
-  --radius: 16px;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.05);
-  --gradiente-ia: linear-gradient(120deg, #ff6b9d, #a78bfa, #60a5fa, #fdba74);
+  --accent: #2a78d6;
+  --accent-soft: rgba(42, 120, 214, 0.1);
+  --success: #0b7a50;
+  --success-soft: rgba(11, 122, 80, 0.1);
+  --warning: #8f5e00;
+  --warning-soft: rgba(201, 133, 0, 0.14);
+  --danger: #c9302c;
+  --danger-soft: rgba(201, 48, 44, 0.09);
+  --radius: 14px;
+  --sidebar: 248px;
+  --shadow-card: 0 1px 2px rgba(19, 19, 22, 0.04);
+  --shadow-pop: 0 16px 48px rgba(19, 19, 22, 0.18);
+  --brilho: 0.55;
+  --gradiente-ia: linear-gradient(120deg, #ff8fb4, #b4a0ff, #7db8ff, #ffc48a);
 }
 
 /* Modo escuro: aplicado via atributo data-theme no <html> (definido pelo
-   script inline em layout.tsx, que roda antes do primeiro paint) — nunca
-   preto puro absoluto nem branco estourado. */
+   script inline em layout.tsx, que roda antes do primeiro paint). */
 :root[data-theme="dark"] {
-  --background: #0b0b0d;
-  --surface: #1c1c1e;
-  --surface-muted: #262628;
-  --foreground: #f5f5f7; /* tinta-clara */
-  --muted: #98989d; /* tinta-clara-suave */
-  --border: #38383a; /* divisor-escuro */
-  --primary: #409cff; /* azul levemente mais claro pra contraste no escuro */
-  --primary-foreground: #0b0b0d;
-  --accent: #409cff;
-  --accent-soft: rgba(0, 113, 227, 0.18);
-  --success: #7cc79a;
-  --success-soft: #1f3327;
-  --danger: #e2897f;
-  --danger-soft: #3a221e;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 20px rgba(0, 0, 0, 0.28);
+  color-scheme: dark;
+  --background: #0a0a0c;
+  --sidebar-bg: #0d0d10;
+  --surface: #141417;
+  --surface-muted: #1c1c20;
+  --surface-hover: #26262b;
+  --input-bg: #0e0e11;
+  --foreground: #f4f4f5;
+  --muted: #a1a1aa;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --primary: #f4f4f5;
+  --primary-foreground: #0a0a0c;
+  --accent: #3987e5;
+  --accent-soft: rgba(57, 135, 229, 0.16);
+  --success: #34c58a;
+  --success-soft: rgba(52, 197, 138, 0.12);
+  --warning: #e0a526;
+  --warning-soft: rgba(224, 165, 38, 0.13);
+  --danger: #f0716b;
+  --danger-soft: rgba(240, 113, 107, 0.12);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  --shadow-pop: 0 20px 60px rgba(0, 0, 0, 0.6);
+  --brilho: 1;
 }
 
 /* Sem preferência salva: segue o tema do sistema automaticamente (o script
    em layout.tsx só define data-theme quando há escolha explícita salva). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not([data-theme="dark"]) {
-    --background: #0b0b0d;
-    --surface: #1c1c1e;
-    --surface-muted: #262628;
-    --foreground: #f5f5f7;
-    --muted: #98989d;
-    --border: #38383a;
-    --primary: #409cff;
-    --primary-foreground: #0b0b0d;
-    --accent: #409cff;
-    --accent-soft: rgba(0, 113, 227, 0.18);
-    --success: #7cc79a;
-    --success-soft: #1f3327;
-    --danger: #e2897f;
-    --danger-soft: #3a221e;
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 20px rgba(0, 0, 0, 0.28);
+    color-scheme: dark;
+    --background: #0a0a0c;
+    --sidebar-bg: #0d0d10;
+    --surface: #141417;
+    --surface-muted: #1c1c20;
+    --surface-hover: #26262b;
+    --input-bg: #0e0e11;
+    --foreground: #f4f4f5;
+    --muted: #a1a1aa;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --primary: #f4f4f5;
+    --primary-foreground: #0a0a0c;
+    --accent: #3987e5;
+    --accent-soft: rgba(57, 135, 229, 0.16);
+    --success: #34c58a;
+    --success-soft: rgba(52, 197, 138, 0.12);
+    --warning: #e0a526;
+    --warning-soft: rgba(224, 165, 38, 0.13);
+    --danger: #f0716b;
+    --danger-soft: rgba(240, 113, 107, 0.12);
+    --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+    --shadow-pop: 0 20px 60px rgba(0, 0, 0, 0.6);
+    --brilho: 1;
   }
 }
 
@@ -89,93 +116,17 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::selection {
+  background: var(--accent-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
-  }
-}
-
-/* Container mobile-first: coluna estreita centralizada. Usado por telas
-   simples (dashboard, histórico, admin, login, editar, melhorar) — ganha
-   mais respiro em telas maiores, mas continua sendo UM container central,
-   não um grid. Os fluxos com layout de colunas de verdade (criação e
-   resultado) usam .creation-shell/.result-shell, abaixo. */
-.app-shell {
-  width: 100%;
-  max-width: 480px;
-  margin-inline: auto;
-  padding-inline: 20px;
-}
-@media (min-width: 768px) {
-  .app-shell {
-    max-width: 640px;
-  }
-}
-@media (min-width: 1024px) {
-  .app-shell {
-    max-width: 860px;
-    padding-inline: 32px;
-  }
-}
-@media (min-width: 1440px) {
-  .app-shell {
-    max-width: 1000px;
-  }
-}
-
-/* ---------- Layout desktop real: criação ---------- */
-/* Mobile: comportamento idêntico ao .app-shell (coluna única, sem grid). */
-.creation-shell {
-  width: 100%;
-  max-width: 480px;
-  margin-inline: auto;
-  padding-inline: 20px;
-}
-@media (min-width: 1024px) {
-  .creation-shell {
-    max-width: 1180px;
-    padding-inline: 24px;
-  }
-  /* Sem align-items aqui de propósito: os itens do grid precisam esticar
-     (stretch, o padrão) pra a coluna central herdar a altura total — é
-     disso que ChatWizard depende pro scroll interno funcionar. */
-  .creation-layout {
-    display: grid;
-    grid-template-columns: 260px minmax(480px, 1fr);
-    gap: 24px;
-  }
-}
-@media (min-width: 1440px) {
-  .creation-shell {
-    max-width: 1320px;
-  }
-  .creation-layout {
-    grid-template-columns: 280px minmax(560px, 1fr);
-    gap: 32px;
-  }
-}
-
-/* ---------- Layout desktop real: resultado ---------- */
-.result-shell {
-  width: 100%;
-  max-width: 480px;
-  margin-inline: auto;
-  padding-inline: 20px;
-}
-@media (min-width: 1024px) {
-  .result-shell {
-    max-width: 1100px;
-    padding-inline: 24px;
-  }
-  .result-layout {
-    display: grid;
-    grid-template-columns: minmax(420px, 640px) 360px;
-    gap: 32px;
-    align-items: start;
   }
 }
 
@@ -186,191 +137,357 @@ body {
   border-radius: 8px;
 }
 
-/* Componentes utilitários reutilizáveis */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-weight: 600;
-  border-radius: 12px;
-  padding: 14px 20px;
-  transition: opacity 0.15s ease, transform 0.05s ease, background-color 0.15s ease, border-color 0.15s ease;
-  cursor: pointer;
-  border: 1px solid transparent;
-  font-size: 16px;
-  text-align: center;
-}
-.btn:hover:not(:disabled) {
-  opacity: 0.92;
-}
-.btn:active:not(:disabled) {
-  transform: scale(0.985);
-}
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.btn-primary {
-  background: var(--primary);
-  color: var(--primary-foreground);
-}
-.btn-accent {
-  background: var(--accent);
-  color: #fff;
-}
-.btn-outline {
-  background: transparent;
-  border-color: var(--border);
-  color: var(--foreground);
-}
-.btn-outline:hover:not(:disabled) {
-  background: var(--surface-muted);
-  opacity: 1;
-}
-.btn-block {
-  width: 100%;
+/* Em @layer para os utilitários do Tailwind poderem ajustar uma classe daqui
+   no ponto de uso. Fora de uma camada estas regras ganhariam de qualquer
+   utilitário, e um "py-1" num .btn não teria efeito nenhum. */
+@layer components {
+  /* Conteúdo das telas logadas: ocupa a largura toda ao lado do menu. O limite
+     só existe para monitor ultrawide, onde linha de tabela vira uma estrada. */
+  .pagina {
+    position: relative;
+    width: 100%;
+    max-width: 1760px;
+    margin-inline: auto;
+    padding: 20px 16px calc(96px + env(safe-area-inset-bottom));
+  }
+  @media (min-width: 1024px) {
+    .pagina {
+      padding: 36px 40px 56px;
+    }
+  }
+
+  /* Coluna central das telas sem menu (entrada e sem acesso). */
+  .app-shell {
+    width: 100%;
+    max-width: 440px;
+    margin-inline: auto;
+    padding-inline: 20px;
+  }
+
+  /* Brilho discreto no topo, nas cores da marca. É o que tira o ar de planilha
+     do fundo liso sem competir com o conteúdo. */
+  .fundo-pagina {
+    position: relative;
+    isolation: isolate;
+  }
+  .fundo-pagina::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 360px;
+    z-index: -1;
+    pointer-events: none;
+    opacity: var(--brilho);
+    background:
+      radial-gradient(620px 240px at 8% -70px, rgba(125, 184, 255, 0.11), transparent 70%),
+      radial-gradient(720px 260px at 58% -110px, rgba(180, 160, 255, 0.09), transparent 70%),
+      radial-gradient(520px 220px at 100% -60px, rgba(255, 196, 138, 0.07), transparent 70%);
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 38px;
+    padding-inline: 10px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+    transition: background-color 0.12s ease, color 0.12s ease;
+  }
+  .nav-item:hover {
+    background: var(--surface-muted);
+    color: var(--foreground);
+  }
+  .nav-item[aria-current="page"] {
+    background: var(--surface-muted);
+    color: var(--foreground);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 16px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 550;
+    letter-spacing: -0.005em;
+    text-align: center;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: opacity 0.12s ease, transform 0.05s ease, background-color 0.12s ease,
+      border-color 0.12s ease;
+  }
+  .btn:hover:not(:disabled) {
+    opacity: 0.88;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.985);
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+  .btn-accent {
+    background: var(--accent);
+    color: #fff;
+  }
+  /* A ação que gasta o pacote: é o único botão colorido da tela de propósito. */
+  .btn-ia {
+    background: var(--gradiente-ia);
+    color: #111114;
+    font-weight: 600;
+  }
+  .btn-outline {
+    background: transparent;
+    border-color: var(--border-strong);
+    color: var(--foreground);
+  }
+  .btn-outline:hover:not(:disabled) {
+    background: var(--surface-muted);
+    opacity: 1;
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface-muted);
+    color: var(--foreground);
+    opacity: 1;
+  }
+  .btn-sm {
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .btn-icone {
+    width: 36px;
+    min-height: 36px;
+    padding: 0;
+    border-radius: 9px;
+  }
+  .btn-block {
+    width: 100%;
+  }
+  /* Dedo precisa de alvo maior que cursor. */
+  @media (pointer: coarse) {
+    .btn {
+      min-height: 44px;
+    }
+    .btn-sm {
+      min-height: 38px;
+    }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Card interativo (usado por links/botões de fluxo) — hover/press sutis. */
+  .card-interactive {
+    cursor: pointer;
+    transition: border-color 0.12s ease, background-color 0.12s ease, transform 0.12s ease;
+  }
+  .card-interactive:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-muted);
+  }
+  .card-interactive:active {
+    transform: scale(0.99);
+  }
+
+  /* Bloco interno de um card: um número, uma linha de lista. */
+  .quadro {
+    background: var(--surface-muted);
+    border-radius: 10px;
+  }
+
+  .input {
+    width: 100%;
+    min-height: 40px;
+    padding: 9px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--input-bg);
+    color: var(--foreground);
+    font-size: 16px; /* evita zoom no iOS */
+    outline: none;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  }
+  @media (min-width: 1024px) {
+    .input {
+      font-size: 14px;
+    }
+  }
+  .input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .input::placeholder {
+    color: var(--muted);
+    opacity: 0.75;
+  }
+  .label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--foreground);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* Chip: botão de opção. O estado selecionado nunca depende só de cor: inverte
+     fundo e texto, o que continua visível sem nenhuma percepção de matiz. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: transparent;
+    color: var(--foreground);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease,
+      transform 0.05s ease;
+  }
+  .chip:hover:not(:disabled) {
+    background: var(--surface-muted);
+  }
+  .chip:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .chip:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .chip-selected,
+  .chip-selected:hover:not(:disabled) {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--primary-foreground);
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--surface-muted);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    white-space: nowrap;
+  }
+  .badge-accent {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .badge-success {
+    background: var(--success-soft);
+    color: var(--success);
+  }
+  .badge-warning {
+    background: var(--warning-soft);
+    color: var(--warning);
+  }
+  .badge-danger {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  /* Abas do cliente. */
+  .abas {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .aba {
+    position: relative;
+    flex-shrink: 0;
+    padding: 10px 12px 12px;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.12s ease;
+  }
+  .aba:hover {
+    color: var(--foreground);
+  }
+  .aba[aria-selected="true"] {
+    color: var(--foreground);
+  }
+  .aba[aria-selected="true"]::after {
+    content: "";
+    position: absolute;
+    inset: auto 12px -1px 12px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--foreground);
+  }
+
+  .modal {
+    width: min(560px, calc(100vw - 32px));
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface);
+    color: var(--foreground);
+    box-shadow: var(--shadow-pop);
+  }
+  .modal-largo {
+    width: min(920px, calc(100vw - 32px));
+  }
+  .modal::backdrop {
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(3px);
+  }
+
+  .esqueleto {
+    border-radius: 12px;
+    background: var(--surface-muted);
+    animation: pulse-soft 1.4s ease-in-out infinite;
+  }
+
+  /* Spinner simples usado nos estados de carregamento */
+  .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    opacity: 0.85;
+  }
 }
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-card);
-  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.15s ease, transform 0.1s ease;
-}
-
-/* Card interativo (usado por links/botões de fluxo) — hover/press sutis. */
-.card-interactive {
-  cursor: pointer;
-}
-.card-interactive:hover {
-  border-color: var(--accent);
-  box-shadow: 0 2px 4px rgba(28, 26, 23, 0.06), 0 8px 24px rgba(28, 26, 23, 0.08);
-}
-.card-interactive:active {
-  transform: scale(0.99);
-}
-
-.input {
-  width: 100%;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  border-radius: 12px;
-  padding: 14px 16px;
-  font-size: 16px; /* evita zoom no iOS */
-  color: var(--foreground);
-  outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-.input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-.input::placeholder {
-  color: var(--muted);
-}
-.label {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--foreground);
-  margin-bottom: 6px;
-  display: block;
-}
-
-/* Chip: botão de opção (cards agrupados, sugestões rápidas) — estado
-   selecionado nunca depende só de cor (também ganha borda + peso de fonte). */
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  padding: 9px 16px;
-  border-radius: 999px;
-  background: var(--surface-muted);
-  border: 1.5px solid transparent;
-  color: var(--foreground);
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.05s ease;
-}
-.chip:hover:not(:disabled) {
-  border-color: var(--border);
-}
-.chip:active:not(:disabled) {
-  transform: scale(0.97);
-}
-.chip:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.chip-selected {
-  background: var(--primary);
-  color: var(--primary-foreground);
-  border-color: var(--primary);
-  font-weight: 600;
-}
-
-/* Gradiente reservado a detalhes ligados à IA (ícone de destaque, badge
-   "IA decide" etc.) — nunca usado como cor de fundo geral da interface. */
-.gradiente-ia-bg {
-  background: var(--gradiente-ia);
-}
-.gradiente-ia-text {
-  background: var(--gradiente-ia);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  border: 1px solid transparent;
-  color: var(--foreground);
-}
-
-/* Painel/accordion (Materiais da arte) */
-.panel-backdrop {
-  background: rgba(0, 0, 0, 0.45);
-  animation: fade-in 0.18s ease;
-}
-.panel-sheet {
-  animation: slide-in-right 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes slide-in-right {
-  from { transform: translateX(24px); opacity: 0.4; }
-  to { transform: translateX(0); opacity: 1; }
-}
 @keyframes pulse-soft {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
-}
-.animate-pulse-soft {
-  animation: pulse-soft 1.4s ease-in-out infinite;
-}
-
-/* Spinner simples usado nos estados de carregamento */
-.spinner {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  opacity: 0.85;
 }
 @keyframes spin {
   to { transform: rotate(360deg); }

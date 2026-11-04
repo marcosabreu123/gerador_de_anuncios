@@ -93,6 +93,38 @@ export async function resumoPorCliente(periodo: PeriodoRelatorio): Promise<Resum
   return [...porCliente.values()].sort((a, b) => b.custo_brl - a.custo_brl);
 }
 
+// Peças entregues em cada dia do período. O dia é o de São Paulo: em UTC, o que
+// sai depois das 21h cairia no dia seguinte.
+export interface ProducaoDoDia {
+  dia: number;
+  pecas: number;
+}
+
+const DIA_EM_SP = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", day: "numeric" });
+
+export function diaDoMesAgora(): number {
+  return Number(DIA_EM_SP.format(new Date()));
+}
+
+export async function producaoPorDia(periodo: PeriodoRelatorio): Promise<ProducaoDoDia[]> {
+  const supabase = await createClient();
+  const { data: pecas } = await supabase
+    .from("pecas")
+    .select("created_at")
+    .in("status", ["gerada", "aprovada"])
+    .gte("created_at", periodo.inicio)
+    .lte("created_at", periodo.fim);
+
+  // getDate, não getUTCDate: mesAtual monta o fim do mês no fuso do servidor.
+  const diasNoMes = new Date(periodo.fim).getDate();
+  const dias = Array.from({ length: diasNoMes }, (_, i) => ({ dia: i + 1, pecas: 0 }));
+  for (const p of pecas ?? []) {
+    const alvo = dias[Number(DIA_EM_SP.format(new Date(p.created_at))) - 1];
+    if (alvo) alvo.pecas += 1;
+  }
+  return dias;
+}
+
 export interface TotaisPeriodo {
   receita_brl: number;
   custo_brl: number;

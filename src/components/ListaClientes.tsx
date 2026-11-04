@@ -2,13 +2,18 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { criarCliente } from "@/app/clientes/actions";
+import { Plus, Search, SearchX, Store } from "lucide-react";
+import { criarCliente } from "@/app/(app)/clientes/actions";
+import BotaoEnviar from "@/components/BotaoEnviar";
+import Modal from "@/components/Modal";
+import { Avatar, CabecalhoPagina, EstadoVazio } from "@/components/ui";
 
 export interface ClienteCard {
   id: string;
   nome: string;
   nicho: string | null;
   ativo: boolean;
+  logo: string | null;
   saldo: number;
   pecasNoMes: number;
   temPedidoEmAndamento: boolean;
@@ -45,131 +50,132 @@ export default function ListaClientes({ clientes }: { clientes: ClienteCard[] })
   const emProducao = ativos.filter((c) => c.temPedidoEmAndamento).length;
   const arquivados = clientes.length - ativos.length;
 
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          className="input flex-1 min-w-[180px]"
-          placeholder="Buscar por nome ou nicho…"
-        />
-        <button
-          type="button"
-          onClick={() => setFormAberto((v) => !v)}
-          className="btn btn-primary shrink-0"
-        >
-          + Novo cliente
-        </button>
-      </div>
+  const botaoNovo = (
+    <button type="button" onClick={() => setFormAberto(true)} className="btn btn-primary">
+      <Plus size={16} aria-hidden="true" />
+      Novo cliente
+    </button>
+  );
 
-      {/* Atalhos que respondem "quem precisa de mim agora?" — a pergunta real
-          de quem gerencia dezenas de contas. */}
-      <div className="flex flex-wrap gap-2">
-        <Chip ativo={filtro === "todos"} onClick={() => setFiltro("todos")}>
-          Todos ({ativos.length})
-        </Chip>
-        <Chip ativo={filtro === "em_producao"} onClick={() => setFiltro("em_producao")}>
-          Em produção ({emProducao})
-        </Chip>
-        <Chip ativo={filtro === "sem_saldo"} onClick={() => setFiltro("sem_saldo")}>
-          Sem saldo ({semSaldo})
-        </Chip>
-        {arquivados > 0 && (
-          <Chip ativo={filtro === "arquivados"} onClick={() => setFiltro("arquivados")}>
-            Arquivados ({arquivados})
+  return (
+    <>
+      <CabecalhoPagina
+        titulo="Clientes"
+        descricao="Cada cliente guarda a própria identidade visual, os materiais e o saldo do pacote."
+        acoes={botaoNovo}
+      />
+
+      <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+        <div className="relative flex-1 lg:max-w-md">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)] pointer-events-none"
+            aria-hidden="true"
+          />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            className="input pl-9"
+            placeholder="Buscar por nome ou nicho…"
+            aria-label="Buscar cliente"
+          />
+        </div>
+
+        {/* Atalhos que respondem "quem precisa de mim agora?" — a pergunta real
+            de quem gerencia dezenas de contas. */}
+        <div className="flex gap-2 overflow-x-auto [scrollbar-width:none]">
+          <Chip ativo={filtro === "todos"} onClick={() => setFiltro("todos")}>
+            Todos <Contagem>{ativos.length}</Contagem>
           </Chip>
-        )}
+          <Chip ativo={filtro === "em_producao"} onClick={() => setFiltro("em_producao")}>
+            Em produção <Contagem>{emProducao}</Contagem>
+          </Chip>
+          <Chip ativo={filtro === "sem_saldo"} onClick={() => setFiltro("sem_saldo")}>
+            Sem saldo <Contagem>{semSaldo}</Contagem>
+          </Chip>
+          {arquivados > 0 && (
+            <Chip ativo={filtro === "arquivados"} onClick={() => setFiltro("arquivados")}>
+              Arquivados <Contagem>{arquivados}</Contagem>
+            </Chip>
+          )}
+        </div>
       </div>
 
       {formAberto && (
-        <form action={criarCliente} className="card p-4 flex flex-col gap-3">
-          <div className="flex items-start justify-between gap-3">
-            <h2 className="font-semibold">Novo cliente</h2>
-            <button
-              type="button"
-              onClick={() => setFormAberto(false)}
-              className="text-[var(--muted)] hover:text-[var(--foreground)]"
-              aria-label="Fechar"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="label">Nome da empresa *</span>
-              <input name="nome" required className="input" placeholder="Ex: Burger do Zé" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="label">Nicho</span>
-              <input name="nicho" className="input" placeholder="Ex: fast-food, gastrobar" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="label">Contato</span>
-              <input name="contato_nome" className="input" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="label">Telefone</span>
-              <input name="contato_telefone" className="input" />
-            </label>
-          </div>
-          <button type="submit" className="btn btn-primary self-start">
-            Cadastrar
-          </button>
-        </form>
+        <Modal titulo="Novo cliente" aoFechar={() => setFormAberto(false)}>
+          <form action={criarCliente} className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="flex flex-col">
+                <span className="label">Nome da empresa *</span>
+                <input name="nome" required className="input" placeholder="Ex: Burger do Zé" />
+              </label>
+              <label className="flex flex-col">
+                <span className="label">Nicho</span>
+                <input name="nicho" className="input" placeholder="Ex: fast-food, gastrobar" />
+              </label>
+              <label className="flex flex-col">
+                <span className="label">Contato</span>
+                <input name="contato_nome" className="input" />
+              </label>
+              <label className="flex flex-col">
+                <span className="label">Telefone</span>
+                <input name="contato_telefone" className="input" />
+              </label>
+            </div>
+            <BotaoEnviar className="btn btn-primary self-end">Cadastrar</BotaoEnviar>
+          </form>
+        </Modal>
       )}
 
       {visiveis.length === 0 ? (
-        <div className="card p-6 text-center">
-          <p className="font-semibold">
-            {clientes.length === 0 ? "Nenhum cliente ainda" : "Nada encontrado"}
-          </p>
-          <p className="text-sm text-[var(--muted)] mt-1">
-            {clientes.length === 0
-              ? "Cadastre o primeiro para começar a produzir."
-              : "Tente outro termo ou troque o filtro."}
-          </p>
+        <div className="card">
+          {ativos.length === 0 && filtro === "todos" && !busca ? (
+            <EstadoVazio
+              icone={Store}
+              titulo="Nenhum cliente ativo"
+              descricao="Cadastre a primeira empresa para começar a produzir."
+              acao={botaoNovo}
+            />
+          ) : (
+            <EstadoVazio
+              icone={SearchX}
+              titulo="Nada encontrado"
+              descricao="Tente outro termo ou troque o filtro."
+            />
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,250px),1fr))] gap-3">
           {visiveis.map((c) => (
-            <Link
-              key={c.id}
-              href={`/clientes/${c.id}`}
-              className="card card-interactive p-3 flex flex-col gap-1 min-w-0"
-            >
-              <div className="flex items-start justify-between gap-1">
-                <p className="font-semibold text-sm leading-tight truncate" title={c.nome}>
-                  {c.nome}
-                </p>
-                {c.temPedidoEmAndamento && (
-                  <span
-                    className="w-2 h-2 rounded-full bg-[var(--accent)] shrink-0 mt-1"
-                    title="Pedido em produção"
-                    aria-label="Pedido em produção"
-                  />
-                )}
+            <Link key={c.id} href={`/clientes/${c.id}`} className="card card-interactive p-3.5 flex flex-col gap-3 min-w-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <Avatar nome={c.nome} src={c.logo} tamanho={40} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm leading-snug truncate" title={c.nome}>
+                    {c.nome}
+                  </p>
+                  <p className="text-xs text-[var(--muted)] truncate">{c.nicho ?? "sem nicho"}</p>
+                </div>
               </div>
-              <p className="text-[11px] text-[var(--muted)] truncate">{c.nicho ?? "sem nicho"}</p>
-              <div className="flex items-center justify-between gap-1 mt-1">
-                <span
-                  className={`text-[11px] font-medium ${
-                    c.saldo === 0 ? "text-[var(--danger)]" : "text-[var(--muted)]"
-                  }`}
-                >
-                  {c.saldo === 0 ? "sem saldo" : `${c.saldo} img`}
+              <div className="flex items-center justify-between gap-2">
+                <span className={`badge ${c.saldo === 0 ? "badge-danger" : ""}`}>
+                  {c.saldo === 0 ? "Sem saldo" : `${c.saldo} ${c.saldo === 1 ? "imagem" : "imagens"}`}
                 </span>
-                {c.pecasNoMes > 0 && (
-                  <span className="text-[11px] text-[var(--muted)]" title="Peças entregues no mês">
-                    {c.pecasNoMes} no mês
-                  </span>
+                {c.temPedidoEmAndamento ? (
+                  <span className="badge badge-accent">Em produção</span>
+                ) : (
+                  c.pecasNoMes > 0 && (
+                    <span className="text-xs text-[var(--muted)]" title="Peças entregues no mês">
+                      {c.pecasNoMes} no mês
+                    </span>
+                  )
                 )}
               </div>
             </Link>
           ))}
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -183,8 +189,12 @@ function Chip({
   children: React.ReactNode;
 }) {
   return (
-    <button type="button" onClick={onClick} className={ativo ? "chip chip-selected" : "chip"}>
+    <button type="button" onClick={onClick} aria-pressed={ativo} className={ativo ? "chip chip-selected" : "chip"}>
       {children}
     </button>
   );
+}
+
+function Contagem({ children }: { children: React.ReactNode }) {
+  return <span className="opacity-60 tabular-nums">{children}</span>;
 }

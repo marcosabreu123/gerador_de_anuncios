@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Upload } from "lucide-react";
 import { enviarImagemParaStorage } from "@/lib/upload-storage";
 import { TIPOS_REFERENCIA, type TipoReferencia } from "@/lib/agencia/types";
 
@@ -52,13 +53,14 @@ export default function UploadMaterial({ clienteId }: { clienteId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-2">
         {(Object.keys(TIPOS_REFERENCIA) as TipoReferencia[]).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTipo(t)}
+            aria-pressed={tipo === t}
             className={tipo === t ? "chip chip-selected" : "chip"}
           >
             {TIPOS_REFERENCIA[t].label}
@@ -66,7 +68,7 @@ export default function UploadMaterial({ clienteId }: { clienteId: string }) {
         ))}
       </div>
 
-      <p className="text-xs text-[var(--muted)]">{TIPOS_REFERENCIA[tipo].ajuda}</p>
+      <p className="text-[13px] text-[var(--muted)]">{TIPOS_REFERENCIA[tipo].ajuda}</p>
 
       <input
         ref={inputRef}
@@ -80,8 +82,11 @@ export default function UploadMaterial({ clienteId }: { clienteId: string }) {
       />
       <label
         htmlFor={`upload-${clienteId}`}
-        className={`btn btn-outline self-start ${enviando ? "opacity-60 pointer-events-none" : ""}`}
+        className={`flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-strong)] px-4 py-7 text-center text-sm font-medium cursor-pointer hover:bg-[var(--surface-muted)] transition-colors ${
+          enviando ? "opacity-60 pointer-events-none" : ""
+        }`}
       >
+        {enviando ? <span className="spinner" aria-hidden="true" /> : <Upload size={18} className="text-[var(--muted)]" aria-hidden="true" />}
         {enviando ? "Enviando…" : `Enviar ${TIPOS_REFERENCIA[tipo].label.toLowerCase()}`}
       </label>
 

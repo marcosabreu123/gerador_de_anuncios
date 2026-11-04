@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Check, Download, Maximize2, PencilLine } from "lucide-react";
 import { lerRespostaJSON } from "@/lib/fetch-json";
 import { baixarArte } from "@/lib/download";
-import { aprovarPeca, registrarTempoPeca } from "@/app/clientes/actions";
+import { aprovarPeca, registrarTempoPeca } from "@/app/(app)/clientes/actions";
+import BotaoEnviar from "@/components/BotaoEnviar";
+import Modal from "@/components/Modal";
+import { SeloStatus } from "@/components/ui";
 import type { Peca } from "@/lib/agencia/types";
 
 // Acompanhamento do lote. As peças são produzidas pelo worker da fila, então
@@ -19,6 +23,7 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
   const [ajustando, setAjustando] = useState<string | null>(null);
   const [instrucao, setInstrucao] = useState("");
   const [erro, setErro] = useState<string | null>(null);
+  const [ampliada, setAmpliada] = useState<string | null>(null);
 
   const emAndamento = pecas.some((p) => p.status === "pendente" || p.status === "gerando");
   const paradas = pecas.filter((p) => p.status === "pendente").length;
@@ -71,10 +76,14 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
     }
   }
 
+  // Com uma peça só o card deita: imagem de um lado, ações do outro. Em pé, ela
+  // ficaria perdida num canto da tela do PC.
+  const unica = pecas.length === 1;
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4 min-w-0">
       {emAndamento && (
-        <div className="card p-3 flex items-center gap-3">
+        <div className="card px-4 py-3 flex items-center gap-3">
           <span className="spinner" aria-hidden="true" />
           <p className="text-sm">
             Produzindo as peças… pode fechar esta tela, o lote continua rodando.
@@ -84,108 +93,152 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
 
       {erro && <p className="text-sm text-[var(--danger)]">{erro}</p>}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className={unica ? "" : "grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4"}>
         {pecas.map((peca) => (
-          <div key={peca.id} className="card p-3 flex flex-col gap-2">
-            <div className="flex items-start justify-between gap-2">
-              <p className="font-semibold text-sm">
-                {peca.ordem + 1}. {peca.titulo}
-              </p>
-              <span className="badge shrink-0">{peca.status}</span>
-            </div>
-
+          <div
+            key={peca.id}
+            className={`card p-3 min-w-0 ${
+              unica ? "grid grid-cols-1 lg:grid-cols-[minmax(0,480px)_minmax(0,1fr)] gap-5" : "flex flex-col gap-3"
+            }`}
+          >
             {peca.imagem_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={peca.imagem_url} alt={peca.titulo ?? "Peça"} className="w-full rounded-xl" />
+              <button
+                type="button"
+                onClick={() => setAmpliada(peca.imagem_url)}
+                className="relative block rounded-[10px] overflow-hidden cursor-zoom-in group"
+                title="Ver em tamanho real"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={peca.imagem_url} alt={peca.titulo ?? "Peça"} className="w-full" />
+                <span className="absolute top-2 right-2 flex items-center justify-center w-8 h-8 rounded-lg bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Maximize2 size={14} aria-hidden="true" />
+                </span>
+              </button>
             ) : (
-              <div className="w-full aspect-[4/5] rounded-xl bg-[var(--surface-muted)] flex items-center justify-center">
+              <div
+                className={`w-full aspect-[4/5] rounded-[10px] flex items-center justify-center ${
+                  peca.status === "erro" ? "bg-[var(--surface-muted)]" : "esqueleto"
+                }`}
+              >
                 <span className="text-sm text-[var(--muted)]">
-                  {peca.status === "erro" ? "Falhou" : "Na fila…"}
+                  {peca.status === "erro" ? "Falhou" : peca.status === "gerando" ? "Gerando…" : "Na fila…"}
                 </span>
               </div>
             )}
 
-            {peca.erro && <p className="text-xs text-[var(--danger)]">{peca.erro}</p>}
+            <div className={`flex flex-col gap-3 min-w-0 ${unica ? "lg:py-2 lg:pr-2" : "px-1 pb-1 flex-1"}`}>
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-medium text-sm truncate" title={peca.titulo ?? undefined}>
+                  {peca.ordem + 1}. {peca.titulo}
+                </p>
+                <SeloStatus status={peca.status} />
+              </div>
 
-            {peca.imagem_url && (
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => baixarArte(peca.imagem_url!, `${peca.titulo ?? "arte"}.png`)}
-                  className="btn btn-outline text-xs py-1"
-                >
-                  Baixar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAjustando(ajustando === peca.id ? null : peca.id)}
-                  className="btn btn-outline text-xs py-1"
-                >
-                  Ajustar
-                </button>
-                {peca.status !== "aprovada" && (
-                  <form action={aprovarPeca}>
-                    <input type="hidden" name="id" value={peca.id} />
-                    <input type="hidden" name="pedido_id" value={pedidoId} />
-                    <input type="hidden" name="cliente_id" value={peca.cliente_id} />
-                    <button type="submit" className="btn btn-primary text-xs py-1">
-                      Aprovar
+              {peca.erro && <p className="text-[13px] text-[var(--danger)]">{peca.erro}</p>}
+
+              {peca.imagem_url && (
+                <div className="flex flex-wrap gap-2">
+                  {peca.status !== "aprovada" && (
+                    <form action={aprovarPeca}>
+                      <input type="hidden" name="id" value={peca.id} />
+                      <input type="hidden" name="pedido_id" value={pedidoId} />
+                      <input type="hidden" name="cliente_id" value={peca.cliente_id} />
+                      <BotaoEnviar className="btn btn-primary btn-sm">
+                        <Check size={14} aria-hidden="true" />
+                        Aprovar
+                      </BotaoEnviar>
+                    </form>
+                  )}
+                  {!unica && (
+                    <button
+                      type="button"
+                      onClick={() => setAjustando(ajustando === peca.id ? null : peca.id)}
+                      aria-expanded={ajustando === peca.id}
+                      className="btn btn-outline btn-sm"
+                    >
+                      <PencilLine size={14} aria-hidden="true" />
+                      Ajustar
                     </button>
-                  </form>
-                )}
-              </div>
-            )}
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => baixarArte(peca.imagem_url!, `${peca.titulo ?? "arte"}.png`)}
+                    className="btn btn-outline btn-sm"
+                  >
+                    <Download size={14} aria-hidden="true" />
+                    Baixar
+                  </button>
+                </div>
+              )}
 
-            {peca.status === "erro" && (
-              <button type="button" onClick={() => regerar(peca.id)} className="btn btn-outline text-xs py-1 self-start">
-                Tentar de novo
-              </button>
-            )}
-
-            {ajustando === peca.id && (
-              <div className="flex flex-col gap-2">
-                <textarea
-                  value={instrucao}
-                  onChange={(e) => setInstrucao(e.target.value)}
-                  className="input min-h-[60px] resize-none text-sm"
-                  placeholder="O que mudar? Ex: deixa o preço maior, fundo mais escuro."
-                />
-                <button
-                  type="button"
-                  onClick={() => regerar(peca.id, instrucao)}
-                  disabled={!instrucao.trim()}
-                  className="btn btn-accent text-xs py-1 self-start"
-                >
-                  Regerar com esse ajuste
+              {peca.status === "erro" && (
+                <button type="button" onClick={() => regerar(peca.id)} className="btn btn-outline btn-sm self-start">
+                  Tentar de novo
                 </button>
-              </div>
-            )}
+              )}
 
-            {/* Tempo humano: é o número que decide se o pacote fecha a conta,
-                já que o custo de API raramente é o gargalo. */}
-            <form action={registrarTempoPeca} className="flex items-end gap-2">
-              <input type="hidden" name="id" value={peca.id} />
-              <input type="hidden" name="pedido_id" value={pedidoId} />
-              <label className="flex flex-col gap-1">
-                <span className="label text-[11px]">Seu tempo (min)</span>
-                <input
-                  name="minutos"
-                  type="number"
-                  min={0}
-                  step="0.5"
-                  defaultValue={
-                    peca.tempo_operacao_segundos ? peca.tempo_operacao_segundos / 60 : undefined
-                  }
-                  className="input w-20 text-sm py-1"
-                />
-              </label>
-              <button type="submit" className="btn btn-outline text-xs py-1">
-                Salvar
-              </button>
-            </form>
+              {peca.imagem_url && (unica || ajustando === peca.id) && (
+                <div className={`flex flex-col gap-2 ${unica ? "flex-1 border-t border-[var(--border)] pt-3" : ""}`}>
+                  {unica && (
+                    <label htmlFor={`ajuste-${peca.id}`} className="text-sm font-medium">
+                      Ajustar esta arte
+                    </label>
+                  )}
+                  <textarea
+                    id={`ajuste-${peca.id}`}
+                    value={instrucao}
+                    onChange={(e) => setInstrucao(e.target.value)}
+                    className={`input resize-y ${unica ? "flex-1 min-h-24" : "min-h-[72px]"}`}
+                    placeholder="O que mudar? Ex: deixa o preço maior, fundo mais escuro."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => regerar(peca.id, instrucao)}
+                    disabled={!instrucao.trim()}
+                    className="btn btn-primary btn-sm self-start"
+                  >
+                    Regerar com esse ajuste
+                  </button>
+                </div>
+              )}
+
+              {/* Tempo humano: é o número que decide se o pacote fecha a conta,
+                  já que o custo de API raramente é o gargalo. Só aparece quando
+                  há arte: em peça na fila o campo não diz nada. */}
+              {peca.imagem_url && (
+                <form
+                  action={registrarTempoPeca}
+                  className="flex items-center gap-2 border-t border-[var(--border)] pt-3 mt-auto"
+                >
+                  <input type="hidden" name="id" value={peca.id} />
+                  <input type="hidden" name="pedido_id" value={pedidoId} />
+                  <label className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-[13px] text-[var(--muted)]">Seu tempo (min)</span>
+                    <input
+                      name="minutos"
+                      type="number"
+                      min={0}
+                      step="0.5"
+                      defaultValue={
+                        peca.tempo_operacao_segundos ? peca.tempo_operacao_segundos / 60 : undefined
+                      }
+                      className="input w-20 min-h-8 py-1"
+                    />
+                  </label>
+                  <BotaoEnviar className="btn btn-ghost btn-sm">Salvar</BotaoEnviar>
+                </form>
+              )}
+            </div>
           </div>
         ))}
       </div>
+
+      {ampliada && (
+        <Modal titulo="Arte em tamanho real" aoFechar={() => setAmpliada(null)} largo>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={ampliada} alt="Arte em tamanho real" className="w-full max-h-[80dvh] object-contain rounded-[10px]" />
+        </Modal>
+      )}
     </div>
   );
 }

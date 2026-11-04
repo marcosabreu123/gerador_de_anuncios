@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { UserRow } from "@/lib/types";
@@ -6,7 +7,7 @@ import type { UserRow } from "@/lib/types";
 // Se a row ainda não existir (trigger não rodou), provisiona na hora — e aí
 // ela nasce com papel 'sem_acesso' (default da coluna), nunca com acesso.
 // Redireciona para /login se não houver sessão.
-export async function requireUser(): Promise<{ authId: string; email: string; perfil: UserRow }> {
+async function buscarUsuario(): Promise<{ authId: string; email: string; perfil: UserRow }> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -35,6 +36,10 @@ export async function requireUser(): Promise<{ authId: string; email: string; pe
 
   return { authId: user.id, email: user.email!, perfil: perfil as UserRow };
 }
+
+// Layout e página pedem o usuário no mesmo carregamento. Sem o cache seriam duas
+// idas ao Supabase Auth por tela.
+export const requireUser = cache(buscarUsuario);
 
 // Acesso à operação (clientes e geração). Vale para sócio e colaborador.
 //
