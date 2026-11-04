@@ -43,7 +43,7 @@ Responda SOMENTE com um objeto JSON:
   "recorteLogo": { "x": 0.8, "y": 0.05, "largura": 0.15, "altura": 0.1 }
 }
 
-"textos" deixa de fora o que faz parte do desenho da logo e o que está impresso no rótulo do produto.
+"textos" deixa de fora o que faz parte do desenho da logo e o que está impresso no rótulo do produto. Um preço é um bloco só, com a moeda junto do valor: "R$ 29,90", mesmo que a arte desenhe o "R$" menor ou separado.
 "cores" traz de duas a quatro cores que definem a arte.
 Os recortes usam frações da imagem, de 0 a 1, com x e y no canto superior esquerdo. "recorteProduto" cobre o item principal do anúncio e não pode ter nenhum texto da arte dentro: num combo, recorte só o item central. "recorteLogo" cobre só a logo. Se a arte não tiver produto ou logo, ou se não der para recortar sem pegar texto, use null.`;
 
