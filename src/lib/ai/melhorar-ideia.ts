@@ -143,15 +143,31 @@ function numerosDe(texto: string): string[] {
   return texto.match(/\d+(?:[.,]\d+)*/g) ?? [];
 }
 
-// Número errado é o erro mais caro de uma arte de venda, e é o único que dá para
-// conferir sem depender do modelo. Compara só os dígitos: "39,90" e "39.90" são o
+// O que a loja teria de cumprir se aparecesse na arte. O prompt proíbe tudo isto
+// sem o pedido dizer, mas nos testes ainda escapou um "Hoje" num título.
+const PROMESSAS =
+  /(?<!\p{L})(hoje|gr[aá]tis|descontos?|brindes?|garantias?|parcel\p{L}*|[uú]ltimas?|limitad[ao]s?|melhor(es)?|mais barat[ao]s?|menor pre[çc]o|por menos)(?!\p{L})/giu;
+
+function semAcento(texto: string): string {
+  return texto.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
+
+// A tela avisa antes de o operador aprovar, porque número errado e promessa que a
+// loja não fez são os erros mais caros de uma arte de venda, e dá para conferir
+// sem depender do modelo. Número compara só os dígitos: "39,90" e "39.90" são o
 // mesmo preço, mas "35" e "35,00" não, porque a regra é copiar como veio.
-export function avisosDeNumeros(ideia: string, briefing: string, cadastro: string): string[] {
+export function avisosDeFidelidade(ideia: string, briefing: string, cadastro: string): string[] {
   const digitos = (n: string) => n.replace(/\D/g, "");
-  const conhecidos = new Set(numerosDe(`${ideia} ${cadastro}`).map(digitos));
+  const fonte = `${ideia} ${cadastro}`;
+  const conhecidos = new Set(numerosDe(fonte).map(digitos));
   const noBriefing = new Set(numerosDe(briefing).map(digitos));
 
-  const novos = new Set(numerosDe(briefing).filter((n) => !conhecidos.has(digitos(n))));
+  const novos = new Set([
+    ...numerosDe(briefing).filter((n) => !conhecidos.has(digitos(n))),
+    ...(briefing.match(PROMESSAS) ?? [])
+      .map((p) => p.toLowerCase())
+      .filter((p) => !semAcento(fonte).includes(semAcento(p))),
+  ]);
   const perdidos = new Set(numerosDe(ideia).filter((n) => !noBriefing.has(digitos(n))));
 
   const avisos: string[] = [];
@@ -201,7 +217,7 @@ export async function melhorarIdeia(ctx: ContextoIdeia): Promise<IdeiaMelhorada>
     faltou: Array.isArray(resposta.faltou)
       ? resposta.faltou.filter((x): x is string => typeof x === "string" && x.trim().length > 0).slice(0, 3)
       : [],
-    avisos: briefing ? avisosDeNumeros(ctx.ideia, briefing, `${ctx.identidade} ${ctx.contatos ?? ""}`) : [],
+    avisos: briefing ? avisosDeFidelidade(ctx.ideia, briefing, `${ctx.identidade} ${ctx.contatos ?? ""}`) : [],
     uso: {
       modelo: TEXT_PROMPT_BUILDER_MODEL,
       entrada: completion.usage?.prompt_tokens ?? 0,
