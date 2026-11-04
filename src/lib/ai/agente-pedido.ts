@@ -202,12 +202,8 @@ export async function transcreverAudio(
   };
 }
 
-// Identidade do cliente em texto corrido, para o caminho de arte-base.
-//
-// montarPromptMelhorarArteExistente não recebe briefing: ele trabalha sobre a
-// arte enviada. No modo "melhorar" isso basta, porque a própria arte carrega
-// cor, logo e fonte. No modo "nova versão" não — ali a arte vale só como fonte
-// de informação da campanha, e sem isto a peça nova sai sem a marca do cliente.
+// Identidade do cliente em texto corrido, para quem não recebe o briefing inteiro:
+// o diretor de arte e o prompt de melhorar arte-base.
 export function identidadeParaInstrucao(
   cliente: Cliente,
   brandKit: BrandKit | null,

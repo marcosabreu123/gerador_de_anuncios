@@ -53,7 +53,7 @@ function regraDeTexto(ficha: FichaCriativa): string {
   return [
     "Render every text string EXACTLY as written, character for character, including currency symbols, commas and accents.",
     "Do not translate, rephrase, reformat or add any text. No extra words, no invented background text, no watermark.",
-    "Keep every word whole — never break a word across lines.",
+    "Keep every word whole — never break a word across lines, and never let an object cover part of a letter.",
     ...(ficha.textos.some(ehPreco) ? [REGRA_DE_PRECO] : []),
   ].join(" ");
 }

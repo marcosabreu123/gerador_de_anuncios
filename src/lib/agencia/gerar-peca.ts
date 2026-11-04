@@ -12,6 +12,7 @@ import {
   pedidoManualParaBriefing,
 } from "@/lib/ai/agente-pedido";
 import { montarPromptDiretorArte } from "@/lib/ai/diretor-arte";
+import { lerArte, recortarDaArte, type LeituraDaArte } from "@/lib/ai/ler-arte";
 import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
 import { custoImagemPorUso, custoImagemUSD, custoTextoUSD, registrarGeracao } from "./custo";
@@ -79,6 +80,36 @@ async function materiaisDaPeca(
   return baixadas.filter((e): e is EntradaImagem => Boolean(e));
 }
 
+// "Criar nova versão": lê a arte em vez de anexá-la (ver ler-arte.ts) e completa
+// as entradas com o recorte do que o cadastro não trouxe. Produto escolhido pelo
+// operador e logo cadastrada têm prioridade sobre o recorte.
+async function lerArteAntiga(
+  arte: EntradaImagem,
+  entradas: EntradaImagem[],
+  ids: { pecaId: string; pedidoId: string; clienteId: string },
+): Promise<LeituraDaArte> {
+  const inicio = Date.now();
+  const { leitura, uso } = await lerArte(arte);
+  await registrarGeracao({
+    tipo: "texto",
+    modelo: uso.modelo,
+    custoUsd: custoTextoUSD(uso.modelo, uso.entrada, uso.saida),
+    usageRaw: { entrada: uso.entrada, saida: uso.saida, estimado: false },
+    duracaoMs: Date.now() - inicio,
+    ...ids,
+  });
+
+  if (leitura.recorteProduto && !entradas.some((e) => e.tipo === "produto")) {
+    const produto = await recortarDaArte(arte, leitura.recorteProduto, "produto");
+    if (produto) entradas.push(produto);
+  }
+  if (leitura.recorteLogo && !entradas.some((e) => e.tipo === "logotipo")) {
+    const logo = await recortarDaArte(arte, leitura.recorteLogo, "logotipo");
+    if (logo) entradas.push(logo);
+  }
+  return leitura;
+}
+
 async function subirImagem(clienteId: string, base64: string): Promise<string> {
   const supabase = createAdminClient();
   const nome = `${crypto.randomUUID()}.png`;
@@ -136,8 +167,9 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
   //
   // 1. Ajuste cirúrgico — o operador clicou "Ajustar" numa peça entregue e
   //    pediu uma mudança pontual. Edita AQUELA imagem e preserva o resto.
-  // 2. Arte-base — ele subiu uma peça pronta para melhorar ou recriar.
-  // 3. Criação do zero, a partir do briefing do cliente.
+  // 2. Melhorar arte-base — ele subiu uma peça pronta, que vai anexada.
+  // 3. Criação do zero pelo diretor de arte. "Criar nova versão" cai aqui: a arte
+  //    enviada é lida, não anexada, e o diretor recria a campanha com o que ela dizia.
   //
   // O ajuste vem primeiro porque é o mais específico: a peça de um ajuste
   // pode ter nascido de uma arte-base, e nesse caso o que vale é a imagem que
@@ -145,19 +177,24 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
   const ajustando = Boolean(manual.ajusteSobreUrl && manual.instrucaoAjuste);
   const urlDeEntrada = ajustando ? manual.ajusteSobreUrl : manual.arteBaseUrl;
   const transformandoArte = Boolean(urlDeEntrada);
+  const novaVersao = !ajustando && transformandoArte && manual.modoTransformacao === "nova_versao_criativa";
 
   const entradas = await materiaisDaPeca(manual, referencias, { ajustando, transformandoArte });
 
+  let arteAntiga: LeituraDaArte | undefined;
   if (urlDeEntrada) {
-    const papelDaBase = ajustando
-      ? "base"
-      : manual.modoTransformacao === "nova_versao_criativa"
-        ? "arte_fonte"
-        : "arte_melhorar";
-    const base = await baixarComoEntrada(urlDeEntrada, papelDaBase);
+    const base = await baixarComoEntrada(urlDeEntrada, ajustando ? "base" : "arte_melhorar");
     if (!base) throw new Error("Não consegui ler a arte usada como base.");
-    // A arte-base vai na frente: é a referência principal da geração.
-    entradas.unshift(base);
+    if (novaVersao) {
+      arteAntiga = await lerArteAntiga(base, entradas, {
+        pecaId: peca.id,
+        pedidoId: peca.pedido_id,
+        clienteId: peca.cliente_id,
+      });
+    } else {
+      // A arte-base vai na frente: é a referência principal da geração.
+      entradas.unshift(base);
+    }
   }
 
   // O que de fato foi anexado manda, não o que o cadastro promete: se a
@@ -177,13 +214,9 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
         prompts: [r.prompt],
         uso: r.uso,
       }))
-    : transformandoArte
+    : transformandoArte && !novaVersao
       ? await montarPromptMelhorarArteExistente({
-          modoTransformacao: manual.modoTransformacao ?? "melhoria_recompositiva",
           direcao: "personalizado",
-          // A identidade do cliente vai junto: no modo "nova versão" a arte
-          // enviada vale só como fonte de informação da campanha, então sem
-          // isto a peça nova sairia sem a marca de quem está pagando.
           instrucaoUsuario: [
             manual.prompt,
             identidadeParaInstrucao(cliente as Cliente, (brandKit as BrandKit) ?? null),
@@ -196,6 +229,7 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
       : await criarComDiretorArte(manual, cliente as Cliente, (brandKit as BrandKit) ?? null, {
           ...anexos,
           briefingLegado: briefing,
+          arteAntiga,
         });
 
   // Tokens reais quando a chamada respondeu; a estimativa só entra quando o
@@ -318,6 +352,7 @@ async function criarComDiretorArte(
     temLogotipo: boolean;
     temReferencia: boolean;
     briefingLegado: Parameters<typeof montarPrompt>[0];
+    arteAntiga?: LeituraDaArte;
   },
 ): Promise<{ prompts: string[]; uso?: { modelo: string; entrada: number; saida: number } }> {
   try {
@@ -333,9 +368,13 @@ async function criarComDiretorArte(
       temLogotipo: ctx.temLogotipo,
       temReferencia: ctx.temReferencia,
       variacao: { indice: manual.variacao ?? 0, total: manual.total ?? 1 },
+      arteAntiga: ctx.arteAntiga,
     });
     return { prompts: [r.prompt], uso: r.uso };
   } catch (e) {
+    // O montador antigo não conhece os textos da arte lida: a fila tentar de novo
+    // é melhor do que entregar uma peça sem as informações do cliente.
+    if (ctx.arteAntiga) throw e;
     console.error("[gerar-peca] diretor de arte falhou, usando o montador antigo:", e);
     return montarPrompt(ctx.briefingLegado);
   }

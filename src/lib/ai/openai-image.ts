@@ -28,7 +28,6 @@ export type TipoEntradaImagem =
   | "logotipo"
   | "base"
   | "arte_melhorar"
-  | "arte_fonte"
   | "fundo"
   | "elemento_extra";
 
@@ -44,13 +43,10 @@ const LABELS_ENTRADA: Record<TipoEntradaImagem, string> = {
     "uma imagem de referência de estilo anexada — use só como inspiração de paleta, clima e nível de acabamento, nunca copie a composição dela, o jeito como o preço foi desenhado, nem qualquer texto, preço, marca ou logotipo que apareça nela",
   logotipo: "o logotipo da marca do lojista anexado — inclua de forma discreta e legível na arte, sem distorcer",
   base: "a imagem base a ser editada — aplique o ajuste pedido preservando o restante exatamente como está",
-  // Os dois abaixo existem porque o rótulo de "base" manda preservar tudo, e ele
-  // vai ANTES do prompt: em "criar nova versão" isso contradizia a instrução de
-  // reinventar a composição, e a peça voltava parecida com a original.
+  // Existe porque o rótulo de "base" manda preservar tudo, e ele vai ANTES do
+  // prompt: contradizia a instrução de reorganizar a composição.
   arte_melhorar:
-    "a arte atual do cliente — mantenha a campanha, o produto e todas as informações comerciais, e reorganize a composição conforme as instruções abaixo",
-  arte_fonte:
-    "a arte antiga do cliente, que serve só como fonte de informação (produto, preço, textos, logo, identidade) — nunca use a composição, o grid, a hierarquia ou a diagramação dela",
+    "a arte atual do cliente — mantenha a campanha, o produto e todas as informações comerciais visíveis nela, sem acrescentar nenhuma, e reorganize a composição conforme as instruções abaixo",
   fundo:
     "uma imagem de referência de fundo anexada pelo lojista — use como base/inspiração para o novo fundo da arte, sem copiar textos ou marcas de terceiros que apareçam nela",
   elemento_extra:

@@ -325,7 +325,8 @@ export default function NovaGeracaoForm({
             ))}
           </div>
           <p className="text-xs text-[var(--muted)]">
-            A foto escolhida vira o produto da arte. Sem foto, a IA compõe o produto do pedido.
+            A foto escolhida vira o produto da arte.{" "}
+            {arteBaseUrl ? "Sem foto, vale o produto da arte enviada." : "Sem foto, a IA compõe o produto do pedido."}
           </p>
         </div>
       )}

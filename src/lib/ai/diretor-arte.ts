@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { criarCompletionComRetry } from "./completions";
 import { fichaParaPrompt, type DialetoModelo } from "./formatos-modelo";
+import type { LeituraDaArte } from "./ler-arte";
 import { TEXT_PROMPT_BUILDER_MODEL } from "./models";
 import { blocoDeNicho, guiaDoNicho } from "./nichos";
 import type { Formato } from "@/lib/types";
@@ -88,7 +89,7 @@ No máximo duas famílias. Hierarquia se faz com peso, tamanho e espaçamento, n
 Headline: escolha deliberada, nunca o padrão. Sans-serif condensada pesada para urgência comercial, serif alta para sofisticação, geométrica espaçada para tecnologia e arquitetura, humanista para confiança e saúde.
 Secundária: sans-serif regular e legível, sempre.
 
-Texto curto e inteiro. Palavra nunca quebra no meio. Preço é elemento gráfico: trabalhe o tamanho relativo entre o símbolo da moeda, os inteiros e os centavos, sempre na mesma linha de base. Nunca peça centavos elevados ou sobrescritos: é o que faz o gerador de imagem duplicar a vírgula.
+Texto curto e inteiro. Palavra nunca quebra no meio, e nenhum objeto da cena cobre parte de uma letra: "HOJE" com o pé do E tapado vira "HOJF". Preço é elemento gráfico: trabalhe o tamanho relativo entre o símbolo da moeda, os inteiros e os centavos, sempre na mesma linha de base. Nunca peça centavos elevados ou sobrescritos: é o que faz o gerador de imagem duplicar a vírgula.
 
 Proibido: contorno preto grosso, sombra dura, efeito 3D, letra inflada, degradê dentro da letra, amarelo com borda preta. Todos marcam a peça como amadora instantaneamente.`;
 
@@ -133,7 +134,7 @@ Nunca invente informação que o briefing não deu: não crie desconto, prazo, s
 
 Quando houver foto do produto anexada, ela é referência do PRODUTO, não da composição. Extraia dela forma, cor, material, rótulo e proporção; descarte o ambiente, a mesa, a luz fraca e o enquadramento casual. Recrie o produto como hero shot de estúdio dentro da cena que você desenhou.
 
-Quando houver logo anexada, ela entra como assinatura, reproduzida fielmente, pequena e discreta. A logo nunca é o produto anunciado, e o nome da empresa nunca vira o produto: uma peça da "Burger do Zé" anuncia o hambúrguer, não a palavra.
+Quando houver logo anexada, ela entra como assinatura, reproduzida fielmente, pequena e discreta, e o nome da empresa não entra como bloco de texto: a logo já assina a peça, e o texto solto faz o gerador redesenhar a logo. A logo nunca é o produto anunciado, e o nome da empresa nunca vira o produto: uma peça da "Burger do Zé" anuncia o hambúrguer, não a palavra.
 
 Quando houver imagem de referência, extraia dela paleta, clima e nível de sofisticação. Nunca copie o texto, a marca ou o logotipo de terceiros que apareçam nela.`;
 
@@ -275,6 +276,8 @@ export interface ContextoPeca {
   // Quando o pedido é de mais de uma peça, a direção precisa ser diferente
   // entre as irmãs — senão o cliente recebe a mesma arte três vezes.
   variacao?: { indice: number; total: number };
+  // "Criar nova versão": o que a arte antiga dizia e como ela era organizada.
+  arteAntiga?: LeituraDaArte;
 }
 
 export interface ResultadoDiretorArte {
@@ -289,12 +292,36 @@ export interface ResultadoDiretorArte {
 const ROTAS_DE_VARIACAO = [
   "Rota desta peça: herói em close. O assunto principal em close ou três-quartos, ocupando a maior massa visual, com o texto no respiro da cena.",
   "Rota desta peça: vista de cima. Câmera a 90 graus sobre a superfície, assunto e objetos de apoio organizados em flat lay, com o texto numa área limpa do quadro.",
-  "Rota desta peça: tipografia protagonista. A headline enorme ocupa boa parte do quadro e é o primeiro impacto; o assunto aparece menor, interagindo com as letras.",
+  "Rota desta peça: tipografia protagonista. A headline enorme ocupa boa parte do quadro e é o primeiro impacto; o assunto aparece menor, abaixo ou ao lado das letras, sem cobrir nenhuma delas.",
   "Rota desta peça: quadro dividido. Um campo liso na cor de base da marca ocupa cerca de um terço do quadro e leva todo o texto; o assunto sangra na borda oposta.",
 ];
 
 export function rotaDeVariacao(indice: number): string {
   return ROTAS_DE_VARIACAO[indice % ROTAS_DE_VARIACAO.length];
+}
+
+// Só pedir "não repita o layout" não bastou: em um dos testes a ficha descreveu o
+// layout antigo proibido e devolveu o produto no mesmo lugar. Por isso o lado do
+// produto vem decidido aqui.
+const LADO_OBRIGATORIO: Record<LeituraDaArte["ladoDoProduto"], string> = {
+  direita: "Nesta peça o produto fica obrigatoriamente no lado esquerdo do quadro e o texto no lado direito.",
+  esquerda: "Nesta peça o produto fica obrigatoriamente no lado direito do quadro e o texto no lado esquerdo.",
+  centro: "A arte antiga era centralizada: nesta peça o produto fica obrigatoriamente deslocado para um lado, sangrando na borda, com o texto em coluna no lado oposto.",
+};
+
+function arteAntigaEmTexto(arte: LeituraDaArte): string {
+  return [
+    "ESTA PEÇA É A NOVA VERSÃO DE UMA ARTE PRONTA. Crie uma campanha nova, como outro diretor de arte que recebeu o mesmo briefing e nunca viu a original.",
+    `TEXTOS DA CAMPANHA. Todos entram, exatamente assim, e nenhum a mais; aqui o limite de blocos de texto não vale:\n${arte.textos.map((t) => `- ${t}`).join("\n")}`,
+    arte.produto ? `PRODUTO ANUNCIADO: ${arte.produto}` : null,
+    arte.cores.length > 0 ? `CORES DA CAMPANHA: ${arte.cores.join(", ")}` : null,
+    arte.layout
+      ? `A ARTE ANTIGA ERA ORGANIZADA ASSIM, E ESTA PEÇA NÃO PODE REPETIR: ${arte.layout} Escolha outro grid, outro enquadramento e outra posição para título, preço e logo.`
+      : null,
+    LADO_OBRIGATORIO[arte.ladoDoProduto],
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function materiaisEmTexto(ctx: ContextoPeca): string {
@@ -305,7 +332,7 @@ function materiaisEmTexto(ctx: ContextoPeca): string {
       : "MATERIAIS: não há foto do produto. Componha o produto do zero, com realismo fotográfico.",
   );
   if (ctx.temLogotipo) {
-    linhas.push("A logo da marca está anexada e deve ser reproduzida fielmente como assinatura discreta da peça.");
+    linhas.push("A logo da marca está anexada e deve ser reproduzida fielmente como assinatura discreta da peça. Não crie bloco de texto com o nome da empresa.");
   }
   if (ctx.temReferencia) {
     linhas.push("Há uma referência visual anexada: extraia dela paleta, clima e nível de sofisticação, nunca texto ou marca de terceiros.");
@@ -331,6 +358,7 @@ export async function montarPromptDiretorArte(ctx: ContextoPeca): Promise<Result
     ctx.contatos?.trim() ? `CONTATOS CADASTRADOS (entram na peça só se o pedido ou uma regra da marca exigir, copiados exatamente):\n${ctx.contatos.trim()}` : null,
     `FORMATO: ${DESCRICAO_FORMATO[ctx.formato]}`,
     materiaisEmTexto(ctx),
+    ctx.arteAntiga ? arteAntigaEmTexto(ctx.arteAntiga) : null,
     variacao,
   ]
     .filter(Boolean)
