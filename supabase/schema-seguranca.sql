@@ -13,7 +13,8 @@
 --   2. public.users: ninguém altera a própria linha. Antes uma conta sem acesso
 --      podia se promover a sócio com um UPDATE no próprio papel.
 --   3. Funções de pacote: só o servidor. Antes qualquer visitante, mesmo sem
---      login, podia debitar ou estornar imagens de um cliente.
+--      login, podia debitar ou estornar imagens de um cliente. As de crédito,
+--      sobra do modelo antigo que o app não chama mais, fecham junto.
 --
 -- Não muda o que o app faz: o worker e as telas de gestão usam a service role,
 -- que não passa por RLS, e o sócio continua alterando papéis por /configuracoes.
@@ -87,3 +88,7 @@ revoke execute on function public.consumir_imagem_pacote(uuid) from public, anon
 revoke execute on function public.devolver_imagem_pacote(uuid) from public, anon, authenticated;
 grant execute on function public.consumir_imagem_pacote(uuid) to service_role;
 grant execute on function public.devolver_imagem_pacote(uuid) to service_role;
+
+revoke execute on function public.debitar_credito(uuid, text) from public, anon, authenticated;
+revoke execute on function public.adicionar_credito(uuid, integer, text) from public, anon, authenticated;
+revoke execute on function public.estornar_credito(uuid, text) from public, anon, authenticated;
