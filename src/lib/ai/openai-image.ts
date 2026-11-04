@@ -8,12 +8,29 @@ export interface ImagemGerada {
   base64: string;
   mimeType: string;
   promptUsado: string;
+  uso?: UsoImagem;
+}
+
+// Tokens cobrados pela OpenAI nesta imagem. É o que permite gravar o custo real
+// em vez de um valor fixo por qualidade: cada anexo soma tokens de entrada.
+export interface UsoImagem {
+  textoEntrada: number;
+  imagemEntrada: number;
+  imagemSaida: number;
 }
 
 // Tipo de imagem de entrada — usado para descrever o papel de cada uma pro
 // modelo, já que a API de imagem da OpenAI não tem um campo estruturado de
 // "papel" por imagem (só uma lista ordenada de arquivos).
-export type TipoEntradaImagem = "produto" | "referencia" | "logotipo" | "base" | "fundo" | "elemento_extra";
+export type TipoEntradaImagem =
+  | "produto"
+  | "referencia"
+  | "logotipo"
+  | "base"
+  | "arte_melhorar"
+  | "arte_fonte"
+  | "fundo"
+  | "elemento_extra";
 
 export interface EntradaImagem {
   base64: string;
@@ -24,9 +41,16 @@ export interface EntradaImagem {
 const LABELS_ENTRADA: Record<TipoEntradaImagem, string> = {
   produto: "a foto real do produto anexada pelo lojista — use como base fiel, preservando formato, cor e rótulo reais",
   referencia:
-    "uma imagem de referência de estilo anexada — use só como inspiração de composição/paleta/clima, nunca copie texto, marca ou logotipo de terceiros que apareçam nela",
+    "uma imagem de referência de estilo anexada — use só como inspiração de paleta, clima e nível de acabamento, nunca copie a composição dela, o jeito como o preço foi desenhado, nem qualquer texto, preço, marca ou logotipo que apareça nela",
   logotipo: "o logotipo da marca do lojista anexado — inclua de forma discreta e legível na arte, sem distorcer",
   base: "a imagem base a ser editada — aplique o ajuste pedido preservando o restante exatamente como está",
+  // Os dois abaixo existem porque o rótulo de "base" manda preservar tudo, e ele
+  // vai ANTES do prompt: em "criar nova versão" isso contradizia a instrução de
+  // reinventar a composição, e a peça voltava parecida com a original.
+  arte_melhorar:
+    "a arte atual do cliente — mantenha a campanha, o produto e todas as informações comerciais, e reorganize a composição conforme as instruções abaixo",
+  arte_fonte:
+    "a arte antiga do cliente, que serve só como fonte de informação (produto, preço, textos, logo, identidade) — nunca use a composição, o grid, a hierarquia ou a diagramação dela",
   fundo:
     "uma imagem de referência de fundo anexada pelo lojista — use como base/inspiração para o novo fundo da arte, sem copiar textos ou marcas de terceiros que apareçam nela",
   elemento_extra:
@@ -38,7 +62,11 @@ function getClient(): OpenAI {
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY não configurada. Adicione ao .env.local para gerar imagens.");
   }
-  return new OpenAI({ apiKey, timeout: 180_000 });
+  // A função do worker vive 120s, e a ficha já gasta uns 25s antes daqui. Estourar
+  // este limite vira erro tratado, com nova tentativa pela fila; passar dele
+  // seria a plataforma matando a função no meio, sem nada registrado. Pelo mesmo
+  // motivo o retry fica com a fila, e não com o SDK.
+  return new OpenAI({ apiKey, timeout: 85_000, maxRetries: 0 });
 }
 
 // Limite de lado da imagem de entrada — fotos de celular (12MP+) não trazem
@@ -149,7 +177,18 @@ async function gerarUma(
 
   const b64 = resp.data?.[0]?.b64_json;
   if (!b64) return null;
-  return { base64: b64, mimeType: "image/png", promptUsado: prompt };
+  return {
+    base64: b64,
+    mimeType: "image/png",
+    promptUsado: prompt,
+    uso: resp.usage
+      ? {
+          textoEntrada: resp.usage.input_tokens_details?.text_tokens ?? 0,
+          imagemEntrada: resp.usage.input_tokens_details?.image_tokens ?? 0,
+          imagemSaida: resp.usage.output_tokens ?? 0,
+        }
+      : undefined,
+  };
 }
 
 export interface OpcoesGeracao {
@@ -180,13 +219,20 @@ export async function gerarVariacoes(opts: OpcoesGeracao): Promise<ImagemGerada[
   );
 
   const geradas: ImagemGerada[] = [];
+  let motivo: unknown;
   for (const r of resultados) {
     if (r.status === "fulfilled" && r.value) geradas.push(r.value);
-    else if (r.status === "rejected") console.error("[openai-image] falha ao gerar uma variação:", r.reason);
+    else if (r.status === "rejected") {
+      console.error("[openai-image] falha ao gerar uma variação:", r.reason);
+      motivo ??= r.reason;
+    }
   }
 
   if (geradas.length === 0) {
-    throw new Error("A OpenAI não retornou nenhuma imagem. Verifique o modelo e a API key.");
+    // O motivo real vai para a tela e para `geracoes`: moderação e limite de uso
+    // pedem reações diferentes, e "verifique a API key" não ajudava em nenhuma.
+    const detalhe = motivo instanceof Error ? `: ${motivo.message}` : "";
+    throw new Error(`A OpenAI não gerou a imagem${detalhe}`);
   }
   return geradas;
 }

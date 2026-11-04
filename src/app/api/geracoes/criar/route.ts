@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
   let forcarSemSaldo = false;
   let arteBaseUrl: string | undefined;
   let modoTransformacao: "melhoria_recompositiva" | "nova_versao_criativa" | undefined;
+  let produtoRefId: string | undefined;
 
   const contentType = request.headers.get("content-type") ?? "";
 
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
       forcarSemSaldo = form.get("forcarSemSaldo") === "true";
       arteBaseUrl = (form.get("arteBaseUrl") as string) || undefined;
       modoTransformacao = (form.get("modoTransformacao") as typeof modoTransformacao) || undefined;
+      produtoRefId = (form.get("produtoRefId") as string) || undefined;
 
       const audio = form.get("audio");
       if (audio instanceof File && audio.size > 0) {
@@ -103,6 +105,7 @@ export async function POST(request: NextRequest) {
       forcarSemSaldo = body.forcarSemSaldo === true;
       arteBaseUrl = (body.arteBaseUrl as string) || undefined;
       modoTransformacao = (body.modoTransformacao as typeof modoTransformacao) || undefined;
+      produtoRefId = (body.produtoRefId as string) || undefined;
     }
   } catch {
     return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
@@ -111,8 +114,13 @@ export async function POST(request: NextRequest) {
   // Validação no servidor, não só na tela: estes valores entram direto no
   // prompt e no tamanho da imagem.
   if (!clienteId) return NextResponse.json({ error: "Informe o cliente." }, { status: 400 });
-  if (!prompt.trim()) {
+  if (!prompt.trim() && !arteBaseUrl) {
     return NextResponse.json({ error: "Descreva o que você precisa (ou grave o áudio)." }, { status: 400 });
+  }
+  // Com arte-base o texto é opcional: a escolha de melhorar ou recriar já diz o
+  // que fazer, e a arte traz as informações da campanha.
+  if (!prompt.trim()) {
+    prompt = modoTransformacao === "nova_versao_criativa" ? "Criar uma nova versão desta arte" : "Melhorar esta arte";
   }
   if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > MAX_IMAGENS_POR_PEDIDO) {
     return NextResponse.json(
@@ -150,6 +158,8 @@ export async function POST(request: NextRequest) {
         disponivel: saldo.disponivel,
         necessario: quantidade,
         podeForcar: perfil.papel === "socio",
+        // O áudio já foi transcrito: volta para a tela em vez de se perder.
+        transcricao: origem === "audio" ? prompt : undefined,
       },
       { status: 402 },
     );
@@ -161,6 +171,7 @@ export async function POST(request: NextRequest) {
       .select("*")
       .eq("cliente_id", clienteId);
     const materiais = materiaisDisponiveis((referencias ?? []) as Referencia[]);
+    const produtoDoCliente = (referencias ?? []).some((r) => r.id === produtoRefId && r.tipo === "produto");
 
     const { data: pedido, error: erroPedido } = await supabase
       .from("pedidos")
@@ -190,6 +201,7 @@ export async function POST(request: NextRequest) {
           intensidade,
           variacao: i,
           total: quantidade,
+          ...(produtoDoCliente ? { produtoRefId } : {}),
           ...(arteBaseUrl ? { arteBaseUrl, modoTransformacao: modoTransformacao ?? "melhoria_recompositiva" } : {}),
         },
         status: "pendente",

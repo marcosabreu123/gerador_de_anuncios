@@ -100,16 +100,48 @@ export async function falharJob(job: FilaJob, erro: string): Promise<void> {
 
 // Jobs travados em "processando" (ex.: a function morreu no meio). Sem isso
 // eles ficariam parados para sempre, e o lote nunca concluiria.
-export async function destravarJobsAbandonados(minutos = 15): Promise<number> {
+//
+// Três minutos bastam porque nenhuma função vive mais de 120s: passado isso, o
+// job está morto com certeza. Cada reserva já conta uma tentativa, então quem
+// esgotou sai da fila em vez de voltar. Sem esse limite, uma peça que sempre
+// estoura o tempo gastaria na OpenAI para sempre sem entregar nada.
+export async function destravarJobsAbandonados(
+  minutos = 3,
+): Promise<{ religados: number; esgotados: FilaJob[] }> {
   const supabase = createAdminClient();
   const limite = new Date(Date.now() - minutos * 60_000).toISOString();
 
-  const { data } = await supabase
+  const { data: presos } = await supabase
     .from("fila_jobs")
-    .update({ status: "pendente", erro: "Reiniciado após processamento interrompido" })
+    .select("*")
     .eq("status", "processando")
-    .lt("iniciado_em", limite)
-    .select("id");
+    .lt("iniciado_em", limite);
 
-  return data?.length ?? 0;
+  let religados = 0;
+  const esgotados: FilaJob[] = [];
+
+  for (const job of (presos ?? []) as FilaJob[]) {
+    const esgotou = job.tentativas >= job.max_tentativas;
+    const { data: liberado } = await supabase
+      .from("fila_jobs")
+      .update(
+        esgotou
+          ? {
+              status: "erro",
+              erro: "Processamento interrompido em todas as tentativas",
+              concluido_em: new Date().toISOString(),
+            }
+          : { status: "pendente", erro: "Reiniciado após processamento interrompido" },
+      )
+      .eq("id", job.id)
+      .eq("status", "processando")
+      .select("id")
+      .maybeSingle();
+
+    if (!liberado) continue;
+    if (esgotou) esgotados.push(job);
+    else religados += 1;
+  }
+
+  return { religados, esgotados };
 }

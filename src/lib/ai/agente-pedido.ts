@@ -1,5 +1,6 @@
 import OpenAI from "openai";
-import { textoEnvolveComida } from "./prompt-builder";
+import { rotaDeVariacao } from "./diretor-arte";
+import { ESTILOS_COMUNICACAO, INTENSIDADES_VISUAIS, textoEnvolveComida } from "./prompt-builder";
 import type { BriefingCompleto, TipoPeca } from "@/lib/types";
 import type { BrandKit, BriefingPecaManual, Cliente, Referencia } from "@/lib/agencia/types";
 
@@ -42,9 +43,9 @@ function regrasDoCliente(brandKit: BrandKit | null): string[] {
 // Quando o operador pede mais de uma imagem, cada peça precisa buscar uma
 // saída diferente — senão voltam variações quase idênticas e o cliente
 // recebe a mesma arte três vezes.
-function instrucaoDeVariacao(variacao: number, total: number): string | null {
+export function instrucaoDeVariacao(variacao: number, total: number): string | null {
   if (total <= 1) return null;
-  return `Esta é a peça ${variacao + 1} de ${total} do mesmo pedido. Proponha uma solução visual claramente distinta das outras: mude conceito, enquadramento, composição e hierarquia. Mesmas informações, direção criativa diferente.`;
+  return `Esta é a peça ${variacao + 1} de ${total} do mesmo pedido. ${rotaDeVariacao(variacao)} Mesmas informações, direção criativa diferente.`;
 }
 
 // O prompt-builder espera um "produto" curto para montar a hierarquia da
@@ -141,14 +142,40 @@ export function tituloDoPedido(prompt: string, qtd: number): string {
   return qtd > 1 ? `${base} (${qtd} peças)` : base;
 }
 
-// Conta quantas referências de cada tipo o cliente tem — define o que entra
-// como imagem de entrada na geração.
+// O que o cliente tem cadastrado. Arte aprovada conta como referência porque
+// é o que a geração usa quando não há referência visual (ver gerar-peca.ts).
 export function materiaisDisponiveis(referencias: Referencia[]) {
   return {
     temFotoProduto: referencias.some((r) => r.tipo === "produto"),
     temLogotipo: referencias.some((r) => r.tipo === "logo"),
-    temReferencia: referencias.some((r) => r.tipo === "referencia_visual"),
+    temReferencia: referencias.some((r) => r.tipo === "referencia_visual" || r.tipo === "arte_aprovada"),
   };
+}
+
+// Os botões de estilo e impacto da tela, em texto. "IA decide" não vira
+// instrução nenhuma: nesse caso quem resolve é o nicho e o pedido.
+export function direcaoDosControles(manual: BriefingPecaManual): string | undefined {
+  const partes: string[] = [];
+  if (manual.estilo && manual.estilo !== "ia_decide") {
+    partes.push(`Estilo visual: ${ESTILOS_COMUNICACAO[manual.estilo]}`);
+  }
+  if (manual.intensidade && manual.intensidade !== "ia_decide") {
+    partes.push(`Impacto visual: ${INTENSIDADES_VISUAIS[manual.intensidade]}`);
+  }
+  return partes.length > 0 ? partes.join("\n") : undefined;
+}
+
+// Contatos cadastrados em texto. Separados da identidade porque não são regra
+// de marca: entram na arte quando o pedido ou uma regra obrigatória pedir, e aí
+// precisam estar à mão, já que o diretor de arte não pode inventar telefone.
+export function contatosParaInstrucao(brandKit: BrandKit | null): string | undefined {
+  const partes = [
+    brandKit?.whatsapp?.trim() && `WhatsApp: ${brandKit.whatsapp.trim()}`,
+    brandKit?.instagram?.trim() && `Instagram: ${brandKit.instagram.trim()}`,
+    brandKit?.endereco?.trim() && `Endereço: ${brandKit.endereco.trim()}`,
+    brandKit?.horario_funcionamento?.trim() && `Horário: ${brandKit.horario_funcionamento.trim()}`,
+  ].filter(Boolean);
+  return partes.length > 0 ? partes.join("\n") : undefined;
 }
 
 // ---------------------------------------------------------------------------

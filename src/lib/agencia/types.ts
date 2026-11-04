@@ -132,6 +132,10 @@ export interface BriefingPecaManual {
   formato: Formato;
   estilo?: EstiloComunicacao;
   intensidade?: IntensidadeVisual;
+  // Foto de produto escolhida para este pedido (id em `referencias`). Sem ela o
+  // produto é composto do zero: o modelo trata o anexo como o produto real da
+  // peça, então anexar a foto errada é pior do que não anexar nenhuma.
+  produtoRefId?: string;
   // Arte pronta enviada pelo operador (a peça antiga do cliente, ou algo que
   // ele mandou por WhatsApp). Quando presente, a geração deixa de criar do
   // zero e passa a trabalhar sobre ela — ver modoTransformacao.

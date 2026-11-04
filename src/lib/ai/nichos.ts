@@ -34,7 +34,7 @@ export interface GuiaNicho {
 export const NICHOS: Record<string, GuiaNicho> = {
   hamburgueria: {
     rotulo: "hamburgueria, lanchonete e fast-food artesanal",
-    termos: ["hamburgueria", "hamburger", "burger", "lanchonete", "lanche", "fast-food", "fast food", "hot dog", "dogueria", "batata"],
+    termos: ["hamburgueria", "hamburger", "hamburguer", "burger", "lanchonete", "lanche", "fast-food", "fast food", "hot dog", "dogueria", "batata"],
     paleta: "madeira escura, carvão, preto fosco, creme, âmbar e um destaque quente saturado usado só no preço ou selo",
     luz: "luz lateral quente e direcional, contraluz marcando o vapor e o brilho do pão; sombra densa mas com detalhe",
     cena: "tábua de madeira ou prato escuro, papel kraft, fritas soltas, gotas de molho, grão de sal, fundo com profundidade desfocada do balcão ou da chapa",
@@ -42,6 +42,18 @@ export const NICHOS: Record<string, GuiaNicho> = {
     tipografia: "sans-serif condensada e pesada na headline, sans-serif regular no secundário; nada de script",
     evitar: "fundo vermelho e amarelo saturado de panfleto, queijo em cor fluorescente, hambúrguer com camadas impossíveis de altura, brilho plástico de render 3D",
     referencia: "campanha de rede premium de hambúrguer artesanal, não encarte de supermercado",
+  },
+
+  restaurante: {
+    rotulo: "restaurante, marmitaria e comida japonesa",
+    termos: ["restaurante", "marmita", "marmitex", "marmitaria", "self-service", "self service", "comida caseira", "prato feito", "comida japonesa", "japonesa", "sushi", "temaki"],
+    paleta: "tons de mesa posta: madeira, linho cru, cerâmica e grafite, com o colorido vindo do próprio prato",
+    luz: "luz lateral suave de janela ou luz quente de salão, marcando vapor, brilho de molho e textura; nunca flash frontal",
+    cena: "mesa posta com talher, guardanapo de tecido e um ou dois ingredientes frescos; marmita em superfície limpa; no japonês, prancha escura, hashi e shoyu, sem excesso",
+    composicao: "prato em três-quartos ou vista de cima ocupando a maior massa visual, oferta em faixa discreta ou no respiro lateral",
+    tipografia: "serif calorosa ou sans-serif humanista; em oferta de almoço, sans-serif semibold bem legível; nada de script fina",
+    evitar: "foto de cardápio com fundo branco estourado, comida com cor artificial, salmão fluorescente, arroz sem textura, mesa lotada de itens",
+    referencia: "cardápio de restaurante bem avaliado ou campanha de delivery premium, não panfleto de bairro",
   },
 
   pizzaria: {
@@ -214,7 +226,7 @@ export const NICHOS: Record<string, GuiaNicho> = {
 
   imobiliaria: {
     rotulo: "imobiliária, construção e arquitetura",
-    termos: ["imobiliária", "imobiliaria", "imóvel", "imovel", "apartamento", "casa", "terreno", "construtora", "construção", "construcao", "arquitetura", "engenharia", "reforma", "móveis planejados", "moveis planejados"],
+    termos: ["imobiliária", "imobiliaria", "imóvel", "imovel", "imóveis", "imoveis", "apartamento", "casa", "terreno", "construtora", "construção", "construcao", "arquitetura", "engenharia", "reforma", "móveis planejados", "moveis planejados"],
     paleta: "neutros arquitetônicos — concreto, areia, off-white, madeira, verde folhagem — com azul ou dourado de marca",
     luz: "luz natural de fim de tarde, sombra longa, valorizando volume e material",
     cena: "fachada, interior com profundidade, janela com luz, vegetação, mobiliário discreto",
@@ -226,7 +238,7 @@ export const NICHOS: Record<string, GuiaNicho> = {
 
   automotivo: {
     rotulo: "automotivo, oficina e autopeças",
-    termos: ["carro", "automotivo", "oficina", "mecânica", "mecanica", "autopeça", "autopeca", "pneu", "lava-jato", "funilaria", "moto", "veículo", "veiculo", "seguro auto"],
+    termos: ["carro", "automotivo", "auto center", "autocenter", "troca de óleo", "troca de oleo", "oficina", "mecânica", "mecanica", "autopeça", "autopeca", "pneu", "lava-jato", "funilaria", "moto", "veículo", "veiculo", "seguro auto"],
     paleta: "preto, grafite, prata, azul profundo e um acento de alerta usado com parcimônia",
     luz: "luz dura com reflexo controlado na lataria, contraluz marcando a silhueta, chão molhado refletindo",
     cena: "piso de concreto, garagem em penumbra, ferramenta, fundo urbano desfocado",
@@ -299,23 +311,41 @@ export const NICHO_GENERICO: GuiaNicho = {
   referencia: "peça de social media de marca bem posicionada",
 };
 
-// Acha o guia pelo nicho do cadastro somado ao pedido. Usa o pedido também
-// porque o cadastro costuma ser genérico ("alimentação") enquanto o pedido diz
-// o que de fato está sendo anunciado ("promoção de pizza").
-export function guiaDoNicho(nicho: string | null | undefined, pedido = ""): GuiaNicho {
-  const alvo = `${nicho ?? ""} ${pedido}`.toLowerCase();
-  if (!alvo.trim()) return NICHO_GENERICO;
+// Minúsculas, sem acento e só com letras e números separados por um espaço.
+function limpar(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+// Procura por palavra inteira, aceitando plural. Por substring "barato" caía em
+// bebidas (por causa de "bar") e "espaço" em beleza (por causa de "spa").
+function acharGuia(texto: string): GuiaNicho | null {
+  const alvo = ` ${limpar(texto)} `;
+  if (!alvo.trim()) return null;
 
   let melhor: { guia: GuiaNicho; peso: number } | null = null;
   for (const guia of Object.values(NICHOS)) {
     for (const termo of guia.termos) {
-      if (!alvo.includes(termo)) continue;
+      const palavra = limpar(termo);
+      const achou = [palavra, `${palavra}s`, `${palavra}es`].some((t) => alvo.includes(` ${t} `));
+      if (!achou) continue;
       // Termo mais longo é mais específico: "hamburgueria" ganha de "lanche".
       const peso = termo.length;
       if (!melhor || peso > melhor.peso) melhor = { guia, peso };
     }
   }
-  return melhor?.guia ?? NICHO_GENERICO;
+  return melhor?.guia ?? null;
+}
+
+// O nicho do cadastro manda. O pedido só decide quando o cadastro é genérico
+// ("alimentação") e não casa com nenhum segmento: uma academia que anuncia o
+// próprio aniversário continua sendo academia, não vira evento.
+export function guiaDoNicho(nicho: string | null | undefined, pedido = ""): GuiaNicho {
+  return acharGuia(nicho ?? "") ?? acharGuia(pedido) ?? NICHO_GENERICO;
 }
 
 // Bloco pronto para injetar no system prompt.

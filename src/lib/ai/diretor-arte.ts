@@ -88,7 +88,7 @@ No máximo duas famílias. Hierarquia se faz com peso, tamanho e espaçamento, n
 Headline: escolha deliberada, nunca o padrão. Sans-serif condensada pesada para urgência comercial, serif alta para sofisticação, geométrica espaçada para tecnologia e arquitetura, humanista para confiança e saúde.
 Secundária: sans-serif regular e legível, sempre.
 
-Texto curto e inteiro. Palavra nunca quebra no meio. Preço é elemento gráfico: trabalhe o tamanho relativo entre o símbolo da moeda, os inteiros e os centavos.
+Texto curto e inteiro. Palavra nunca quebra no meio. Preço é elemento gráfico: trabalhe o tamanho relativo entre o símbolo da moeda, os inteiros e os centavos, sempre na mesma linha de base. Nunca peça centavos elevados ou sobrescritos: é o que faz o gerador de imagem duplicar a vírgula.
 
 Proibido: contorno preto grosso, sombra dura, efeito 3D, letra inflada, degradê dentro da letra, amarelo com borda preta. Todos marcam a peça como amadora instantaneamente.`;
 
@@ -261,6 +261,13 @@ export interface ContextoPeca {
   // Pedido original do operador, em português, como ele escreveu ou falou.
   pedido: string;
   identidade?: string;
+  // Estilo e impacto escolhidos nos botões da tela, já em texto. Ausente quando
+  // o operador deixou "IA decide".
+  direcaoVisual?: string;
+  // WhatsApp, Instagram, endereço e horário cadastrados. Ficam à disposição: o
+  // diretor não pode inventar contato, então sem isto o pedido "coloca o
+  // WhatsApp" não tinha como ser atendido.
+  contatos?: string;
   formato: Formato;
   temFotoProduto: boolean;
   temLogotipo: boolean;
@@ -274,6 +281,20 @@ export interface ResultadoDiretorArte {
   prompt: string;
   ficha: FichaCriativa;
   uso?: { modelo: string; entrada: number; saida: number };
+}
+
+// Cada peça do lote nasce numa chamada separada, sem ver as irmãs. Só pedir "seja
+// diferente" não adianta: num lote de três saíram três closes em três-quartos da
+// mesma fatia de pizza. Por isso cada peça recebe uma rota de layout própria.
+const ROTAS_DE_VARIACAO = [
+  "Rota desta peça: herói em close. O assunto principal em close ou três-quartos, ocupando a maior massa visual, com o texto no respiro da cena.",
+  "Rota desta peça: vista de cima. Câmera a 90 graus sobre a superfície, assunto e objetos de apoio organizados em flat lay, com o texto numa área limpa do quadro.",
+  "Rota desta peça: tipografia protagonista. A headline enorme ocupa boa parte do quadro e é o primeiro impacto; o assunto aparece menor, interagindo com as letras.",
+  "Rota desta peça: quadro dividido. Um campo liso na cor de base da marca ocupa cerca de um terço do quadro e leva todo o texto; o assunto sangra na borda oposta.",
+];
+
+export function rotaDeVariacao(indice: number): string {
+  return ROTAS_DE_VARIACAO[indice % ROTAS_DE_VARIACAO.length];
 }
 
 function materiaisEmTexto(ctx: ContextoPeca): string {
@@ -299,13 +320,15 @@ export async function montarPromptDiretorArte(ctx: ContextoPeca): Promise<Result
   if (!apiKey) throw new Error("OPENAI_API_KEY ausente.");
 
   const variacao = ctx.variacao && ctx.variacao.total > 1
-    ? `ESTA É A PEÇA ${ctx.variacao.indice + 1} DE ${ctx.variacao.total} do mesmo pedido. Proponha uma direção claramente distinta das irmãs: outro conceito, outro enquadramento, outra composição e outra hierarquia. As mesmas informações, uma solução visual diferente.`
+    ? `ESTA É A PEÇA ${ctx.variacao.indice + 1} DE ${ctx.variacao.total} do mesmo pedido. ${rotaDeVariacao(ctx.variacao.indice)} As mesmas informações, com um conceito próprio que não repita a ideia das outras peças.`
     : null;
 
   const usuario = [
     `PEDIDO DO OPERADOR: ${ctx.pedido}`,
     `EMPRESA: ${ctx.empresa}${ctx.nicho ? ` (nicho: ${ctx.nicho})` : ""}`,
     ctx.identidade?.trim() ? `IDENTIDADE VISUAL DO CLIENTE (tem precedência sobre a paleta do segmento):\n${ctx.identidade.trim()}` : null,
+    ctx.direcaoVisual?.trim() ? `DIREÇÃO ESCOLHIDA PELO OPERADOR (siga, tem precedência sobre o padrão do segmento):\n${ctx.direcaoVisual.trim()}` : null,
+    ctx.contatos?.trim() ? `CONTATOS CADASTRADOS (entram na peça só se o pedido ou uma regra da marca exigir, copiados exatamente):\n${ctx.contatos.trim()}` : null,
     `FORMATO: ${DESCRICAO_FORMATO[ctx.formato]}`,
     materiaisEmTexto(ctx),
     variacao,
@@ -313,7 +336,9 @@ export async function montarPromptDiretorArte(ctx: ContextoPeca): Promise<Result
     .filter(Boolean)
     .join("\n\n");
 
-  const openai = new OpenAI({ apiKey, timeout: 40_000 });
+  // maxRetries 0 porque criarCompletionComRetry já tenta de novo. Somando os
+  // retries do SDK, a ficha podia gastar 240s de uma função que vive 120s.
+  const openai = new OpenAI({ apiKey, timeout: 40_000, maxRetries: 0 });
   const completion = await criarCompletionComRetry(openai, {
     model: TEXT_PROMPT_BUILDER_MODEL,
     temperature: 0.85,

@@ -18,7 +18,7 @@ export default async function NovaGeracaoPage({ params }: { params: Promise<{ id
 
   const [{ data: brandKitRaw }, { data: referenciasRaw }, saldo] = await Promise.all([
     supabase.from("brand_kits").select("*").eq("cliente_id", id).maybeSingle(),
-    supabase.from("referencias").select("*").eq("cliente_id", id),
+    supabase.from("referencias").select("*").eq("cliente_id", id).order("created_at", { ascending: false }),
     saldoDoCliente(id),
   ]);
 
@@ -30,7 +30,10 @@ export default async function NovaGeracaoPage({ params }: { params: Promise<{ id
   const materiais = (["produto", "logo", "referencia_visual"] as const).map((tipo) => ({
     tipo,
     label: TIPOS_REFERENCIA[tipo].label,
-    tem: referencias.some((r) => r.tipo === tipo),
+    // Arte aprovada também serve de referência de estilo (ver gerar-peca.ts).
+    tem: referencias.some(
+      (r) => r.tipo === tipo || (tipo === "referencia_visual" && r.tipo === "arte_aprovada"),
+    ),
   }));
 
   const semIdentidade = !brandKit?.estilo_visual && !brandKit?.cores_primarias;
@@ -78,6 +81,7 @@ export default async function NovaGeracaoPage({ params }: { params: Promise<{ id
           clienteId={id}
           saldoDisponivel={saldo.disponivel}
           ehSocio={ehSocio(perfil)}
+          fotosProduto={referencias.filter((r) => r.tipo === "produto")}
         />
       </main>
     </>

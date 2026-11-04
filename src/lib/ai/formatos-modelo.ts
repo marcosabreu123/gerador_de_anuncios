@@ -54,8 +54,19 @@ function regraDeTexto(ficha: FichaCriativa): string {
     "Render every text string EXACTLY as written, character for character, including currency symbols, commas and accents.",
     "Do not translate, rephrase, reformat or add any text. No extra words, no invented background text, no watermark.",
     "Keep every word whole — never break a word across lines.",
+    ...(ficha.textos.some(ehPreco) ? [REGRA_DE_PRECO] : []),
   ].join(" ");
 }
+
+function ehPreco(t: FichaCriativa["textos"][number]): boolean {
+  return t.papel === "preco" || /\d,\d{2}/.test(t.conteudo);
+}
+
+// Centavos elevados são o que produz "R$ 189,,90". Numa rodada de 17 artes, as 3
+// que subiram os centavos saíram com vírgula dupla, inclusive uma que pedia
+// vírgula única no prompt, e as 14 com o preço numa linha de base só saíram limpas.
+const REGRA_DE_PRECO =
+  "Set each price on one single baseline: the cents may be smaller, but never raised or superscripted, and the comma appears exactly once.";
 
 // ---------------------------------------------------------------------------
 // gpt-image-2 — prosa em seções

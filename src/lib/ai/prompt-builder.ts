@@ -32,7 +32,7 @@ import {
 // "Premium" + "Impactante" = luxo com presença comercial forte; "Clean" +
 // "Discreta" = estilo Apple; "Vibrante" + "Impactante" = promoção de açaí;
 // "Minimalista" + "Impactante" = poucos elementos com muito impacto.
-const ESTILOS_COMUNICACAO: Record<Exclude<EstiloComunicacao, "ia_decide">, string> = {
+export const ESTILOS_COMUNICACAO: Record<Exclude<EstiloComunicacao, "ia_decide">, string> = {
   premium: "estética sofisticada, poucos elementos, muito refinamento, hierarquia excelente, espaço negativo, texturas discretas, iluminação elegante, aspecto de marca premium — nunca exagerar em brilhos ou efeitos",
   moderno: "visual contemporâneo, layout dinâmico, elementos gráficos discretos, sensação de profundidade e de marca tecnológica/atual, organização limpa",
   clean: "layout extremamente limpo, poucos elementos, muito respiro, foco absoluto no produto, excelente legibilidade, paleta reduzida, sem excesso de efeitos",
@@ -43,7 +43,7 @@ const ESTILOS_COMUNICACAO: Record<Exclude<EstiloComunicacao, "ia_decide">, strin
 // Nível de impacto/energia comercial da peça — dimensão independente do
 // estilo (nunca altera a identidade estética escolhida acima, só a força com
 // que ela é aplicada).
-const INTENSIDADES_VISUAIS: Record<Exclude<IntensidadeVisual, "ia_decide">, string> = {
+export const INTENSIDADES_VISUAIS: Record<Exclude<IntensidadeVisual, "ia_decide">, string> = {
   discreta: "visual calmo, baixo contraste, poucos brilhos, poucos elementos chamativos — ideal para marcas sofisticadas",
   equilibrada: "mistura organização com impacto — nível padrão, adequado para a maioria das artes",
   impactante: "maior destaque para preço/CTA/oferta, maior contraste, maior profundidade, mais força visual e energia, sem exagerar e sem nunca perder legibilidade",

@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { lerRespostaJSON } from "@/lib/fetch-json";
 import GerandoMensagem from "@/components/GerandoMensagem";
 import { enviarImagemParaStorage } from "@/lib/upload-storage";
+import type { Referencia } from "@/lib/agencia/types";
 import type { EstiloComunicacao, Formato, IntensidadeVisual } from "@/lib/types";
 
 // Tela de produção. O operador escreve ou fala o pedido, ajusta os controles
@@ -43,10 +44,12 @@ export default function NovaGeracaoForm({
   clienteId,
   saldoDisponivel,
   ehSocio,
+  fotosProduto,
 }: {
   clienteId: string;
   saldoDisponivel: number;
   ehSocio: boolean;
+  fotosProduto: Referencia[];
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -66,9 +69,20 @@ export default function NovaGeracaoForm({
     "melhoria_recompositiva" | "nova_versao_criativa"
   >("melhoria_recompositiva");
   const [subindoArte, setSubindoArte] = useState(false);
+  // Com uma foto só ela já vem marcada. Com várias, a escolha é do operador: o
+  // modelo trata o anexo como o produto da peça, e a foto errada estraga a arte.
+  const [produtoRefId, setProdutoRefId] = useState<string | null>(
+    fotosProduto.length === 1 ? fotosProduto[0].id : null,
+  );
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  // O fim da gravação acontece fora do render em que ela começou. Sem a versão
+  // mais recente do envio, um formato trocado durante a gravação se perderia.
+  const enviarRef = useRef<typeof enviar>(null);
+  useEffect(() => {
+    enviarRef.current = enviar;
+  });
 
   async function iniciarGravacao() {
     setErro(null);
@@ -83,7 +97,7 @@ export default function NovaGeracaoForm({
         // Libera o microfone na hora — senão o indicador do navegador fica
         // aceso depois que o áudio já foi enviado.
         stream.getTracks().forEach((t) => t.stop());
-        void enviar(new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" }));
+        void enviarRef.current?.(new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" }));
       };
       recorder.start();
       recorderRef.current = recorder;
@@ -114,6 +128,7 @@ export default function NovaGeracaoForm({
         form.append("estilo", estilo);
         form.append("intensidade", intensidade);
         if (forcarSemSaldo) form.append("forcarSemSaldo", "true");
+        if (produtoRefId) form.append("produtoRefId", produtoRefId);
         if (arteBaseUrl) {
           form.append("arteBaseUrl", arteBaseUrl);
           form.append("modoTransformacao", modoTransformacao);
@@ -131,6 +146,7 @@ export default function NovaGeracaoForm({
             estilo,
             intensidade,
             forcarSemSaldo,
+            ...(produtoRefId ? { produtoRefId } : {}),
             ...(arteBaseUrl ? { arteBaseUrl, modoTransformacao } : {}),
           }),
         });
@@ -141,10 +157,12 @@ export default function NovaGeracaoForm({
         pedidoId?: string;
         saldoInsuficiente?: boolean;
         podeForcar?: boolean;
+        transcricao?: string;
       }>(res);
 
       if (!res.ok || !json.pedidoId) {
         if (json.saldoInsuficiente) {
+          if (json.transcricao) setPrompt(json.transcricao);
           setPodeForcar(Boolean(json.podeForcar));
           setErro(json.error ?? "Saldo insuficiente.");
           return;
@@ -178,6 +196,7 @@ export default function NovaGeracaoForm({
 
   const custoEmImagens = quantidade;
   const faltaSaldo = custoEmImagens > saldoDisponivel;
+  const bloqueadoSemSaldo = faltaSaldo && !ehSocio;
 
   return (
     <div className="card p-4 flex flex-col gap-4">
@@ -203,7 +222,7 @@ export default function NovaGeracaoForm({
             ⏹ Parar e usar o áudio
           </button>
         ) : (
-          <button type="button" onClick={iniciarGravacao} className="btn btn-outline">
+          <button type="button" onClick={iniciarGravacao} disabled={bloqueadoSemSaldo} className="btn btn-outline">
             🎙 Gravar áudio
           </button>
         )}
@@ -282,6 +301,35 @@ export default function NovaGeracaoForm({
         )}
       </div>
 
+      {fotosProduto.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="label">Foto do produto</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Opcao ativo={produtoRefId === null} onClick={() => setProdutoRefId(null)}>
+              Nenhuma
+            </Opcao>
+            {fotosProduto.map((foto) => (
+              <button
+                key={foto.id}
+                type="button"
+                onClick={() => setProdutoRefId(foto.id)}
+                title={foto.descricao ?? "Foto do produto"}
+                aria-pressed={produtoRefId === foto.id}
+                className={`rounded-lg overflow-hidden border-2 ${
+                  produtoRefId === foto.id ? "border-[var(--accent)]" : "border-transparent"
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={foto.url} alt={foto.descricao ?? "Foto do produto"} className="w-14 h-14 object-cover" />
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-[var(--muted)]">
+            A foto escolhida vira o produto da arte. Sem foto, a IA compõe o produto do pedido.
+          </p>
+        </div>
+      )}
+
       <Grupo titulo="Quantas imagens">
         {QUANTIDADES.map((q) => (
           <Opcao key={q} ativo={quantidade === q} onClick={() => setQuantidade(q)}>
@@ -326,7 +374,7 @@ export default function NovaGeracaoForm({
         <button
           type="button"
           onClick={() => enviar()}
-          disabled={!prompt.trim() || enviando || gravando || (faltaSaldo && !ehSocio)}
+          disabled={(!prompt.trim() && !arteBaseUrl) || enviando || gravando || bloqueadoSemSaldo}
           className="btn btn-primary"
         >
           Gerar {quantidade > 1 ? `${quantidade} imagens` : "imagem"}
@@ -340,7 +388,7 @@ export default function NovaGeracaoForm({
         )}
       </div>
 
-      {faltaSaldo && !ehSocio && (
+      {bloqueadoSemSaldo && (
         <p className="text-xs text-[var(--muted)]">
           Este cliente não tem saldo suficiente. Peça a um sócio para lançar o pacote.
         </p>

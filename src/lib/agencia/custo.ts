@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { UsoImagem } from "@/lib/ai/openai-image";
 import type { TipoGeracao } from "./types";
 
 // Instrumentação de custo. O modelo antigo contava "créditos" do lojista, que
@@ -7,29 +8,37 @@ import type { TipoGeracao } from "./types";
 // que falharam (falha também é dinheiro gasto).
 
 // ---------------------------------------------------------------------------
-// TABELA DE PREÇOS — CONFERIR ANTES DE CONFIAR NOS NÚMEROS
+// TABELA DE PREÇOS
 // ---------------------------------------------------------------------------
-// Estes valores são um ponto de partida, NÃO uma fonte de verdade: preço de
-// API muda e varia por conta/região. Confira no painel de billing da OpenAI e
-// ajuste aqui — é o único lugar do app que precisa mudar.
+// Conferida na página de preços da OpenAI em 2026-11-03, sem desconto de cache
+// nem batch. Preço de API muda: quando mudar, este é o único lugar a ajustar.
 //
 // Por isso usage_raw é gravado junto em `geracoes`: com o dado bruto guardado,
 // corrigir a tabela depois permite RECALCULAR o histórico inteiro, em vez de
 // perder o custo real das gerações antigas.
 //
 // Valores em USD.
+
+// Imagem: USD por 1M de tokens. A OpenAI cobra por token, e cada anexo soma
+// tokens de entrada, então o custo real varia de peça para peça.
+export const PRECO_IMAGEM_TOKENS_USD: Record<string, UsoImagem> = {
+  "gpt-image-2": { textoEntrada: 5, imagemEntrada: 8, imagemSaida: 30 },
+};
+
+// Estimativa por imagem, só para quando não há tokens para contar: a chamada
+// falhou ou a resposta veio sem o campo usage.
 export const PRECO_IMAGEM_USD: Record<string, Record<string, number>> = {
   "gpt-image-2": {
     low: 0.02,
-    medium: 0.07,
+    medium: 0.06,
     high: 0.19,
   },
 };
 
 // Texto: USD por 1M de tokens (entrada/saída).
 export const PRECO_TEXTO_USD: Record<string, { entrada: number; saida: number }> = {
-  "gpt-5.4": { entrada: 2.5, saida: 10 },
-  "gpt-5.4-nano": { entrada: 0.1, saida: 0.4 },
+  "gpt-5.4": { entrada: 2.5, saida: 15 },
+  "gpt-5.4-nano": { entrada: 0.2, saida: 1.25 },
   "gpt-5.5": { entrada: 5, saida: 20 },
 };
 
@@ -46,6 +55,17 @@ export function cambioAtual(): number {
 
 export function custoImagemUSD(modelo: string, qualidade: string): number {
   return PRECO_IMAGEM_USD[modelo]?.[qualidade] ?? 0;
+}
+
+export function custoImagemPorUso(modelo: string, uso: UsoImagem): number {
+  const preco = PRECO_IMAGEM_TOKENS_USD[modelo];
+  if (!preco) return 0;
+  return (
+    (uso.textoEntrada * preco.textoEntrada +
+      uso.imagemEntrada * preco.imagemEntrada +
+      uso.imagemSaida * preco.imagemSaida) /
+    1_000_000
+  );
 }
 
 export function custoTextoUSD(modelo: string, tokensEntrada: number, tokensSaida: number): number {
