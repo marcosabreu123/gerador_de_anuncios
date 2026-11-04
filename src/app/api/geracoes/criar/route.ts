@@ -1,9 +1,9 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { materiaisDisponiveis, tituloDoPedido, transcreverAudio } from "@/lib/ai/agente-pedido";
+import { materiaisDisponiveis, tituloDoPedido } from "@/lib/ai/agente-pedido";
 import { enfileirar } from "@/lib/agencia/fila";
 import { saldoDoCliente } from "@/lib/agencia/pacotes";
-import { PRECO_TRANSCRICAO_USD_POR_MINUTO, registrarGeracao } from "@/lib/agencia/custo";
+import { transcreverPedido } from "@/lib/agencia/transcricao";
 import type { EstiloComunicacao, Formato, IntensidadeVisual } from "@/lib/types";
 import type { BriefingPecaManual, Referencia } from "@/lib/agencia/types";
 
@@ -77,20 +77,7 @@ export async function POST(request: NextRequest) {
       const audio = form.get("audio");
       if (audio instanceof File && audio.size > 0) {
         origem = "audio";
-        const inicio = Date.now();
-        const { texto, duracaoSegundos } = await transcreverAudio(audio);
-        prompt = texto;
-
-        // Sem duração na resposta, estima pelo tamanho para o custo não ficar
-        // zerado no rateio.
-        const minutos = (duracaoSegundos ?? audio.size / 32_000) / 60;
-        await registrarGeracao({
-          tipo: "transcricao",
-          modelo: "whisper-1",
-          custoUsd: minutos * PRECO_TRANSCRICAO_USD_POR_MINUTO,
-          duracaoMs: Date.now() - inicio,
-          clienteId,
-        });
+        prompt = await transcreverPedido(audio, clienteId);
       } else {
         prompt = String(form.get("prompt") ?? "");
       }

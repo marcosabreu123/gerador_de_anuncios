@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ImagePlus, Mic, Minus, Sparkles, Square } from "lucide-react";
+import { Check, ImagePlus, Mic, Minus, Sparkles, Square, WandSparkles } from "lucide-react";
 import { lerRespostaJSON } from "@/lib/fetch-json";
 import GerandoMensagem from "@/components/GerandoMensagem";
 import { TituloCard } from "@/components/ui";
@@ -18,6 +18,19 @@ import type { EstiloComunicacao, Formato, IntensidadeVisual } from "@/lib/types"
 // operador: quantidade, formato e intensidade são escolha de quem conhece o
 // cliente. O que o agente faz é ler o perfil da empresa (identidade, nicho,
 // regras, materiais) e traduzir o pedido em direção de arte.
+//
+// "Melhorar minha ideia" é opcional: a IA sugere um briefing, e ele só entra no
+// pedido se o operador aprovar. Quem não quiser continua gerando direto.
+
+// Abaixo disso quase sempre falta o que vender, para quem ou o que fazer.
+const PALAVRAS_DE_IDEIA_CURTA = 12;
+
+interface SugestaoDeBriefing {
+  // Null quando a IA considerou que a ideia já está boa.
+  briefing: string | null;
+  faltou: string[];
+  avisos: string[];
+}
 
 const QUANTIDADES = [1, 2, 3, 4] as const;
 
@@ -79,15 +92,30 @@ export default function NovaGeracaoForm({
   const [produtoRefId, setProdutoRefId] = useState<string | null>(
     fotosProduto.length === 1 ? fotosProduto[0].id : null,
   );
+  const [sugestao, setSugestao] = useState<SugestaoDeBriefing | null>(null);
+  const [melhorando, setMelhorando] = useState(false);
+  const [erroMelhoria, setErroMelhoria] = useState<string | null>(null);
+  // O que o operador tinha escrito antes de aprovar: a aprovação pode ser desfeita.
+  const [textoAntes, setTextoAntes] = useState<string | null>(null);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const destinoAudioRef = useRef<"gerar" | "melhorar">("gerar");
   // O fim da gravação acontece fora do render em que ela começou. Sem a versão
   // mais recente do envio, um formato trocado durante a gravação se perderia.
   const enviarRef = useRef<typeof enviar>(null);
+  const melhorarRef = useRef<typeof melhorar>(null);
   useEffect(() => {
     enviarRef.current = enviar;
+    melhorarRef.current = melhorar;
   });
+
+  // Em tela baixa a sugestão nasce abaixo da dobra, com o aprovar fora de vista.
+  // A margem de rolagem no card desconta o menu fixo do celular.
+  const sugestaoRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (sugestao) sugestaoRef.current?.scrollIntoView({ block: "nearest" });
+  }, [sugestao]);
 
   async function iniciarGravacao() {
     setErro(null);
@@ -102,7 +130,9 @@ export default function NovaGeracaoForm({
         // Libera o microfone na hora — senão o indicador do navegador fica
         // aceso depois que o áudio já foi enviado.
         stream.getTracks().forEach((t) => t.stop());
-        void enviarRef.current?.(new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" }));
+        const audio = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (destinoAudioRef.current === "melhorar") void melhorarRef.current?.(audio);
+        else void enviarRef.current?.(audio);
       };
       recorder.start();
       recorderRef.current = recorder;
@@ -112,11 +142,66 @@ export default function NovaGeracaoForm({
     }
   }
 
-  function pararGravacao() {
+  function pararGravacao(destino: "gerar" | "melhorar") {
+    destinoAudioRef.current = destino;
     recorderRef.current?.stop();
     recorderRef.current = null;
     setGravando(false);
-    setTranscrevendo(true);
+    if (destino === "gerar") setTranscrevendo(true);
+    else setMelhorando(true);
+  }
+
+  async function melhorar(audio?: Blob) {
+    setMelhorando(true);
+    setErroMelhoria(null);
+    try {
+      let res: Response;
+      if (audio) {
+        const form = new FormData();
+        form.append("clienteId", clienteId);
+        form.append("ideia", prompt);
+        form.append("audio", audio, "pedido.webm");
+        res = await fetch("/api/geracoes/melhorar-ideia", { method: "POST", body: form });
+      } else {
+        res = await fetch("/api/geracoes/melhorar-ideia", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clienteId, ideia: prompt, anterior: sugestao?.briefing }),
+        });
+      }
+
+      const json = await lerRespostaJSON<{
+        error?: string;
+        ideia?: string;
+        briefing?: string | null;
+        faltou?: string[];
+        avisos?: string[];
+      }>(res);
+
+      // O áudio já virou texto: fica na caixa mesmo se a melhoria falhar.
+      if (json.ideia) setPrompt(json.ideia);
+      if (!res.ok) throw new Error(json.error ?? "Não consegui melhorar agora.");
+
+      setSugestao({ briefing: json.briefing ?? null, faltou: json.faltou ?? [], avisos: json.avisos ?? [] });
+    } catch (e) {
+      setErroMelhoria(e instanceof Error ? e.message : "Não consegui melhorar agora.");
+    } finally {
+      setMelhorando(false);
+    }
+  }
+
+  function aprovarSugestao() {
+    if (!sugestao?.briefing) return;
+    // Numa segunda aprovação, "voltar" continua levando ao texto do operador.
+    setTextoAntes((antes) => antes ?? prompt);
+    setPrompt(sugestao.briefing);
+    setSugestao(null);
+  }
+
+  function desfazerAprovacao() {
+    if (textoAntes === null) return;
+    setPrompt(textoAntes);
+    setTextoAntes(null);
   }
 
   async function enviar(audio?: Blob, forcarSemSaldo = false) {
@@ -204,6 +289,11 @@ export default function NovaGeracaoForm({
   const bloqueadoSemSaldo = faltaSaldo && !ehSocio;
   const semIdentidade = materiais.some((m) => m.tipo === "identidade" && !m.tem);
   const proporcao = FORMATOS.find((f) => f.valor === formato)?.proporcao;
+  const aprovacaoPendente = Boolean(sugestao?.briefing);
+  const palavras = prompt.trim() ? prompt.trim().split(/\s+/).length : 0;
+  // Com arte-base a informação da campanha vem da arte, que a melhoria não enxerga.
+  const ideiaCurta =
+    !arteBaseUrl && !sugestao && textoAntes === null && palavras > 0 && palavras < PALAVRAS_DE_IDEIA_CURTA;
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
@@ -216,26 +306,115 @@ export default function NovaGeracaoForm({
 
           <textarea
             value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            className="input min-h-[132px] resize-y"
+            onChange={(e) => {
+              setPrompt(e.target.value);
+              // A sugestão foi feita sobre o texto anterior: aprová-la agora
+              // apagaria o que o operador acabou de escrever.
+              setSugestao(null);
+              setErroMelhoria(null);
+            }}
+            className="input min-h-[132px] max-h-[50vh] resize-y field-sizing-content"
             placeholder="Ex: promoção de hambúrguer artesanal no combo com fritas e refri por R$39,90, hoje só até as 22h"
-            disabled={gravando}
+            disabled={gravando || melhorando}
           />
 
           <div className="flex flex-wrap items-center gap-2">
             {gravando ? (
-              <button type="button" onClick={pararGravacao} className="btn btn-accent">
-                <Square size={14} aria-hidden="true" />
-                Parar e usar o áudio
-              </button>
+              <>
+                <button type="button" onClick={() => pararGravacao("gerar")} className="btn btn-accent">
+                  <Square size={14} aria-hidden="true" />
+                  Parar e usar o áudio
+                </button>
+                {!arteBaseUrl && (
+                  <button type="button" onClick={() => pararGravacao("melhorar")} className="btn btn-outline">
+                    <WandSparkles size={16} aria-hidden="true" />
+                    Parar e melhorar a ideia
+                  </button>
+                )}
+                <span className="text-sm text-[var(--muted)]">Gravando…</span>
+              </>
             ) : (
-              <button type="button" onClick={iniciarGravacao} disabled={bloqueadoSemSaldo} className="btn btn-outline">
-                <Mic size={16} aria-hidden="true" />
-                Gravar áudio
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={iniciarGravacao}
+                  disabled={bloqueadoSemSaldo || melhorando}
+                  className="btn btn-outline"
+                >
+                  <Mic size={16} aria-hidden="true" />
+                  Gravar áudio
+                </button>
+                {!arteBaseUrl && (
+                  <button
+                    type="button"
+                    onClick={() => melhorar()}
+                    disabled={!prompt.trim() || melhorando || bloqueadoSemSaldo}
+                    className={`btn btn-outline ${ideiaCurta ? "border-[var(--accent)] text-[var(--accent)]" : ""}`}
+                  >
+                    {melhorando ? (
+                      <span className="spinner" aria-hidden="true" />
+                    ) : (
+                      <WandSparkles size={16} aria-hidden="true" />
+                    )}
+                    {melhorando ? "Melhorando…" : "Melhorar minha ideia"}
+                  </button>
+                )}
+                {ideiaCurta && !melhorando && (
+                  <span className="text-[13px] text-[var(--muted)]">Ideia curta: a IA pode montar um briefing melhor.</span>
+                )}
+              </>
             )}
-            {gravando && <span className="text-sm text-[var(--muted)]">Gravando…</span>}
           </div>
+
+          {erroMelhoria && <p className="text-sm text-[var(--danger)]">{erroMelhoria}</p>}
+
+          {textoAntes !== null && (
+            <p className="text-[13px] text-[var(--muted)]">
+              Briefing aprovado.{" "}
+              <button type="button" onClick={desfazerAprovacao} className="underline hover:text-[var(--foreground)]">
+                Voltar ao meu texto
+              </button>
+            </p>
+          )}
+
+          {sugestao && (
+            <div ref={sugestaoRef} className="quadro p-4 flex flex-col gap-3 scroll-mt-20 scroll-mb-24 lg:scroll-mb-4">
+              {sugestao.briefing ? (
+                <div className="flex flex-col gap-1.5">
+                  <span className="label mb-0">Briefing sugerido</span>
+                  <p className="text-sm whitespace-pre-wrap">{sugestao.briefing}</p>
+                </div>
+              ) : (
+                <p className="text-sm">Sua ideia já está boa. Pode gerar assim.</p>
+              )}
+
+              {sugestao.faltou.length > 0 && (
+                <p className="text-[13px] text-[var(--muted)]">Para ficar mais forte, informe: {sugestao.faltou.join("; ")}.</p>
+              )}
+              {sugestao.avisos.map((aviso) => (
+                <p key={aviso} className="text-[13px] text-[var(--danger)]">
+                  Confira. {aviso}
+                </p>
+              ))}
+
+              <div className="flex flex-wrap items-center gap-2">
+                {sugestao.briefing && (
+                  <>
+                    <button type="button" onClick={aprovarSugestao} disabled={melhorando} className="btn btn-primary btn-sm">
+                      <Check size={14} aria-hidden="true" />
+                      Aprovar briefing
+                    </button>
+                    <button type="button" onClick={() => melhorar()} disabled={melhorando} className="btn btn-outline btn-sm">
+                      Outra sugestão
+                    </button>
+                  </>
+                )}
+                <button type="button" onClick={() => setSugestao(null)} disabled={melhorando} className="btn btn-ghost btn-sm">
+                  {sugestao.briefing ? "Manter meu texto" : "Fechar"}
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <div className={`grid grid-cols-1 gap-4 ${fotosProduto.length > 0 ? "lg:grid-cols-2" : ""}`}>
@@ -440,19 +619,28 @@ export default function NovaGeracaoForm({
 
           {erro && <p className="text-sm text-[var(--danger)]">{erro}</p>}
 
+          {/* Com sugestão aberta o botão espera: gerar agora usaria o texto antigo
+              e gastaria o pacote em algo que o operador talvez nem queira mais. */}
           <button
             type="button"
             onClick={() => enviar()}
-            disabled={(!prompt.trim() && !arteBaseUrl) || enviando || gravando || bloqueadoSemSaldo}
+            disabled={
+              (!prompt.trim() && !arteBaseUrl) || enviando || gravando || melhorando || aprovacaoPendente || bloqueadoSemSaldo
+            }
             className="btn btn-ia btn-block"
           >
             <Sparkles size={16} aria-hidden="true" />
-            Gerar {quantidade > 1 ? `${quantidade} imagens` : "imagem"}
+            {aprovacaoPendente ? "Aprove ou descarte a sugestão" : `Gerar ${quantidade > 1 ? `${quantidade} imagens` : "imagem"}`}
           </button>
 
           {/* Produzir sem saldo é decisão comercial: fica só com o sócio. */}
           {podeForcar && ehSocio && (
-            <button type="button" onClick={() => enviar(undefined, true)} disabled={enviando} className="btn btn-outline btn-block">
+            <button
+              type="button"
+              onClick={() => enviar(undefined, true)}
+              disabled={enviando || melhorando || aprovacaoPendente}
+              className="btn btn-outline btn-block"
+            >
               Gerar mesmo sem saldo
             </button>
           )}
