@@ -26,6 +26,16 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
 
+  // Regerar gasta API: mesma exigência de /api/geracoes/criar.
+  const { data: perfil } = await supabase
+    .from("users")
+    .select("papel, ativo")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!perfil?.ativo || (perfil.papel !== "socio" && perfil.papel !== "colaborador")) {
+    return NextResponse.json({ error: "Sem permissão para gerar." }, { status: 403 });
+  }
+
   let body: Body;
   try {
     body = (await request.json()) as Body;
