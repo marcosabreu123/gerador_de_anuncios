@@ -1,9 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  montarPrompt,
-  montarPromptAjusteGptImage,
-  montarPromptMelhorarArteExistente,
-} from "@/lib/ai/prompt-builder";
+import { montarPrompt, montarPromptMelhorarArteExistente } from "@/lib/ai/prompt-builder";
+import { montarOrdemDeAjuste } from "@/lib/ai/ajuste-arte";
 import {
   contatosParaInstrucao,
   direcaoDosControles,
@@ -228,13 +225,14 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
   };
 
   const briefing = pedidoManualParaBriefing(manual, cliente as Cliente, (brandKit as BrandKit) ?? null, anexos);
+  const arteDoAjuste = entradas.find((e) => e.tipo === "base");
 
   // 1) Prompt (custo de texto)
   const inicioPrompt = Date.now();
   const { prompts, uso } = mudandoFormato
     ? { prompts: [promptNovoFormato(formato, manual.instrucaoAjuste!)], uso: undefined }
-    : ajustando
-      ? await montarPromptAjusteGptImage(peca.prompt_usado ?? "", manual.instrucaoAjuste!).then((r) => ({
+    : arteDoAjuste
+      ? await montarOrdemDeAjuste(arteDoAjuste, manual.instrucaoAjuste!).then((r) => ({
           prompts: [r.prompt],
           uso: r.uso,
         }))

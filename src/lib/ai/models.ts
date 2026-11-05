@@ -18,18 +18,16 @@ export const IMAGE_MODEL = "gpt-image-2";
 
 export type QualidadeImagem = "low" | "medium" | "high";
 
-// Criar uma arte e editar uma arte pronta são trabalhos diferentes, e medimos
-// que pedem qualidades diferentes.
-//
 // CRIAÇÃO usa "medium", e isso inclui melhorar ou recriar uma arte-base: nos dois
 // casos o modelo desenha layout e tipografia do zero. A vírgula dupla no preço
 // não depende da qualidade, ela apareceu em "low" e em "medium"; quem a evita é
 // a regra de preço em formatos-modelo.ts.
 //
-// EDIÇÃO é só o ajuste cirúrgico, e fica em "low". Aqui o modelo não inventa
-// tipografia, ele copia a que já está na imagem. Num teste de sete modelos
-// trocando o preço da mesma arte (uma amostra de cada), gpt-image-2 em "low" foi
-// o que menos mexeu no resto: erro médio de 8,3 contra 11,2 do segundo colocado.
+// EDIÇÃO também usa "medium". Em "low" o modelo mexia menos no resto da arte porque
+// mexia menos em tudo: o pedido "entregador em formato de desenho" voltava quase
+// igual, e o operador achava que o ajuste não tinha rodado. Em "medium" o entregador
+// virou desenho e título, logo e fundo ficaram no lugar. Custa uns US$ 0,05 por
+// ajuste, contra US$ 0,02.
 //
 // Custo real por peça fica em `geracoes`, calculado pelos tokens (ver custo.ts).
 // IMAGE_QUALITY e IMAGE_QUALITY_EDICAO sobrescrevem cada um.
@@ -41,7 +39,7 @@ function daEnv(nome: string, padrao: QualidadeImagem): QualidadeImagem {
 }
 
 export function qualidadeParaEtapa(etapa: Etapa): QualidadeImagem {
-  if (etapa === "edicao") return daEnv("IMAGE_QUALITY_EDICAO", "low");
+  if (etapa === "edicao") return daEnv("IMAGE_QUALITY_EDICAO", "medium");
   return daEnv("IMAGE_QUALITY", "medium");
 }
 
