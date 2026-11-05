@@ -122,6 +122,14 @@ export default function ListaClientes({ clientes }: { clientes: ClienteCard[] })
                 <input name="contato_telefone" className="input" />
               </label>
             </div>
+            <label className="flex flex-col">
+              <span className="label">Sobre a empresa</span>
+              <textarea
+                name="observacoes"
+                className="input min-h-[76px] resize-y"
+                placeholder="O que ela faz, para quem e como a pessoa compra. A IA lê isto antes de criar qualquer arte."
+              />
+            </label>
             <BotaoEnviar className="btn btn-primary self-end">Cadastrar</BotaoEnviar>
           </form>
         </Modal>

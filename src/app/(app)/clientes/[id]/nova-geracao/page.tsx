@@ -1,10 +1,15 @@
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { ehSocio, requireOperador } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import NovaGeracaoForm from "@/components/NovaGeracaoForm";
 import { Avatar, CabecalhoPagina } from "@/components/ui";
+import { leituraEmDia } from "@/lib/agencia/leitura-referencias";
 import { saldoDoCliente } from "@/lib/agencia/pacotes";
 import { TIPOS_REFERENCIA, type BrandKit, type Cliente, type Referencia } from "@/lib/agencia/types";
+
+// Folga para a leitura das referências terminar depois que a tela já abriu.
+export const maxDuration = 60;
 
 export default async function NovaGeracaoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -23,6 +28,10 @@ export default async function NovaGeracaoPage({ params }: { params: Promise<{ id
 
   const brandKit = (brandKitRaw as BrandKit) ?? null;
   const referencias = (referenciasRaw ?? []) as Referencia[];
+
+  // Enquanto o operador escreve o pedido, a IA relê as referências se elas mudaram.
+  // Assim a sugestão e a arte já encontram a leitura pronta, sem ninguém esperar.
+  after(() => leituraEmDia(cliente, brandKit, referencias));
 
   // Mostra ao operador o que o agente vai realmente considerar. Sem isso ele
   // gera no escuro e só descobre no resultado que faltava a logo.

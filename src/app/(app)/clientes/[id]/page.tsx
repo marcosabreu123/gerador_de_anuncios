@@ -72,6 +72,7 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
   const artes = (artesRaw ?? []) as Pick<Peca, "id" | "pedido_id" | "titulo" | "imagem_url" | "status" | "created_at">[];
   const pedidos = (pedidosRaw ?? []) as Pedido[];
   const logo = referencias.find((r) => r.tipo === "logo")?.url;
+  const leitura = brandKit?.direcao_arte ?? null;
 
   // Cliente arquivado não recebe pedido novo: reative antes, para não produzir
   // no lugar errado por engano.
@@ -160,7 +161,8 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
     <form action={salvarBrandKit} className="flex flex-col gap-4">
       <input type="hidden" name="cliente_id" value={id} />
       <p className="text-sm text-[var(--muted)]">
-        É isso que faz o agente gerar no estilo desta empresa em vez de algo genérico.
+        Cores e regras a IA cumpre à risca. Tipografia, tom e estilo são um norte: escreva pouco, ou deixe em branco
+        que ela tira isso das referências.
       </p>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -173,17 +175,17 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
             <input name="cores_secundarias" defaultValue={brandKit?.cores_secundarias ?? ""} className="input" />
           </Campo>
           <Campo rotulo="Tipografia">
-            <input name="tipografia" defaultValue={brandKit?.tipografia ?? ""} className="input" placeholder="Ex: sans-serif pesada, bem comercial" />
+            <input name="tipografia" defaultValue={brandKit?.tipografia ?? ""} className="input" placeholder="Ex: letra pesada e comercial" />
           </Campo>
           <Campo rotulo="Tom de voz">
-            <input name="tom_de_voz" defaultValue={brandKit?.tom_de_voz ?? ""} className="input" placeholder="Ex: descontraído, direto, sem formalidade" />
+            <input name="tom_de_voz" defaultValue={brandKit?.tom_de_voz ?? ""} className="input" placeholder="Ex: descontraído e direto" />
           </Campo>
         </section>
 
         <section className="card p-5 flex flex-col gap-3">
           <TituloCard titulo="Direção das artes" />
           <Campo rotulo="Estilo visual">
-            <textarea name="estilo_visual" defaultValue={brandKit?.estilo_visual ?? ""} className="input min-h-[76px] resize-y" placeholder="Como as artes dessa marca têm que parecer." />
+            <textarea name="estilo_visual" defaultValue={brandKit?.estilo_visual ?? ""} className="input min-h-[76px] resize-y" placeholder="Em poucas palavras: vibrante, minimalista, sofisticado..." />
           </Campo>
           <Campo rotulo="Regras obrigatórias (uma por linha)">
             <textarea
@@ -270,10 +272,27 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
         )}
       </section>
 
-      <section className="card p-5 flex flex-col gap-3">
-        <TituloCard titulo="Enviar material" />
-        <UploadMaterial clienteId={id} />
-      </section>
+      <div className="flex flex-col gap-4">
+        <section className="card p-5 flex flex-col gap-3">
+          <TituloCard titulo="Enviar material" />
+          <UploadMaterial clienteId={id} />
+        </section>
+
+        {leitura && (
+          <section className="card p-5 flex flex-col gap-3">
+            <TituloCard
+              titulo="O que a IA entendeu das referências"
+              descricao="Ela lê as imagens sozinha, e relê quando você abre um novo pedido depois de trocar alguma."
+            />
+            <dl className="flex flex-col gap-2.5">
+              <Entendimento rotulo="O negócio" texto={leitura.negocio} />
+              <Entendimento rotulo="O que a marca costuma dizer" texto={leitura.mensagens} />
+              <Entendimento rotulo="Como a marca fala" texto={leitura.voz} />
+              <Entendimento rotulo="Como a marca aparece" texto={leitura.visual} />
+            </dl>
+          </section>
+        )}
+      </div>
     </div>
   );
 
@@ -356,8 +375,13 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
             <input name="contato_telefone" defaultValue={cliente.contato_telefone ?? ""} className="input" />
           </Campo>
         </div>
-        <Campo rotulo="Observações">
-          <textarea name="observacoes" defaultValue={cliente.observacoes ?? ""} className="input min-h-[76px] resize-y" />
+        <Campo rotulo="Sobre a empresa">
+          <textarea
+            name="observacoes"
+            defaultValue={cliente.observacoes ?? ""}
+            className="input min-h-[76px] resize-y"
+            placeholder="O que ela faz, para quem e como a pessoa compra. A IA lê isto antes de criar qualquer arte."
+          />
         </Campo>
         <BotaoEnviar className="btn btn-outline self-start">Salvar dados</BotaoEnviar>
       </form>
@@ -432,6 +456,16 @@ function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode
       <span className="label">{rotulo}</span>
       {children}
     </label>
+  );
+}
+
+function Entendimento({ rotulo, texto }: { rotulo: string; texto: string }) {
+  if (!texto) return null;
+  return (
+    <div>
+      <dt className="text-[13px] font-medium">{rotulo}</dt>
+      <dd className="text-[13px] text-[var(--muted)] mt-0.5">{texto}</dd>
+    </div>
   );
 }
 

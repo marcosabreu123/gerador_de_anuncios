@@ -13,6 +13,7 @@ import {
 } from "@/lib/ai/agente-pedido";
 import { montarPromptDiretorArte } from "@/lib/ai/diretor-arte";
 import { lerArte, recortarDaArte, type LeituraDaArte } from "@/lib/ai/ler-arte";
+import { leituraParaDiretor } from "@/lib/ai/ler-referencias";
 import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
 import { custoImagemPorUso, custoImagemUSD, custoTextoUSD, registrarGeracao } from "./custo";
@@ -361,6 +362,8 @@ async function criarComDiretorArte(
       nicho: cliente.nicho,
       pedido: manual.prompt,
       identidade: identidadeParaInstrucao(cliente, brandKit),
+      // Só a guardada: reler aqui gastaria o tempo que a peça precisa para sair.
+      referencias: brandKit?.direcao_arte ? leituraParaDiretor(brandKit.direcao_arte) : undefined,
       direcaoVisual: direcaoDosControles(manual),
       contatos: contatosParaInstrucao(brandKit),
       formato: manual.formato ?? "feed-4-5",

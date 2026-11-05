@@ -28,14 +28,16 @@ function regrasDoCliente(brandKit: BrandKit | null): string[] {
   if (brandKit.regras_obrigatorias?.length) {
     linhas.push(`Regras obrigatórias da marca (nunca descumprir): ${brandKit.regras_obrigatorias.join("; ")}`);
   }
+  // Só as regras são obrigação. Com estes três escritos como regra, a IA passou a
+  // repetir nas peças cada frase e cada objeto citado neles.
   if (brandKit.estilo_visual?.trim()) {
-    linhas.push(`Estilo visual da marca: ${brandKit.estilo_visual.trim()}`);
+    linhas.push(`Estilo visual da marca (é norte, não roteiro): ${brandKit.estilo_visual.trim()}`);
   }
   if (brandKit.tom_de_voz?.trim()) {
-    linhas.push(`Tom de voz da marca: ${brandKit.tom_de_voz.trim()}`);
+    linhas.push(`Tom de voz da marca (é norte, e frase citada aqui é exemplo, não texto pronto): ${brandKit.tom_de_voz.trim()}`);
   }
   if (brandKit.tipografia?.trim()) {
-    linhas.push(`Preferência tipográfica: ${brandKit.tipografia.trim()}`);
+    linhas.push(`Preferência tipográfica (é norte): ${brandKit.tipografia.trim()}`);
   }
   return linhas;
 }
@@ -185,6 +187,8 @@ export function contatosParaInstrucao(brandKit: BrandKit | null): string | undef
 // geração de imagem e economiza o passo mais chato da operação.
 export async function transcreverAudio(
   arquivo: File,
+  // Sem o nome da empresa, "Pedidos 10" voltou como "PIDE dos 10" num pedido real.
+  empresa?: string,
 ): Promise<{ texto: string; duracaoSegundos: number | null }> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY não configurada.");
@@ -194,6 +198,7 @@ export async function transcreverAudio(
     file: arquivo,
     model: "whisper-1",
     language: "pt",
+    ...(empresa ? { prompt: `Pedido de arte para a empresa ${empresa}.` } : {}),
   });
 
   return {
@@ -210,6 +215,7 @@ export function identidadeParaInstrucao(
 ): string {
   const partes: string[] = [`Empresa: ${cliente.nome}`];
   if (cliente.nicho?.trim()) partes.push(`Ramo: ${cliente.nicho.trim()}`);
+  if (cliente.observacoes?.trim()) partes.push(`Sobre a empresa: ${cliente.observacoes.trim()}`);
   if (brandKit?.cores_primarias?.trim()) {
     partes.push(`Cores primárias da marca: ${brandKit.cores_primarias.trim()}`);
   }

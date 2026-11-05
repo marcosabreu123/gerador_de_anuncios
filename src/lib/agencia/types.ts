@@ -1,3 +1,4 @@
+import type { LeituraDasReferencias } from "@/lib/ai/ler-referencias";
 import type { EstiloComunicacao, Formato, IntensidadeVisual } from "@/lib/types";
 
 // Tipos do modelo de agência — espelham supabase/schema-agencia.sql.
@@ -37,7 +38,8 @@ export interface BrandKit {
   endereco: string | null;
   horario_funcionamento: string | null;
   instagram: string | null;
-  direcao_arte: Record<string, unknown> | null;
+  // O que a IA entendeu das artes de referência (ver leitura-referencias.ts).
+  direcao_arte: LeituraDasReferencias | null;
   created_at: string;
   updated_at: string;
 }

@@ -67,6 +67,13 @@ Você não desenha um layout: você resolve um problema de comunicação com ima
 4. QUE CENA SUSTENTA O ARGUMENTO. Luz, superfície, profundidade e os dois ou três objetos de apoio. Cena é narrativa, não enfeite.
 5. COMO O TEXTO ENTRA NA CENA. O texto ocupa o respiro que a cena deixou, não se sobrepõe a ela. Se não há respiro, a cena está errada — volte ao passo 4 em vez de empilhar texto por cima.`;
 
+const TIPO_DE_PEDIDO = `## Leia o pedido antes de criar
+O pedido diz o quanto a criação é sua.
+
+Pedido com oferta, preço ou condição: a oferta é a peça, e toda condição entra como veio. Pedido detalhado, com textos, elementos ou cena definidos: as decisões são do operador, e você executa cada item, criando só o que ele deixou em aberto.
+
+Pedido aberto, que só dá a ocasião, como "arte para domingo", ou data comemorativa, como "Ano Novo": a ideia é sua. Entenda o que a empresa faz e com quem ela fala, encontre uma situação real daquele momento para aquele público e crie o conceito e a headline em cima disso, sem inventar oferta. A mesma data muda de cliente para cliente: fale com o público daquele ramo.`;
+
 const HIERARQUIA = `## Hierarquia
 A peça tem no máximo quatro níveis, nesta ordem de peso: produto, headline, oferta ou preço, assinatura. Informação de apoio (endereço, horário, redes) é um quinto nível opcional e discreto — e quando não for essencial, deixe de fora e sugira para a legenda.
 
@@ -100,7 +107,7 @@ A cor de destaque perde força na proporção em que é repetida. Usada uma vez,
 
 Fundo saturado chapado é a assinatura do panfleto. Prefira base neutra profunda ou clara, com a saturação concentrada no produto e no destaque.
 
-Quando o cliente tem identidade visual cadastrada, ela manda. A paleta do segmento é só o padrão de mercado para quando a marca não define nada.
+Quando o cliente tem cores e regras cadastradas, elas mandam. A paleta do segmento é só o padrão de mercado para quando a marca não define nada. Estilo, tipografia e referências da marca são norte: dão o jeito da peça, e a ideia continua sendo sua, sem repetir objeto ou recurso de arte antiga.
 
 Sempre devolva cores em hexadecimal. Os geradores de imagem atuais respeitam hex com fidelidade alta quando o código está amarrado a um objeto específico.`;
 
@@ -130,7 +137,7 @@ Este é o critério mais importante da peça. O cliente não sabe nomear, mas re
 const FIDELIDADE = `## Fidelidade ao briefing
 Preço, telefone, endereço, nome de marca e nome de produto são copiados caractere por caractere, sem reescrever, traduzir, arredondar ou reformatar. Se o briefing diz "R$ 39,90", a ficha diz "R$ 39,90".
 
-Nunca invente informação que o briefing não deu: não crie desconto, prazo, selo de qualidade, slogan nem número de telefone.
+Nunca invente informação que o briefing não deu: não crie desconto, prazo, selo de qualidade, slogan, número de telefone, ano nem data. Em data comemorativa, o ano só entra se o pedido disser.
 
 Quando houver foto do produto anexada, ela é referência do PRODUTO, não da composição. Extraia dela forma, cor, material, rótulo e proporção; descarte o ambiente, a mesa, a luz fraca e o enquadramento casual. Recrie o produto como hero shot de estúdio dentro da cena que você desenhou.
 
@@ -164,6 +171,7 @@ export const NUCLEO_DIRETOR_ARTE = [
   "Você é diretor de arte publicitário sênior. Trabalhou em agência, dirigiu campanha de produto e sabe a diferença entre uma peça que organiza informação e uma peça que vende.",
   "Seu trabalho aqui é decidir a direção de arte de uma peça de social media para um negócio brasileiro e entregá-la como ficha estruturada. Outro sistema vai transformar sua ficha em imagem — por isso a ficha precisa ser específica e executável, nunca um desejo vago como 'composição moderna e elegante'.",
   PROCESSO,
+  TIPO_DE_PEDIDO,
   HIERARQUIA,
   COMPOSICAO,
   TIPOGRAFIA,
@@ -262,6 +270,9 @@ export interface ContextoPeca {
   // Pedido original do operador, em português, como ele escreveu ou falou.
   pedido: string;
   identidade?: string;
+  // O que as artes de referência mostram, já em texto. A imagem anexada vai só para
+  // o gerador: é por aqui que o diretor conhece a marca.
+  referencias?: string;
   // Estilo e impacto escolhidos nos botões da tela, já em texto. Ausente quando
   // o operador deixou "IA decide".
   direcaoVisual?: string;
@@ -324,6 +335,12 @@ function arteAntigaEmTexto(arte: LeituraDaArte): string {
     .join("\n\n");
 }
 
+// Sem a data, o modelo chuta o ano: duas artes de Ano Novo saíram com "Que 2025
+// seja..." e "Que 2026 seja...", em novembro de 2026, mesmo com a regra proibindo.
+export function dataAtual(): string {
+  return new Date().toLocaleDateString("pt-BR", { dateStyle: "long", timeZone: "America/Sao_Paulo" });
+}
+
 function materiaisEmTexto(ctx: ContextoPeca): string {
   const linhas: string[] = [];
   linhas.push(
@@ -335,9 +352,24 @@ function materiaisEmTexto(ctx: ContextoPeca): string {
     linhas.push("A logo da marca está anexada e deve ser reproduzida fielmente como assinatura discreta da peça. Não crie bloco de texto com o nome da empresa.");
   }
   if (ctx.temReferencia) {
-    linhas.push("Há uma referência visual anexada: extraia dela paleta, clima e nível de sofisticação, nunca texto ou marca de terceiros.");
+    linhas.push("Uma referência visual do cliente vai junto para o gerador de imagem, só como clima e acabamento. Não descreva nem repita os elementos dela.");
   }
   return linhas.join("\n");
+}
+
+// Com logo anexada, a assinatura é a própria logo. Como bloco de texto ela caía na
+// lista do que escrever exatamente como está: o prompt de duas peças reais mandava
+// renderizar "logo da marca anexada", e uma delas saiu com a logo redesenhada.
+function assinaturaViraLogo(ficha: FichaCriativa): FichaCriativa {
+  const assinatura = ficha.textos.find((t) => t.papel === "assinatura");
+  if (!assinatura) return ficha;
+  return {
+    ...ficha,
+    textos: ficha.textos.filter((t) => t.papel !== "assinatura"),
+    composicao: [ficha.composicao, assinatura.posicao && `The attached logo sits ${assinatura.posicao}.`]
+      .filter(Boolean)
+      .join(" "),
+  };
 }
 
 // Gera a ficha criativa e devolve o prompt já no dialeto do gerador em uso.
@@ -352,8 +384,10 @@ export async function montarPromptDiretorArte(ctx: ContextoPeca): Promise<Result
 
   const usuario = [
     `PEDIDO DO OPERADOR: ${ctx.pedido}`,
+    `DATA ATUAL: ${dataAtual()}. Serve para você se situar no tempo, e não entra na arte por conta própria.`,
     `EMPRESA: ${ctx.empresa}${ctx.nicho ? ` (nicho: ${ctx.nicho})` : ""}`,
     ctx.identidade?.trim() ? `IDENTIDADE VISUAL DO CLIENTE (tem precedência sobre a paleta do segmento):\n${ctx.identidade.trim()}` : null,
+    ctx.referencias?.trim() ? `O QUE AS ARTES DE REFERÊNCIA DO CLIENTE MOSTRAM (é norte da linguagem da marca, a ideia desta peça é nova):\n${ctx.referencias.trim()}` : null,
     ctx.direcaoVisual?.trim() ? `DIREÇÃO ESCOLHIDA PELO OPERADOR (siga, tem precedência sobre o padrão do segmento):\n${ctx.direcaoVisual.trim()}` : null,
     ctx.contatos?.trim() ? `CONTATOS CADASTRADOS (entram na peça só se o pedido ou uma regra da marca exigir, copiados exatamente):\n${ctx.contatos.trim()}` : null,
     `FORMATO: ${DESCRICAO_FORMATO[ctx.formato]}`,
@@ -380,8 +414,9 @@ export async function montarPromptDiretorArte(ctx: ContextoPeca): Promise<Result
   const texto = completion.choices[0]?.message?.content;
   if (!texto) throw new Error("O diretor de arte não devolveu ficha.");
 
-  const ficha = normalizarFicha(JSON.parse(texto));
-  if (!ficha) throw new Error("Ficha criativa inválida.");
+  const bruta = normalizarFicha(JSON.parse(texto));
+  if (!bruta) throw new Error("Ficha criativa inválida.");
+  const ficha = ctx.temLogotipo ? assinaturaViraLogo(bruta) : bruta;
 
   return {
     prompt: fichaParaPrompt(ficha, dialetoAtual(), DESCRICAO_FORMATO[ctx.formato]),

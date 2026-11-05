@@ -4,8 +4,9 @@ import { contatosParaInstrucao, identidadeParaInstrucao } from "@/lib/ai/agente-
 import { melhorarIdeia } from "@/lib/ai/melhorar-ideia";
 import { TEXT_PROMPT_BUILDER_MODEL } from "@/lib/ai/models";
 import { custoTextoUSD, registrarGeracao } from "@/lib/agencia/custo";
+import { leituraEmDia } from "@/lib/agencia/leitura-referencias";
 import { transcreverPedido } from "@/lib/agencia/transcricao";
-import type { BrandKit, Cliente } from "@/lib/agencia/types";
+import type { BrandKit, Cliente, Referencia } from "@/lib/agencia/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -69,11 +70,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data: brandKitRaw } = await supabase
-    .from("brand_kits")
-    .select("*")
-    .eq("cliente_id", clienteId)
-    .maybeSingle();
+  const [{ data: brandKitRaw }, { data: referenciasRaw }] = await Promise.all([
+    supabase.from("brand_kits").select("*").eq("cliente_id", clienteId).maybeSingle(),
+    supabase.from("referencias").select("*").eq("cliente_id", clienteId).order("created_at", { ascending: false }),
+  ]);
   const brandKit = (brandKitRaw as BrandKit) ?? null;
 
   if (audio) {
@@ -89,12 +89,16 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Normalmente já está pronta: a tela de criação dispara a leitura ao abrir.
+  const referencias = await leituraEmDia(cliente, brandKit, (referenciasRaw ?? []) as Referencia[]);
+
   const inicio = Date.now();
   try {
     const { briefing, faltou, avisos, uso } = await melhorarIdeia({
       ideia,
       identidade: identidadeParaInstrucao(cliente, brandKit),
       contatos: contatosParaInstrucao(brandKit),
+      referencias,
       anterior,
     });
 
