@@ -11,14 +11,14 @@ import {
   instrucaoDeVariacao,
   pedidoManualParaBriefing,
 } from "@/lib/ai/agente-pedido";
-import { montarPromptDiretorArte } from "@/lib/ai/diretor-arte";
+import { DESCRICAO_FORMATO, montarPromptDiretorArte, promptNovoFormato } from "@/lib/ai/diretor-arte";
 import { lerArte, recortarDaArte, type LeituraDaArte } from "@/lib/ai/ler-arte";
-import { leituraParaDiretor } from "@/lib/ai/ler-referencias";
+import { imagemParaLeitura, leituraParaDiretor } from "@/lib/ai/ler-referencias";
 import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
 import { custoImagemPorUso, custoImagemUSD, custoTextoUSD, registrarGeracao } from "./custo";
 import { consumirImagemComoWorker } from "./pacotes";
-import type { BrandKit, BriefingPecaManual, Cliente, Referencia } from "./types";
+import { operadorEscreveu, type BrandKit, type BriefingPecaManual, type Cliente, type Referencia, type VersaoPeca } from "./types";
 import type { Formato } from "@/lib/types";
 
 // Produção de UMA peça, do briefing à imagem salva. Roda no worker da fila
@@ -50,25 +50,27 @@ async function baixarComoEntrada(url: string, tipo: EntradaImagem["tipo"]): Prom
 async function materiaisDaPeca(
   manual: BriefingPecaManual,
   referencias: Referencia[],
-  caminho: { ajustando: boolean; transformandoArte: boolean },
+  caminho: { ajustando: boolean; mudandoFormato: boolean; imagemEnviada: boolean },
 ): Promise<EntradaImagem[]> {
   const logo = referencias.find((r) => r.tipo === "logo");
 
   // Ajuste edita uma arte pronta: ela já traz logo e produto, e anexá-los de
   // novo só dá ao modelo motivo para redesenhar o que devia preservar. A logo
-  // volta apenas quando o pedido fala dela, para ele ter o desenho certo.
+  // volta apenas quando o pedido fala dela, para ele ter o desenho certo, ou quando
+  // a mudança de formato faz o gerador desenhar a peça de novo.
   if (caminho.ajustando) {
-    if (!logo || !/\b(logo|logotipo|logomarca)\b/i.test(manual.instrucaoAjuste ?? "")) return [];
+    const pedeLogo = caminho.mudandoFormato || /\b(logo|logotipo|logomarca)\b/i.test(manual.instrucaoAjuste ?? "");
+    if (!logo || !pedeLogo) return [];
     const e = await baixarComoEntrada(logo.url, "logotipo");
     return e ? [e] : [];
   }
 
   const produto = referencias.find((r) => r.id === manual.produtoRefId && r.tipo === "produto");
 
-  // Referência de estilo só na criação: com arte-base, quem dá o tom é a própria
-  // arte enviada. A que o operador cadastrou manda; sem ela vale a última arte
-  // aprovada, que é como os pedidos seguintes saem mais perto do que já agradou.
-  const estilo = caminho.transformandoArte
+  // Referência de estilo só na criação sem imagem: com ela, quem dá o tom é a imagem
+  // enviada. A que o operador cadastrou manda; sem ela vale a última arte aprovada,
+  // que é como os pedidos seguintes saem mais perto do que já agradou.
+  const estilo = caminho.imagemEnviada
     ? undefined
     : (referencias.find((r) => r.tipo === "referencia_visual") ??
       referencias.find((r) => r.tipo === "arte_aprovada"));
@@ -162,29 +164,48 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
   await supabase.from("pecas").update({ status: "gerando", erro: null }).eq("id", pecaId);
 
   const manual = (peca.briefing ?? {}) as BriefingPecaManual;
-  const formato: Formato = manual.formato ?? "feed-4-5";
+  const formato: Formato = manual.formatoNovo ?? manual.formato ?? "feed-4-5";
 
-  // Três caminhos possíveis, nesta ordem de precedência:
+  // Caminhos possíveis, nesta ordem de precedência:
   //
-  // 1. Ajuste cirúrgico — o operador clicou "Ajustar" numa peça entregue e
-  //    pediu uma mudança pontual. Edita AQUELA imagem e preserva o resto.
+  // 1. Ajuste — o operador pediu uma mudança numa peça entregue. Edita AQUELA imagem
+  //    e preserva o resto. Pedido de outro formato refaz a peça na nova proporção.
   // 2. Melhorar arte-base — ele subiu uma peça pronta, que vai anexada.
   // 3. Criação do zero pelo diretor de arte. "Criar nova versão" cai aqui: a arte
   //    enviada é lida, não anexada, e o diretor recria a campanha com o que ela dizia.
+  //    Referência também: o diretor e o gerador veem a imagem, e o pedido manda.
   //
   // O ajuste vem primeiro porque é o mais específico: a peça de um ajuste
   // pode ter nascido de uma arte-base, e nesse caso o que vale é a imagem que
   // ele está olhando agora, não a que originou a peça.
   const ajustando = Boolean(manual.ajusteSobreUrl && manual.instrucaoAjuste);
-  const urlDeEntrada = ajustando ? manual.ajusteSobreUrl : manual.arteBaseUrl;
+  const mudandoFormato = ajustando && Boolean(manual.formatoNovo);
+  const comoReferencia = !ajustando && Boolean(manual.arteBaseUrl) && manual.modoTransformacao === "referencia";
+  const urlDeEntrada = ajustando ? manual.ajusteSobreUrl : comoReferencia ? undefined : manual.arteBaseUrl;
   const transformandoArte = Boolean(urlDeEntrada);
   const novaVersao = !ajustando && transformandoArte && manual.modoTransformacao === "nova_versao_criativa";
 
-  const entradas = await materiaisDaPeca(manual, referencias, { ajustando, transformandoArte });
+  const entradas = await materiaisDaPeca(manual, referencias, {
+    ajustando,
+    mudandoFormato,
+    imagemEnviada: transformandoArte || comoReferencia,
+  });
+
+  let imagemDoPedido: string | undefined;
+  if (comoReferencia) {
+    const [referencia, paraDiretor] = await Promise.all([
+      baixarComoEntrada(manual.arteBaseUrl!, "referencia_pedido"),
+      imagemParaLeitura(manual.arteBaseUrl!),
+    ]);
+    if (!referencia || !paraDiretor) throw new Error("Não consegui abrir a imagem de referência.");
+    entradas.push(referencia);
+    imagemDoPedido = paraDiretor;
+  }
 
   let arteAntiga: LeituraDaArte | undefined;
   if (urlDeEntrada) {
-    const base = await baixarComoEntrada(urlDeEntrada, ajustando ? "base" : "arte_melhorar");
+    const papel = mudandoFormato ? "arte_novo_formato" : ajustando ? "base" : "arte_melhorar";
+    const base = await baixarComoEntrada(urlDeEntrada, papel);
     if (!base) throw new Error("Não consegui ler a arte usada como base.");
     if (novaVersao) {
       arteAntiga = await lerArteAntiga(base, entradas, {
@@ -210,49 +231,56 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
 
   // 1) Prompt (custo de texto)
   const inicioPrompt = Date.now();
-  const { prompts, uso } = ajustando
-    ? await montarPromptAjusteGptImage(peca.prompt_usado ?? "", manual.instrucaoAjuste!).then((r) => ({
-        prompts: [r.prompt],
-        uso: r.uso,
-      }))
-    : transformandoArte && !novaVersao
-      ? await montarPromptMelhorarArteExistente({
-          direcao: "personalizado",
-          instrucaoUsuario: [
-            manual.prompt,
-            identidadeParaInstrucao(cliente as Cliente, (brandKit as BrandKit) ?? null),
-            direcaoDosControles(manual),
-            instrucaoDeVariacao(manual.variacao, manual.total),
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
-        }).then((r) => ({ prompts: [r.prompt], uso: r.uso }))
-      : await criarComDiretorArte(manual, cliente as Cliente, (brandKit as BrandKit) ?? null, {
-          ...anexos,
-          briefingLegado: briefing,
-          arteAntiga,
-        });
+  const { prompts, uso } = mudandoFormato
+    ? { prompts: [promptNovoFormato(formato, manual.instrucaoAjuste!)], uso: undefined }
+    : ajustando
+      ? await montarPromptAjusteGptImage(peca.prompt_usado ?? "", manual.instrucaoAjuste!).then((r) => ({
+          prompts: [r.prompt],
+          uso: r.uso,
+        }))
+      : transformandoArte && !novaVersao
+        ? await montarPromptMelhorarArteExistente({
+            direcao: "personalizado",
+            ordem: operadorEscreveu(manual.prompt) ? manual.prompt : undefined,
+            formatoSaida: DESCRICAO_FORMATO[formato],
+            instrucaoUsuario: [
+              identidadeParaInstrucao(cliente as Cliente, (brandKit as BrandKit) ?? null),
+              direcaoDosControles(manual),
+              instrucaoDeVariacao(manual.variacao, manual.total),
+            ]
+              .filter(Boolean)
+              .join("\n\n"),
+          }).then((r) => ({ prompts: [r.prompt], uso: r.uso }))
+        : await criarComDiretorArte(manual, cliente as Cliente, (brandKit as BrandKit) ?? null, {
+            ...anexos,
+            briefingLegado: briefing,
+            arteAntiga,
+            imagemDoPedido,
+          });
 
-  // Tokens reais quando a chamada respondeu; a estimativa só entra quando o
-  // prompt veio do fallback determinístico (sem chamada, logo sem custo real).
-  const modeloTexto = uso?.modelo ?? "gpt-5.4";
-  await registrarGeracao({
-    tipo: "texto",
-    modelo: modeloTexto,
-    custoUsd: uso
-      ? custoTextoUSD(modeloTexto, uso.entrada, uso.saida)
-      : custoTextoUSD(modeloTexto, 3000, 1200),
-    usageRaw: uso ? { entrada: uso.entrada, saida: uso.saida, estimado: false } : { estimado: true },
-    duracaoMs: Date.now() - inicioPrompt,
-    pecaId: peca.id,
-    pedidoId: peca.pedido_id,
-    clienteId: peca.cliente_id,
-  });
+  // O novo formato não chama modelo de texto, então não há custo a registrar.
+  if (!mudandoFormato) {
+    // Tokens reais quando a chamada respondeu; a estimativa só entra quando o
+    // prompt veio do fallback determinístico (sem chamada, logo sem custo real).
+    const modeloTexto = uso?.modelo ?? "gpt-5.4";
+    await registrarGeracao({
+      tipo: "texto",
+      modelo: modeloTexto,
+      custoUsd: uso
+        ? custoTextoUSD(modeloTexto, uso.entrada, uso.saida)
+        : custoTextoUSD(modeloTexto, 3000, 1200),
+      usageRaw: uso ? { entrada: uso.entrada, saida: uso.saida, estimado: false } : { estimado: true },
+      duracaoMs: Date.now() - inicioPrompt,
+      pecaId: peca.id,
+      pedidoId: peca.pedido_id,
+      clienteId: peca.cliente_id,
+    });
+  }
 
   // 2) Imagem
-  // Só o ajuste copia a tipografia que já está na arte. Melhorar ou recriar uma
-  // arte-base desenha layout e texto de novo: é criação, não edição. Ver models.ts.
-  const qualidade = qualidadeParaEtapa(ajustando ? "edicao" : "final");
+  // Só o ajuste copia a tipografia que já está na arte. Melhorar, recriar ou mudar de
+  // formato desenha layout e texto de novo: é criação, não edição. Ver models.ts.
+  const qualidade = qualidadeParaEtapa(ajustando && !mudandoFormato ? "edicao" : "final");
   const inicioImagem = Date.now();
   let imagens;
   try {
@@ -308,6 +336,21 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
     }
   }
 
+  // Relê o briefing: o operador pode ter pedido outro ajuste enquanto esta arte saía.
+  const { data: atual } = await supabase.from("pecas").select("briefing").eq("id", pecaId).maybeSingle();
+  const briefingFinal: BriefingPecaManual = {
+    ...((atual?.briefing ?? manual) as BriefingPecaManual),
+    formato,
+    versoes: versoesComANova(peca, {
+      url: imagemUrl,
+      criadaEm: new Date().toISOString(),
+      formato,
+      ajuste: ajustando ? manual.instrucaoAjuste : undefined,
+      promptUsado: imagens[0].promptUsado,
+    }),
+  };
+  delete briefingFinal.formatoNovo;
+
   await supabase
     .from("pecas")
     .update({
@@ -315,12 +358,32 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
       imagem_url: imagemUrl,
       prompt_usado: imagens[0].promptUsado,
       erro: null,
+      briefing: briefingFinal,
     })
     .eq("id", pecaId);
 
   await encerrarPedidoSePronto(peca.pedido_id);
 
   return { imagemUrl, promptUsado: imagens[0].promptUsado, saldoRestante };
+}
+
+// Peça criada antes de existir a lista começa pela imagem que já tinha.
+function versoesComANova(
+  peca: { imagem_url: string | null; prompt_usado: string | null; created_at: string; briefing: unknown },
+  nova: VersaoPeca,
+): VersaoPeca[] {
+  const manual = (peca.briefing ?? {}) as BriefingPecaManual;
+  const versoes = manual.versoes ?? [];
+  if (versoes.length > 0 || !peca.imagem_url) return [...versoes, nova];
+  return [
+    {
+      url: peca.imagem_url,
+      criadaEm: peca.created_at,
+      formato: manual.formato ?? "feed-4-5",
+      promptUsado: peca.prompt_usado ?? undefined,
+    },
+    nova,
+  ];
 }
 
 // Pedido concluído quando nenhuma peça segue pendente/gerando. Vale também para
@@ -354,6 +417,7 @@ async function criarComDiretorArte(
     temReferencia: boolean;
     briefingLegado: Parameters<typeof montarPrompt>[0];
     arteAntiga?: LeituraDaArte;
+    imagemDoPedido?: string;
   },
 ): Promise<{ prompts: string[]; uso?: { modelo: string; entrada: number; saida: number } }> {
   try {
@@ -372,6 +436,8 @@ async function criarComDiretorArte(
       temReferencia: ctx.temReferencia,
       variacao: { indice: manual.variacao ?? 0, total: manual.total ?? 1 },
       arteAntiga: ctx.arteAntiga,
+      operadorEscreveu: operadorEscreveu(manual.prompt),
+      imagemDoPedido: ctx.imagemDoPedido,
     });
     return { prompts: [r.prompt], uso: r.uso };
   } catch (e) {

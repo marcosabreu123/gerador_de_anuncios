@@ -5,7 +5,12 @@ import { enfileirar } from "@/lib/agencia/fila";
 import { saldoDoCliente } from "@/lib/agencia/pacotes";
 import { transcreverPedido } from "@/lib/agencia/transcricao";
 import type { EstiloComunicacao, Formato, IntensidadeVisual } from "@/lib/types";
-import type { BriefingPecaManual, Referencia } from "@/lib/agencia/types";
+import {
+  PEDIDO_SEM_TEXTO,
+  type BriefingPecaManual,
+  type ModoImagemEnviada,
+  type Referencia,
+} from "@/lib/agencia/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -56,7 +61,7 @@ export async function POST(request: NextRequest) {
   let origem: "audio" | "texto" = "texto";
   let forcarSemSaldo = false;
   let arteBaseUrl: string | undefined;
-  let modoTransformacao: "melhoria_recompositiva" | "nova_versao_criativa" | undefined;
+  let modoTransformacao: ModoImagemEnviada = "referencia";
   let produtoRefId: string | undefined;
 
   const contentType = request.headers.get("content-type") ?? "";
@@ -71,7 +76,7 @@ export async function POST(request: NextRequest) {
       intensidade = String(form.get("intensidade") ?? "ia_decide") as IntensidadeVisual;
       forcarSemSaldo = form.get("forcarSemSaldo") === "true";
       arteBaseUrl = (form.get("arteBaseUrl") as string) || undefined;
-      modoTransformacao = (form.get("modoTransformacao") as typeof modoTransformacao) || undefined;
+      modoTransformacao = (form.get("modoTransformacao") as ModoImagemEnviada) || modoTransformacao;
       produtoRefId = (form.get("produtoRefId") as string) || undefined;
 
       const audio = form.get("audio");
@@ -91,7 +96,7 @@ export async function POST(request: NextRequest) {
       intensidade = (body.intensidade as IntensidadeVisual) ?? "ia_decide";
       forcarSemSaldo = body.forcarSemSaldo === true;
       arteBaseUrl = (body.arteBaseUrl as string) || undefined;
-      modoTransformacao = (body.modoTransformacao as typeof modoTransformacao) || undefined;
+      modoTransformacao = (body.modoTransformacao as ModoImagemEnviada) || modoTransformacao;
       produtoRefId = (body.produtoRefId as string) || undefined;
     }
   } catch {
@@ -101,13 +106,14 @@ export async function POST(request: NextRequest) {
   // Validação no servidor, não só na tela: estes valores entram direto no
   // prompt e no tamanho da imagem.
   if (!clienteId) return NextResponse.json({ error: "Informe o cliente." }, { status: 400 });
-  if (!prompt.trim() && !arteBaseUrl) {
+  // Referência só ajuda um pedido: sozinha, ela não diz o que criar.
+  if (!prompt.trim() && (!arteBaseUrl || modoTransformacao === "referencia")) {
     return NextResponse.json({ error: "Descreva o que você precisa (ou grave o áudio)." }, { status: 400 });
   }
   // Com arte-base o texto é opcional: a escolha de melhorar ou recriar já diz o
   // que fazer, e a arte traz as informações da campanha.
-  if (!prompt.trim()) {
-    prompt = modoTransformacao === "nova_versao_criativa" ? "Criar uma nova versão desta arte" : "Melhorar esta arte";
+  if (!prompt.trim() && modoTransformacao !== "referencia") {
+    prompt = PEDIDO_SEM_TEXTO[modoTransformacao];
   }
   if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > MAX_IMAGENS_POR_PEDIDO) {
     return NextResponse.json(
@@ -189,7 +195,7 @@ export async function POST(request: NextRequest) {
           variacao: i,
           total: quantidade,
           ...(produtoDoCliente ? { produtoRefId } : {}),
-          ...(arteBaseUrl ? { arteBaseUrl, modoTransformacao: modoTransformacao ?? "melhoria_recompositiva" } : {}),
+          ...(arteBaseUrl ? { arteBaseUrl, modoTransformacao } : {}),
         },
         status: "pendente",
       }));

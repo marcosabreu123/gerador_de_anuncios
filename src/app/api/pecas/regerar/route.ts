@@ -2,6 +2,7 @@ import { after, NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { enfileirar } from "@/lib/agencia/fila";
 import type { BriefingPecaManual } from "@/lib/agencia/types";
+import { formatoPedidoExplicitamente } from "@/lib/image-dimensions";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -50,11 +51,18 @@ export async function POST(request: NextRequest) {
   const instrucao = body.instrucao?.trim();
   const briefing = (peca.briefing ?? {}) as BriefingPecaManual;
 
+  // Formato pedido num ajuste que falhou não pode valer para o próximo.
+  const semFormatoPendente = { ...briefing };
+  delete semFormatoPendente.formatoNovo;
+
   if (instrucao) {
     // O ajuste entra no próprio prompt e ACUMULA: o segundo pedido não pode
     // apagar o primeiro ("mais escuro" + "preço maior" valem juntos).
     const promptAtual = briefing.prompt ?? "";
     const promptAcumulado = `${promptAtual}\n\nAjuste pedido: ${instrucao}`.trim();
+
+    const pedido = formatoPedidoExplicitamente(instrucao);
+    const formatoNovo = pedido && pedido !== (briefing.formato ?? "feed-4-5") ? pedido : null;
 
     // Com a arte já entregue na mão, ajustar é EDITAR aquela imagem, não
     // produzir outra: o operador pediu "o preço maior", não uma arte nova.
@@ -63,18 +71,24 @@ export async function POST(request: NextRequest) {
     // não há o que editar, e ela volta pelo caminho de criação com o ajuste
     // embutido no prompt.
     const ajuste: Partial<BriefingPecaManual> = peca.imagem_url
-      ? { ajusteSobreUrl: peca.imagem_url as string, instrucaoAjuste: instrucao }
-      : {};
+      ? {
+          ajusteSobreUrl: peca.imagem_url as string,
+          instrucaoAjuste: instrucao,
+          ...(formatoNovo ? { formatoNovo } : {}),
+        }
+      : formatoNovo
+        ? { formato: formatoNovo }
+        : {};
 
     await supabase
       .from("pecas")
-      .update({ briefing: { ...briefing, ...ajuste, prompt: promptAcumulado } })
+      .update({ briefing: { ...semFormatoPendente, ...ajuste, prompt: promptAcumulado } })
       .eq("id", peca.id);
-  } else if (briefing.ajusteSobreUrl || briefing.instrucaoAjuste) {
+  } else if (briefing.ajusteSobreUrl || briefing.instrucaoAjuste || briefing.formatoNovo) {
     // "Tentar de novo" sem instrução: refazer, não repetir o ajuste anterior.
     // Sem limpar, uma peça que falhou depois de um ajuste voltaria editando a
     // imagem velha com o pedido velho.
-    const limpo = { ...briefing };
+    const limpo = { ...semFormatoPendente };
     delete limpo.ajusteSobreUrl;
     delete limpo.instrucaoAjuste;
     await supabase.from("pecas").update({ briefing: limpo }).eq("id", peca.id);

@@ -141,7 +141,7 @@ Nunca invente informação que o briefing não deu: não crie desconto, prazo, s
 
 Quando houver foto do produto anexada, ela é referência do PRODUTO, não da composição. Extraia dela forma, cor, material, rótulo e proporção; descarte o ambiente, a mesa, a luz fraca e o enquadramento casual. Recrie o produto como hero shot de estúdio dentro da cena que você desenhou.
 
-Quando houver logo anexada, ela entra como assinatura, reproduzida fielmente, pequena e discreta, e o nome da empresa não entra como bloco de texto: a logo já assina a peça, e o texto solto faz o gerador redesenhar a logo. A logo nunca é o produto anunciado, e o nome da empresa nunca vira o produto: uma peça da "Burger do Zé" anuncia o hambúrguer, não a palavra.
+Quando houver logo anexada, ela entra como assinatura, reproduzida fielmente, pequena e discreta, e o nome da empresa não entra sozinho como bloco de texto: a logo já assina a peça, e o texto solto faz o gerador redesenhar a logo. Frase do pedido que cita a empresa, como "peça no Pedidos 10", é mensagem da peça e entra inteira. A logo nunca é o produto anunciado, e o nome da empresa nunca vira o produto: uma peça da "Burger do Zé" anuncia o hambúrguer, não a palavra.
 
 Quando houver imagem de referência, extraia dela paleta, clima e nível de sofisticação. Nunca copie o texto, a marca ou o logotipo de terceiros que apareçam nela.`;
 
@@ -250,7 +250,7 @@ export function normalizarFicha(bruto: unknown): FichaCriativa | null {
 // Integração com o fluxo de produção
 // ---------------------------------------------------------------------------
 
-const DESCRICAO_FORMATO: Record<Formato, string> = {
+export const DESCRICAO_FORMATO: Record<Formato, string> = {
   "story-9-16": "vertical 9:16 full-screen story",
   "feed-4-5": "vertical 4:5 social media feed post",
   "quadrado-1-1": "square 1:1 social media post",
@@ -289,6 +289,11 @@ export interface ContextoPeca {
   variacao?: { indice: number; total: number };
   // "Criar nova versão": o que a arte antiga dizia e como ela era organizada.
   arteAntiga?: LeituraDaArte;
+  // Com a arte antiga: false quando o operador não escreveu nada além de mandar a arte.
+  operadorEscreveu?: boolean;
+  // Imagem que o operador mandou como referência deste pedido, em data URL. Vai para
+  // o modelo olhar: em texto, ele não teria como saber o que o operador viu nela.
+  imagemDoPedido?: string;
 }
 
 export interface ResultadoDiretorArte {
@@ -320,10 +325,15 @@ const LADO_OBRIGATORIO: Record<LeituraDaArte["ladoDoProduto"], string> = {
   centro: "A arte antiga era centralizada: nesta peça o produto fica obrigatoriamente deslocado para um lado, sangrando na borda, com o texto em coluna no lado oposto.",
 };
 
-function arteAntigaEmTexto(arte: LeituraDaArte): string {
+function arteAntigaEmTexto(arte: LeituraDaArte, operadorEscreveu: boolean): string {
+  const textos = arte.textos.map((t) => `- ${t}`).join("\n");
   return [
     "ESTA PEÇA É A NOVA VERSÃO DE UMA ARTE PRONTA. Crie uma campanha nova, como outro diretor de arte que recebeu o mesmo briefing e nunca viu a original.",
-    `TEXTOS DA CAMPANHA. Todos entram, exatamente assim, e nenhum a mais; aqui o limite de blocos de texto não vale:\n${arte.textos.map((t) => `- ${t}`).join("\n")}`,
+    // "Todos entram, e nenhum a mais" apagava o pedido: um "bateu a fome? peça no
+    // Pedidos 10" com arte enviada saiu com o título da arte e nada do que foi pedido.
+    operadorEscreveu
+      ? `O PEDIDO DO OPERADOR MANDA. Cada frase que ele escreveu para a arte entra na peça, e o título, a chamada, a oferta, o produto ou a ideia que ele citou substituem os da arte antiga: se ele deu a chamada, a chamada antiga sai. Da arte antiga, aproveite só o que o pedido não mudou:\n${textos}`
+      : `TEXTOS DA CAMPANHA. Todos entram, exatamente assim, e nenhum a mais; aqui o limite de blocos de texto não vale:\n${textos}`,
     arte.produto ? `PRODUTO ANUNCIADO: ${arte.produto}` : null,
     arte.cores.length > 0 ? `CORES DA CAMPANHA: ${arte.cores.join(", ")}` : null,
     arte.layout
@@ -334,6 +344,16 @@ function arteAntigaEmTexto(arte: LeituraDaArte): string {
     .filter(Boolean)
     .join("\n\n");
 }
+
+const REFERENCIA_DO_PEDIDO = `A IMAGEM ANEXADA A ESTA MENSAGEM É UMA REFERÊNCIA QUE O OPERADOR ESCOLHEU PARA ESTE PEDIDO.
+
+O PEDIDO MANDA. A peça nasce do que ele diz, e a imagem está aqui para ajudar. Esta peça não é uma nova versão da imagem.
+
+Olhe a imagem e entenda por que ela veio. Se o pedido disser o que aproveitar dela, aproveite exatamente isso. Se não disser, aproveite o estilo: energia, tipo de composição, tratamento do texto, clima e acabamento. A ideia, o layout e os textos desta peça são novos.
+
+Títulos, frases, preços, ofertas e chamadas da imagem ficam de fora, a não ser que o pedido peça. Marca, logo ou produto de outra empresa nunca entram.
+
+Quando a ficha precisar de algo que está na imagem, cite como "the attached reference image": ela também vai para o gerador.`;
 
 // Sem a data, o modelo chuta o ano: duas artes de Ano Novo saíram com "Que 2025
 // seja..." e "Que 2026 seja...", em novembro de 2026, mesmo com a regra proibindo.
@@ -372,6 +392,18 @@ function assinaturaViraLogo(ficha: FichaCriativa): FichaCriativa {
   };
 }
 
+// Prompt para refazer uma arte pronta em outra proporção. Não passa pelo diretor: a
+// peça já está decidida, e o gerador só precisa redistribuí-la no novo quadro. A
+// edição cirúrgica não serve aqui, porque ela manda preservar justamente o enquadramento.
+export function promptNovoFormato(formato: Formato, instrucao: string): string {
+  return [
+    `Rebuild this finished advertising artwork for a new canvas: ${DESCRICAO_FORMATO[formato]}. It is the same ad, not a new campaign.`,
+    "Keep every text exactly as it appears in the attached artwork, character for character, in the same typography style. Keep the logo, the product, the photography, the colors and the overall look. Add no new text, no new objects and no new information.",
+    "Redistribute the layout so the new canvas is filled naturally from edge to edge: extend the background and the scene, and reposition and rescale the elements. No stretching, no distortion, no empty bars, no borders, and nothing cut off at the edges.",
+    `What the operator asked for: "${instrucao}"`,
+  ].join("\n\n");
+}
+
 // Gera a ficha criativa e devolve o prompt já no dialeto do gerador em uso.
 // Lança quando não consegue — quem chama decide o fallback.
 export async function montarPromptDiretorArte(ctx: ContextoPeca): Promise<ResultadoDiretorArte> {
@@ -392,7 +424,8 @@ export async function montarPromptDiretorArte(ctx: ContextoPeca): Promise<Result
     ctx.contatos?.trim() ? `CONTATOS CADASTRADOS (entram na peça só se o pedido ou uma regra da marca exigir, copiados exatamente):\n${ctx.contatos.trim()}` : null,
     `FORMATO: ${DESCRICAO_FORMATO[ctx.formato]}`,
     materiaisEmTexto(ctx),
-    ctx.arteAntiga ? arteAntigaEmTexto(ctx.arteAntiga) : null,
+    ctx.arteAntiga ? arteAntigaEmTexto(ctx.arteAntiga, ctx.operadorEscreveu ?? true) : null,
+    ctx.imagemDoPedido ? REFERENCIA_DO_PEDIDO : null,
     variacao,
   ]
     .filter(Boolean)
@@ -407,7 +440,15 @@ export async function montarPromptDiretorArte(ctx: ContextoPeca): Promise<Result
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: systemDiretorArte(ctx.nicho, ctx.pedido) },
-      { role: "user", content: usuario },
+      {
+        role: "user",
+        content: ctx.imagemDoPedido
+          ? [
+              { type: "text", text: usuario },
+              { type: "image_url", image_url: { url: ctx.imagemDoPedido, detail: "high" } },
+            ]
+          : usuario,
+      },
     ],
   });
 

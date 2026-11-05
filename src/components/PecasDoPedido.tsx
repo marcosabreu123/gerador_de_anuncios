@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { Check, Download, Maximize2, PencilLine } from "lucide-react";
 import { lerRespostaJSON } from "@/lib/fetch-json";
 import { baixarArte } from "@/lib/download";
-import { aprovarPeca, registrarTempoPeca } from "@/app/(app)/clientes/actions";
+import { aprovarPeca, registrarTempoPeca, usarVersaoPeca } from "@/app/(app)/clientes/actions";
 import BotaoEnviar from "@/components/BotaoEnviar";
 import Modal from "@/components/Modal";
 import { SeloStatus } from "@/components/ui";
-import type { Peca } from "@/lib/agencia/types";
+import type { BriefingPecaManual, Peca, VersaoPeca } from "@/lib/agencia/types";
 
 // Acompanhamento do lote. As peças são produzidas pelo worker da fila, então
 // a tela precisa se atualizar sozinha — o operador aprova e vai fazer outra
@@ -18,12 +18,17 @@ import type { Peca } from "@/lib/agencia/types";
 const INTERVALO_ATUALIZACAO_MS = 6000;
 const INTERVALO_CUTUCAO_MS = 30_000;
 
+function versoesDa(peca: Peca): VersaoPeca[] {
+  return (peca.briefing as BriefingPecaManual | null)?.versoes ?? [];
+}
+
 export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedidoId: string }) {
   const router = useRouter();
   const [ajustando, setAjustando] = useState<string | null>(null);
   const [instrucao, setInstrucao] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [ampliada, setAmpliada] = useState<string | null>(null);
+  const [versaoAberta, setVersaoAberta] = useState<{ pecaId: string; url: string } | null>(null);
 
   const emAndamento = pecas.some((p) => p.status === "pendente" || p.status === "gerando");
   const paradas = pecas.filter((p) => p.status === "pendente").length;
@@ -80,6 +85,11 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
   // ficaria perdida num canto da tela do PC. A altura da arte acompanha a janela
   // para ela caber inteira no notebook, sem precisar rolar.
   const unica = pecas.length === 1;
+
+  const pecaDaVersao = versaoAberta && pecas.find((p) => p.id === versaoAberta.pecaId);
+  const versoesAbertas = pecaDaVersao ? versoesDa(pecaDaVersao) : [];
+  const indiceAberto = versoesAbertas.findIndex((v) => v.url === versaoAberta?.url);
+  const versao = versoesAbertas[indiceAberto];
 
   return (
     <div className="flex flex-col gap-4 min-w-0">
@@ -182,6 +192,32 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
                 </button>
               )}
 
+              {/* Toda imagem que a peça já teve fica aqui: um ajuste pode piorar a arte,
+                  e a anterior precisa continuar ao alcance. */}
+              {versoesDa(peca).length > 1 && (
+                <div className="flex flex-col gap-1.5 border-t border-[var(--border)] pt-3">
+                  <span className="text-[13px] text-[var(--muted)]">Versões desta arte</span>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {versoesDa(peca).map((v, i) => (
+                      <button
+                        key={v.url}
+                        type="button"
+                        onClick={() => setVersaoAberta({ pecaId: peca.id, url: v.url })}
+                        title={v.ajuste ?? "Primeira versão"}
+                        aria-label={`Abrir a versão ${i + 1}`}
+                        aria-current={v.url === peca.imagem_url}
+                        className={`shrink-0 rounded-[10px] overflow-hidden border-2 ${
+                          v.url === peca.imagem_url ? "border-[var(--foreground)]" : "border-transparent"
+                        }`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={v.url} alt="" loading="lazy" className="h-16 w-auto" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {peca.imagem_url && (unica || ajustando === peca.id) && (
                 <div className={`flex flex-col gap-2 ${unica ? "flex-1 border-t border-[var(--border)] pt-3" : ""}`}>
                   {unica && (
@@ -194,7 +230,7 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
                     value={instrucao}
                     onChange={(e) => setInstrucao(e.target.value)}
                     className={`input resize-y ${unica ? "flex-1 min-h-24" : "min-h-[72px]"}`}
-                    placeholder="O que mudar? Ex: deixa o preço maior, fundo mais escuro."
+                    placeholder="O que mudar? Ex: deixa o preço maior, passa para story."
                   />
                   <button
                     type="button"
@@ -242,6 +278,48 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
         <Modal titulo="Arte em tamanho real" aoFechar={() => setAmpliada(null)} largo>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={ampliada} alt="Arte em tamanho real" className="w-full max-h-[80dvh] object-contain rounded-[10px]" />
+        </Modal>
+      )}
+
+      {pecaDaVersao && versao && (
+        <Modal
+          titulo={`Versão ${indiceAberto + 1} de ${versoesAbertas.length}`}
+          aoFechar={() => setVersaoAberta(null)}
+          largo
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={versao.url} alt="" className="w-full max-h-[62dvh] object-contain rounded-[10px]" />
+          <p className="text-[13px] text-[var(--muted)]">
+            {versao.ajuste ? `Pedido: ${versao.ajuste}` : "Primeira versão desta arte."}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {versao.url === pecaDaVersao.imagem_url ? (
+              <span className="text-sm">Esta é a versão em uso.</span>
+            ) : (
+              <form
+                action={async (form) => {
+                  await usarVersaoPeca(form);
+                  setVersaoAberta(null);
+                }}
+              >
+                <input type="hidden" name="id" value={pecaDaVersao.id} />
+                <input type="hidden" name="pedido_id" value={pedidoId} />
+                <input type="hidden" name="url" value={versao.url} />
+                <BotaoEnviar className="btn btn-primary btn-sm">
+                  <Check size={14} aria-hidden="true" />
+                  Usar esta versão
+                </BotaoEnviar>
+              </form>
+            )}
+            <button
+              type="button"
+              onClick={() => baixarArte(versao.url, `${pecaDaVersao.titulo ?? "arte"}-versao-${indiceAberto + 1}.png`)}
+              className="btn btn-outline btn-sm"
+            >
+              <Download size={14} aria-hidden="true" />
+              Baixar
+            </button>
+          </div>
         </Modal>
       )}
     </div>

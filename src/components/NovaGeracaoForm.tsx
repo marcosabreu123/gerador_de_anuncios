@@ -8,7 +8,7 @@ import { lerRespostaJSON } from "@/lib/fetch-json";
 import GerandoMensagem from "@/components/GerandoMensagem";
 import { TituloCard } from "@/components/ui";
 import { enviarImagemParaStorage } from "@/lib/upload-storage";
-import type { Referencia } from "@/lib/agencia/types";
+import type { ModoImagemEnviada, Referencia } from "@/lib/agencia/types";
 import type { EstiloComunicacao, Formato, IntensidadeVisual } from "@/lib/types";
 
 // Tela de produção. O operador escreve ou fala o pedido, ajusta os controles
@@ -35,9 +35,23 @@ interface SugestaoDeBriefing {
 const QUANTIDADES = [1, 2, 3, 4] as const;
 
 const FORMATOS: { valor: Formato; label: string; ajuda: string; proporcao: string }[] = [
-  { valor: "feed-4-5", label: "Feed", ajuda: "4:5", proporcao: "4 / 5" },
   { valor: "story-9-16", label: "Story", ajuda: "9:16", proporcao: "9 / 16" },
+  { valor: "feed-4-5", label: "Feed", ajuda: "4:5", proporcao: "4 / 5" },
   { valor: "quadrado-1-1", label: "Quadrado", ajuda: "1:1", proporcao: "1 / 1" },
+];
+
+const MODOS_DA_IMAGEM: { valor: ModoImagemEnviada; label: string; ajuda: string }[] = [
+  { valor: "referencia", label: "Usar como referência", ajuda: "Seu pedido manda, e a imagem é só inspiração." },
+  {
+    valor: "melhoria_recompositiva",
+    label: "Melhorar esta arte",
+    ajuda: "Mesma campanha, composição melhor. O que você escrever vale mais que a arte.",
+  },
+  {
+    valor: "nova_versao_criativa",
+    label: "Criar nova versão",
+    ajuda: "Mesmas informações, design novo. O que você escrever vale mais que a arte.",
+  },
 ];
 
 const ESTILOS: { valor: EstiloComunicacao; label: string }[] = [
@@ -72,7 +86,7 @@ export default function NovaGeracaoForm({
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [quantidade, setQuantidade] = useState<number>(1);
-  const [formato, setFormato] = useState<Formato>("feed-4-5");
+  const [formato, setFormato] = useState<Formato>("story-9-16");
   const [estilo, setEstilo] = useState<EstiloComunicacao>("ia_decide");
   const [intensidade, setIntensidade] = useState<IntensidadeVisual>("ia_decide");
   const [gravando, setGravando] = useState(false);
@@ -80,12 +94,9 @@ export default function NovaGeracaoForm({
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [podeForcar, setPodeForcar] = useState(false);
-  // Arte pronta que o operador quer melhorar/recriar. Quando preenchida, a
-  // geração trabalha sobre ela em vez de criar do zero.
+  // Imagem enviada junto do pedido. O modo diz o que a geração faz com ela.
   const [arteBaseUrl, setArteBaseUrl] = useState<string | null>(null);
-  const [modoTransformacao, setModoTransformacao] = useState<
-    "melhoria_recompositiva" | "nova_versao_criativa"
-  >("melhoria_recompositiva");
+  const [modoTransformacao, setModoTransformacao] = useState<ModoImagemEnviada>("referencia");
   const [subindoArte, setSubindoArte] = useState(false);
   // Com uma foto só ela já vem marcada. Com várias, a escolha é do operador: o
   // modelo trata o anexo como o produto da peça, e a foto errada estraga a arte.
@@ -161,12 +172,18 @@ export default function NovaGeracaoForm({
         form.append("clienteId", clienteId);
         form.append("ideia", prompt);
         form.append("audio", audio, "pedido.webm");
+        if (arteBaseUrl) form.append("imagemUrl", arteBaseUrl);
         res = await fetch("/api/geracoes/melhorar-ideia", { method: "POST", body: form });
       } else {
         res = await fetch("/api/geracoes/melhorar-ideia", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clienteId, ideia: prompt, anterior: sugestao?.briefing }),
+          body: JSON.stringify({
+            clienteId,
+            ideia: prompt,
+            anterior: sugestao?.briefing,
+            ...(arteBaseUrl ? { imagemUrl: arteBaseUrl } : {}),
+          }),
         });
       }
 
@@ -291,9 +308,11 @@ export default function NovaGeracaoForm({
   const proporcao = FORMATOS.find((f) => f.valor === formato)?.proporcao;
   const aprovacaoPendente = Boolean(sugestao?.briefing);
   const palavras = prompt.trim() ? prompt.trim().split(/\s+/).length : 0;
-  // Com arte-base a informação da campanha vem da arte, que a melhoria não enxerga.
+  // Melhorar ou recriar parte da arte enviada. Como referência, ela só ajuda o pedido.
+  const trabalhaSobreArte = Boolean(arteBaseUrl) && modoTransformacao !== "referencia";
+  // Sobre a arte a informação da campanha vem dela, que a melhoria não enxerga.
   const ideiaCurta =
-    !arteBaseUrl && !sugestao && textoAntes === null && palavras > 0 && palavras < PALAVRAS_DE_IDEIA_CURTA;
+    !trabalhaSobreArte && !sugestao && textoAntes === null && palavras > 0 && palavras < PALAVRAS_DE_IDEIA_CURTA;
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
@@ -325,7 +344,7 @@ export default function NovaGeracaoForm({
                   <Square size={14} aria-hidden="true" />
                   Parar e usar o áudio
                 </button>
-                {!arteBaseUrl && (
+                {!trabalhaSobreArte && (
                   <button type="button" onClick={() => pararGravacao("melhorar")} className="btn btn-outline">
                     <WandSparkles size={16} aria-hidden="true" />
                     Parar e melhorar a ideia
@@ -344,7 +363,7 @@ export default function NovaGeracaoForm({
                   <Mic size={16} aria-hidden="true" />
                   Gravar áudio
                 </button>
-                {!arteBaseUrl && (
+                {!trabalhaSobreArte && (
                   <button
                     type="button"
                     onClick={() => melhorar()}
@@ -418,42 +437,33 @@ export default function NovaGeracaoForm({
         </section>
 
         <div className={`grid grid-cols-1 gap-4 ${fotosProduto.length > 0 ? "lg:grid-cols-2" : ""}`}>
-          {/* Partir de uma arte pronta. Opcional e recolhido no visual, porque a
-              maioria das gerações é do zero — mas quando o cliente manda a peça
-              antiga e pede "melhora essa aí", é por aqui. */}
+          {/* Opcional e recolhido no visual, porque a maioria das gerações é do zero.
+              É por aqui que entra uma inspiração para o pedido, ou a peça antiga
+              quando o cliente pede "melhora essa aí". */}
           <section className="card p-5 flex flex-col gap-3 min-w-0">
-            <TituloCard titulo="Partir de uma arte pronta" descricao="Opcional. Para quando o cliente manda a peça antiga." />
+            <TituloCard titulo="Enviar uma imagem" descricao="Opcional. Uma referência para o pedido, ou a peça antiga do cliente." />
 
             {arteBaseUrl ? (
               <div className="flex items-start gap-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={arteBaseUrl} alt="Arte base" className="w-20 rounded-lg shrink-0" />
+                <img src={arteBaseUrl} alt="Imagem enviada" className="w-20 rounded-lg shrink-0" />
                 <div className="flex flex-col gap-2 flex-1 min-w-0">
                   <div className="flex flex-wrap gap-2">
-                    <Opcao
-                      ativo={modoTransformacao === "melhoria_recompositiva"}
-                      onClick={() => setModoTransformacao("melhoria_recompositiva")}
-                    >
-                      Melhorar esta arte
-                    </Opcao>
-                    <Opcao
-                      ativo={modoTransformacao === "nova_versao_criativa"}
-                      onClick={() => setModoTransformacao("nova_versao_criativa")}
-                    >
-                      Criar nova versão
-                    </Opcao>
+                    {MODOS_DA_IMAGEM.map((m) => (
+                      <Opcao key={m.valor} ativo={modoTransformacao === m.valor} onClick={() => setModoTransformacao(m.valor)}>
+                        {m.label}
+                      </Opcao>
+                    ))}
                   </div>
                   <p className="text-[13px] text-[var(--muted)]">
-                    {modoTransformacao === "melhoria_recompositiva"
-                      ? "Mesma campanha, composição visivelmente melhor."
-                      : "Mesmas informações, design recriado do zero."}
+                    {MODOS_DA_IMAGEM.find((m) => m.valor === modoTransformacao)?.ajuda}
                   </p>
                   <button
                     type="button"
                     onClick={() => setArteBaseUrl(null)}
                     className="text-[13px] text-[var(--muted)] hover:text-[var(--foreground)] underline self-start"
                   >
-                    Remover arte base
+                    Remover imagem
                   </button>
                 </div>
               </div>
@@ -491,7 +501,7 @@ export default function NovaGeracaoForm({
                   ) : (
                     <ImagePlus size={16} className="text-[var(--muted)]" aria-hidden="true" />
                   )}
-                  {subindoArte ? "Enviando…" : "Enviar arte existente"}
+                  {subindoArte ? "Enviando…" : "Enviar imagem"}
                 </label>
               </>
             )}
@@ -502,7 +512,7 @@ export default function NovaGeracaoForm({
               <TituloCard
                 titulo="Foto do produto"
                 descricao={`A foto escolhida vira o produto da arte. ${
-                  arteBaseUrl ? "Sem foto, vale o produto da arte enviada." : "Sem foto, a IA compõe o produto do pedido."
+                  trabalhaSobreArte ? "Sem foto, vale o produto da arte enviada." : "Sem foto, a IA compõe o produto do pedido."
                 }`}
               />
               <div className="flex flex-wrap items-center gap-2">
@@ -625,7 +635,7 @@ export default function NovaGeracaoForm({
             type="button"
             onClick={() => enviar()}
             disabled={
-              (!prompt.trim() && !arteBaseUrl) || enviando || gravando || melhorando || aprovacaoPendente || bloqueadoSemSaldo
+              (!prompt.trim() && !trabalhaSobreArte) || enviando || gravando || melhorando || aprovacaoPendente || bloqueadoSemSaldo
             }
             className="btn btn-ia btn-block"
           >

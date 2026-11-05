@@ -25,9 +25,11 @@ export interface UsoImagem {
 export type TipoEntradaImagem =
   | "produto"
   | "referencia"
+  | "referencia_pedido"
   | "logotipo"
   | "base"
   | "arte_melhorar"
+  | "arte_novo_formato"
   | "fundo"
   | "elemento_extra";
 
@@ -41,12 +43,19 @@ const LABELS_ENTRADA: Record<TipoEntradaImagem, string> = {
   produto: "a foto real do produto anexada pelo lojista — use como base fiel, preservando formato, cor e rótulo reais",
   referencia:
     "uma imagem de referência de estilo anexada — use só como inspiração de paleta, clima e nível de acabamento, nunca copie a composição dela, o jeito como o preço foi desenhado, nem qualquer texto, preço, marca ou logotipo que apareça nela",
+  // Separado de "referencia" porque aqui o pedido pode mandar aproveitar algo da
+  // imagem, como um objeto, e o rótulo vai ANTES do prompt.
+  referencia_pedido:
+    "a imagem de referência que o operador escolheu para este pedido, e não a arte a ser refeita — siga as instruções abaixo e aproveite dela só o que elas indicarem; nenhum texto, preço, frase, marca ou logotipo dela entra na arte, a não ser que as instruções abaixo citem",
   logotipo: "o logotipo da marca do lojista anexado — inclua de forma discreta e legível na arte, sem distorcer",
   base: "a imagem base a ser editada — aplique o ajuste pedido preservando o restante exatamente como está",
   // Existe porque o rótulo de "base" manda preservar tudo, e ele vai ANTES do
   // prompt: contradizia a instrução de reorganizar a composição.
   arte_melhorar:
-    "a arte atual do cliente — mantenha a campanha, o produto e todas as informações comerciais visíveis nela, sem acrescentar nenhuma, e reorganize a composição conforme as instruções abaixo",
+    "a arte atual do cliente — mantenha a campanha, o produto e as informações comerciais visíveis nela, sem acrescentar nenhuma, e reorganize a composição conforme as instruções abaixo; quando elas mandarem mudar ou acrescentar algo, vale o que elas dizem",
+  // O rótulo de "base" manda preservar tudo, inclusive o enquadramento que precisa mudar.
+  arte_novo_formato:
+    "a arte pronta do cliente, feita em outra proporção — é esta mesma peça que deve ser refeita no formato pedido abaixo",
   fundo:
     "uma imagem de referência de fundo anexada pelo lojista — use como base/inspiração para o novo fundo da arte, sem copiar textos ou marcas de terceiros que apareçam nela",
   elemento_extra:

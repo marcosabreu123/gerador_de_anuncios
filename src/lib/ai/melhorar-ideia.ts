@@ -160,6 +160,9 @@ export interface ContextoIdeia {
   // O que as artes de referência mostram. Fica fora da conferência de fidelidade:
   // um preço ou um "grátis" de arte antiga não vale como dado desta peça.
   referencias?: LeituraDasReferencias | null;
+  // Imagem que o operador mandou como referência deste pedido, em data URL. Também
+  // fica fora da conferência de fidelidade, pelo mesmo motivo.
+  imagemDoPedido?: string;
   // Sugestão que o operador dispensou ao pedir outra. Sem ela a segunda
   // tentativa volta quase igual à primeira.
   anterior?: string;
@@ -267,6 +270,9 @@ export async function melhorarIdeia(ctx: ContextoIdeia): Promise<IdeiaMelhorada>
       ? `FRASES QUE A MARCA JÁ USOU. Servem para sentir a voz. Não repita nenhuma, a menos que o pedido peça:\n${ctx.referencias.jaUsadas.map((f) => `- ${f}`).join("\n")}`
       : null,
     ctx.contatos?.trim() ? `CONTATOS CADASTRADOS:\n${ctx.contatos.trim()}` : null,
+    ctx.imagemDoPedido
+      ? "IMAGEM DE REFERÊNCIA DESTE PEDIDO. Está anexada a esta mensagem: o operador a escolheu para mostrar o jeito que quer. A ideia dele manda. Use a imagem para entender o estilo e a intenção, e não tire dela título, frase, preço ou oferta, a não ser que a ideia peça."
+      : null,
     ctx.anterior?.trim()
       ? `SUGESTÃO QUE O OPERADOR DISPENSOU. Vá por outro caminho, com outra situação, outro título e outra ideia visual, e não uma reescrita desta. Os dados do pedido continuam os mesmos:\n${ctx.anterior.trim()}`
       : null,
@@ -282,7 +288,15 @@ export async function melhorarIdeia(ctx: ContextoIdeia): Promise<IdeiaMelhorada>
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: SYSTEM_MELHORAR_IDEIA },
-      { role: "user", content: usuario },
+      {
+        role: "user",
+        content: ctx.imagemDoPedido
+          ? [
+              { type: "text", text: usuario },
+              { type: "image_url", image_url: { url: ctx.imagemDoPedido, detail: "high" } },
+            ]
+          : usuario,
+      },
     ],
   });
 

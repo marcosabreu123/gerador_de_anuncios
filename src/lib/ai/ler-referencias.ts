@@ -44,7 +44,7 @@ Só afirme o que as artes mostram. Se não der para saber algo, deixe de fora. P
 const LADO_MAXIMO_PX = 1024;
 
 // Referência que não abre não pode derrubar a leitura das outras.
-async function imagemParaLeitura(url: string): Promise<string | null> {
+export async function imagemParaLeitura(url: string): Promise<string | null> {
   try {
     // Import aqui dentro de propósito: este arquivo também é carregado pela tela de nova
     // geração, e sharp no topo derrubava a página inteira quando o binário não estava lá.

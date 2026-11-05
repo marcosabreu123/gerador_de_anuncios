@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { contatosParaInstrucao, identidadeParaInstrucao } from "@/lib/ai/agente-pedido";
+import { imagemParaLeitura } from "@/lib/ai/ler-referencias";
 import { melhorarIdeia } from "@/lib/ai/melhorar-ideia";
 import { TEXT_PROMPT_BUILDER_MODEL } from "@/lib/ai/models";
 import { custoTextoUSD, registrarGeracao } from "@/lib/agencia/custo";
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
   let clienteId = "";
   let ideia = "";
   let anterior: string | undefined;
+  let imagemUrl: string | undefined;
   let audio: File | null = null;
 
   try {
@@ -43,6 +45,7 @@ export async function POST(request: NextRequest) {
       const form = await request.formData();
       clienteId = String(form.get("clienteId") ?? "");
       ideia = String(form.get("ideia") ?? "");
+      imagemUrl = (form.get("imagemUrl") as string) || undefined;
       const arquivo = form.get("audio");
       if (arquivo instanceof File && arquivo.size > 0) audio = arquivo;
     } else {
@@ -50,6 +53,7 @@ export async function POST(request: NextRequest) {
       clienteId = String(body.clienteId ?? "");
       ideia = String(body.ideia ?? "");
       anterior = (body.anterior as string) || undefined;
+      imagemUrl = (body.imagemUrl as string) || undefined;
     }
   } catch {
     return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
@@ -90,7 +94,10 @@ export async function POST(request: NextRequest) {
   }
 
   // Normalmente já está pronta: a tela de criação dispara a leitura ao abrir.
-  const referencias = await leituraEmDia(cliente, brandKit, (referenciasRaw ?? []) as Referencia[]);
+  const [referencias, imagemDoPedido] = await Promise.all([
+    leituraEmDia(cliente, brandKit, (referenciasRaw ?? []) as Referencia[]),
+    imagemUrl ? imagemParaLeitura(imagemUrl) : null,
+  ]);
 
   const inicio = Date.now();
   try {
@@ -99,6 +106,7 @@ export async function POST(request: NextRequest) {
       identidade: identidadeParaInstrucao(cliente, brandKit),
       contatos: contatosParaInstrucao(brandKit),
       referencias,
+      imagemDoPedido: imagemDoPedido ?? undefined,
       anterior,
     });
 

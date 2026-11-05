@@ -1134,29 +1134,52 @@ const DESCRICAO_DIRECAO: Record<Exclude<DirecaoTransformacao, "personalizado">, 
   ia_decide: "deixar a IA decidir a melhor direção",
 };
 
-function descreverPedidoArteExistente(req: Pick<ArteExistenteRequest, "direcao" | "instrucaoUsuario">): string {
+// O que o fluxo de melhorar recebe além do pedido antigo. "ordem" é o que o operador
+// escreveu na tela, e fica separada da identidade do cliente porque tem outro peso.
+type PedidoMelhorarArte = Pick<ArteExistenteRequest, "direcao" | "instrucaoUsuario"> & {
+  ordem?: string;
+  formatoSaida?: string;
+};
+
+function descreverPedidoArteExistente(req: PedidoMelhorarArte): string {
   const linhas: string[] = [
     "O lojista quer MELHORAR a arte existente: mesma campanha, mesmas informações, mas uma composição visivelmente melhor — pode reorganizar layout, hierarquia e distribuição dos elementos, não é só clarear ou polir a mesma peça.",
   ];
+  if (req.ordem?.trim()) {
+    linhas.unshift(`ORDEM DO OPERADOR, que vale acima de tudo: ${req.ordem.trim()}`);
+  }
   if (req.direcao && req.direcao !== "personalizado") {
     linhas.push(`Direção desejada: ${DESCRICAO_DIRECAO[req.direcao]}.`);
   }
   if (req.instrucaoUsuario?.trim()) {
     linhas.push(`Instrução específica do lojista: ${req.instrucaoUsuario.trim()}`);
   }
+  if (req.formatoSaida) linhas.push(`FORMATO DE SAÍDA: ${req.formatoSaida}`);
   return linhas.join("\n");
 }
 
 const PROMPT_BASE_MELHORIA_RECOMPOSITIVA =
-  `Use the uploaded artwork as the main reference for content, product, brand and sales message. Create a clearly improved version of the same advertising campaign. Preserve exactly the commercial information that is visible in the artwork, and add nothing: if it shows no phone number, address or call to action, the new version shows none either. Keep the same sales intent and main message, but do not copy the original layout rigidly. Improve the composition noticeably. You may reorganize the layout, hierarchy, spacing, background, product placement, price treatment, typography and visual balance as needed to make the artwork stronger. Preserve the campaign, not the exact structure. Preserve the original aspect ratio and output format of the attached image. Keep the same image format/proportion as the original uploaded design. Do not change the composition format unless the user explicitly requests a new format. The result must look noticeably better and more professionally designed, not just brighter or slightly polished. Do not invent new information, do not change prices, do not change the logo, and do not turn it into a completely different campaign. ${FOOD_CONDITIONAL_HINT}`;
+  `Use the uploaded artwork as the main reference for content, product, brand and sales message. Create a clearly improved version of the same advertising campaign. Preserve exactly the commercial information that is visible in the artwork, and add nothing: if it shows no phone number, address or call to action, the new version shows none either. Keep the same sales intent and main message, but do not copy the original layout rigidly. Improve the composition noticeably. You may reorganize the layout, hierarchy, spacing, background, product placement, price treatment, typography and visual balance as needed to make the artwork stronger. Preserve the campaign, not the exact structure. Compose for the requested output format and fill the whole canvas, even if the attached artwork has another proportion. The result must look noticeably better and more professionally designed, not just brighter or slightly polished. Do not invent new information, do not change prices, do not change the logo, and do not turn it into a completely different campaign. ${FOOD_CONDITIONAL_HINT}`;
 
-function fallbackTransformarArteExistente(req: Pick<ArteExistenteRequest, "instrucaoUsuario">): string {
-  const base = PROMPT_BASE_MELHORIA_RECOMPOSITIVA;
+function fallbackTransformarArteExistente(req: PedidoMelhorarArte): string {
   const instrucao = req.instrucaoUsuario?.trim();
-  return aplicarPadraoDesigner(instrucao ? `${base} ${instrucao}.` : base);
+  return aplicarPadraoDesigner(
+    [
+      // Em primeiro lugar: a base manda preservar preço e informações, e a ordem pode
+      // ser justamente trocá-los.
+      req.ordem?.trim() && `Operator order, which overrides every rule below: ${req.ordem.trim()}.`,
+      req.formatoSaida && `Output format: ${req.formatoSaida}.`,
+      PROMPT_BASE_MELHORIA_RECOMPOSITIVA,
+      instrucao && `${instrucao}.`,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
 }
 
 const SYSTEM_MELHORIA_RECOMPOSITIVA = `Você escreve prompts para o GPT Image melhorar uma arte publicitária existente. Grau de liberdade criativa: MÉDIO. Isso NÃO é um ajuste cirúrgico (ajuste cirúrgico já existe no fluxo de editar detalhe) — o resultado precisa parecer uma versão claramente melhorada, não a mesma arte apenas mais clara ou com contraste ajustado.
+
+Quando vier ORDEM DO OPERADOR, ela vale acima de todas as regras deste texto e do que está na arte: o que ele mandar trocar, tirar ou acrescentar acontece, mesmo que mude preço, texto, produto ou ideia. O prompt final abre com essa ordem em frases diretas, com os textos novos entre aspas, e as regras de preservar valem só para o que ela não citou.
 
 Preserve exatamente o que está na arte: a ideia principal da campanha, produto, marca, logo, preço, informações comerciais e mensagem principal.
 
@@ -1168,22 +1191,20 @@ Nunca limite a melhoria a brilho, contraste ou polimento superficial — isso é
 
 Prompt-base (adapte ao pedido, não copie literalmente): "${PROMPT_BASE_MELHORIA_RECOMPOSITIVA}"
 
-O prompt final que você escrever deve sempre conter, adaptado ao contexto, estas 6 frases: "Do not copy the original layout rigidly.", "Improve the composition noticeably.", "You may reorganize the layout while preserving the same information and sales intent.", "Do not limit the improvement to brightness, contrast or small polish.", "Preserve the campaign, not the exact structure.", "Keep the original format/aspect ratio unless the user explicitly asks to change it."
+O prompt final que você escrever deve sempre conter, adaptado ao contexto, estas 6 frases: "Do not copy the original layout rigidly.", "Improve the composition noticeably.", "You may reorganize the layout while preserving the same information and sales intent.", "Do not limit the improvement to brightness, contrast or small polish.", "Preserve the campaign, not the exact structure.", "Compose for the requested output format and fill the whole canvas."
 
 Se o lojista pedir uma direção específica (mais profissional, mais clean, mais premium, melhorar legibilidade, reduzir poluição visual, ou deixar a IA decidir), incorpore isso mantendo sempre o grau de liberdade MÉDIO.
 
-Regra de formato: o formato/proporção da arte original (story 9:16, feed 4:5 ou quadrado 1:1) deve ser preservado — só sugira mudança de formato se o lojista pedir isso explicitamente (ex: "transforma em feed", "quero em story").
+Regra de formato: a arte sai no FORMATO DE SAÍDA informado, que é escolha do operador. Se a arte enviada tiver outra proporção, redistribua os elementos para preencher o novo quadro inteiro, sem faixa vazia, sem esticar e sem cortar nada.
 
-Antes de finalizar, confira este checklist (corrija o prompt antes de responder se qualquer resposta for "não"): o prompt permite mudança clara de composição? Permite reorganizar blocos? Permite redesenhar cards/preço? Pede melhoria perceptível? Evita dizer para preservar o layout rigidamente? Preserva o formato original?
+Antes de finalizar, confira este checklist (corrija o prompt antes de responder se qualquer resposta for "não"): o prompt abre com a ordem do operador, quando houver? Permite mudança clara de composição? Permite reorganizar blocos? Permite redesenhar cards/preço? Pede melhoria perceptível? Evita dizer para preservar o layout rigidamente? Usa o formato de saída pedido?
 
 A saída deve ser apenas o prompt final em INGLÊS (o modelo de imagem segue instrução de direção de arte com mais consistência em inglês), sem explicações, sem comentários e sem aspas ao redor de tudo.`;
 
 // Gera o prompt final (em INGLÊS — gpt-image-2 segue esse tipo de instrução
 // de direção de arte com mais consistência) pro fluxo de melhorar uma arte
 // enviada pelo lojista. "Criar nova versão" não passa aqui: ver ler-arte.ts.
-export async function montarPromptMelhorarArteExistente(
-  req: Pick<ArteExistenteRequest, "direcao" | "instrucaoUsuario">,
-): Promise<PromptGerado> {
+export async function montarPromptMelhorarArteExistente(req: PedidoMelhorarArte): Promise<PromptGerado> {
   const apiKey = process.env.OPENAI_API_KEY;
   const fallback = fallbackTransformarArteExistente(req);
   if (!apiKey) return { prompt: fallback, usouFallback: true };
@@ -1210,7 +1231,7 @@ export async function montarPromptMelhorarArteExistente(
   }
   if (!texto) return { prompt: fallback, usouFallback: true, uso };
   const reforcado = reforcarComidaRealista(aplicarPadraoDesigner(texto), {
-    contexto: `${req.direcao ?? ""} ${req.instrucaoUsuario ?? ""}`,
+    contexto: `${req.direcao ?? ""} ${req.ordem ?? ""} ${req.instrucaoUsuario ?? ""}`,
     fluxo: "melhoria",
   });
   return { prompt: reforcado, usouFallback: false, uso };

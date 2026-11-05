@@ -72,20 +72,40 @@ export function formatoMaisProximo(dim: Dimensoes): Formato {
   return melhor;
 }
 
-// Detecta se o pedido do lojista menciona explicitamente um formato
-// diferente (ex.: "transforma em feed", "quero em story", "muda para
-// quadrado") — nesse caso o formato pedido tem prioridade sobre o da
-// imagem original (ver REGRA GLOBAL DE FORMATO: só muda com pedido explícito).
+// Detecta se o pedido do operador muda o formato da arte ("passa para story",
+// "quero em 9:16", "formato quadrado"). É o que faz o ajuste trocar o tamanho da
+// imagem: sem isso o pedido virava texto e a arte voltava na proporção antiga.
+//
+// "quadrado" só conta com contexto de formato, porque "coloca o preço num quadrado
+// vermelho" é pedido de desenho.
 const PADRAO_FORMATO_PEDIDO: { regex: RegExp; formato: Formato }[] = [
-  { regex: /\bstory\b|\b9:16\b/i, formato: "story-9-16" },
-  { regex: /\bfeed\b|\b4:5\b/i, formato: "feed-4-5" },
-  { regex: /\bquadrad[ao]\b|\b1:1\b/i, formato: "quadrado-1-1" },
+  {
+    regex: /\be?stor(?:y|ys|i|ie|ies)\b|\b9\s*[:x×/]\s*16\b|\bformato\s+(?:de\s+)?vertical\b/gi,
+    formato: "story-9-16",
+  },
+  { regex: /\bfeed\b|\b4\s*[:x×/]\s*5\b/gi, formato: "feed-4-5" },
+  {
+    regex:
+      /\bformato\s+(?:de\s+)?quadrad[ao]\b|\b1\s*[:x×/]\s*1\b|\b(?:para|pra|em|deixa|deixe|quero|fica)\s+quadrad[ao]\s*(?:[.,;!]|$)/gi,
+    formato: "quadrado-1-1",
+  },
 ];
 
 export function formatoPedidoExplicitamente(texto: string | undefined | null): Formato | null {
   if (!texto?.trim()) return null;
+  // Entre aspas é texto da arte, não instrução.
+  const instrucao = texto.replace(/"[^"]*"|“[^”]*”/g, " ");
+
+  // Vale a última menção: em "de feed para story" o destino vem depois.
+  let pedido: Formato | null = null;
+  let posicao = -1;
   for (const { regex, formato } of PADRAO_FORMATO_PEDIDO) {
-    if (regex.test(texto)) return formato;
+    for (const achado of instrucao.matchAll(regex)) {
+      if (achado.index > posicao) {
+        posicao = achado.index;
+        pedido = formato;
+      }
+    }
   }
-  return null;
+  return pedido;
 }

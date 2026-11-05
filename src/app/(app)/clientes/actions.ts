@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireOperador, requireSocio } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { PACOTE_ENTRADA } from "@/lib/agencia/pacotes";
+import type { BriefingPecaManual } from "@/lib/agencia/types";
 
 // Server Actions do cadastro da agência. CRUD simples vai direto por action
 // (sem rota de API) — rota só onde há processamento pesado ou chamada de IA.
@@ -234,6 +235,45 @@ export async function aprovarPeca(form: FormData) {
 
   if (pedidoId) revalidatePath(`/pedidos/${pedidoId}`);
   if (clienteId) revalidatePath(`/clientes/${clienteId}`);
+}
+
+// Volta a peça para uma imagem que ela já teve. Nada é apagado: a que estava em uso
+// continua na lista, e os próximos ajustes partem da versão escolhida.
+export async function usarVersaoPeca(form: FormData) {
+  await requireOperador();
+  const supabase = await createClient();
+  const id = texto(form, "id");
+  const pedidoId = texto(form, "pedido_id");
+  const url = texto(form, "url");
+  if (!id || !url) return;
+
+  const { data: peca } = await supabase.from("pecas").select("briefing, status").eq("id", id).maybeSingle();
+  // Com a peça na fila, a imagem que está saindo tomaria o lugar da escolhida.
+  if (!peca || peca.status === "pendente" || peca.status === "gerando") return;
+
+  const briefing = (peca.briefing ?? {}) as BriefingPecaManual;
+  const versao = briefing.versoes?.find((v) => v.url === url);
+  if (!versao) return;
+
+  const atualizado: BriefingPecaManual = { ...briefing, formato: versao.formato };
+  delete atualizado.ajusteSobreUrl;
+  delete atualizado.instrucaoAjuste;
+  delete atualizado.formatoNovo;
+
+  await supabase
+    .from("pecas")
+    .update({
+      imagem_url: versao.url,
+      prompt_usado: versao.promptUsado ?? null,
+      briefing: atualizado,
+      // A aprovação foi da outra imagem.
+      status: "gerada",
+      aprovada_em: null,
+      erro: null,
+    })
+    .eq("id", id);
+
+  if (pedidoId) revalidatePath(`/pedidos/${pedidoId}`);
 }
 
 // Arquiva ou reativa um cliente. Para uma carteira de dezenas de empresas, a

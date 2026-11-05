@@ -129,6 +129,36 @@ export interface PlanoPedido {
 // Substituiu o planejamento automático de lote, que decidia sozinho quantas
 // peças fazer e o que cada uma diria. Na prática isso engessava: quem conhece
 // o cliente é o operador, e ele quer pedir exatamente o que precisa.
+
+// O que fazer com a imagem que o operador enviou junto do pedido.
+// referencia: o pedido manda e a imagem é só inspiração.
+// melhoria_recompositiva: mesma campanha, composição claramente melhor.
+// nova_versao_criativa: mesmas informações, design recriado do zero.
+export type ModoImagemEnviada = "referencia" | "melhoria_recompositiva" | "nova_versao_criativa";
+
+// O que vira o pedido quando o operador manda a arte sem escrever nada.
+export const PEDIDO_SEM_TEXTO = {
+  melhoria_recompositiva: "Melhorar esta arte",
+  nova_versao_criativa: "Criar uma nova versão desta arte",
+} as const;
+
+// Quando o operador escreveu, a ordem dele manda no que está na arte enviada.
+export function operadorEscreveu(prompt: string): boolean {
+  return !Object.values<string>(PEDIDO_SEM_TEXTO).includes(prompt.trim());
+}
+
+// Cada imagem que a peça já teve. O ajuste troca a arte em uso, mas a anterior pode
+// ter ficado melhor: a lista guarda todas para o operador resgatar.
+export interface VersaoPeca {
+  url: string;
+  criadaEm: string;
+  formato: Formato;
+  // O que o operador pediu para chegar nesta versão. A primeira não tem.
+  ajuste?: string;
+  // Vira contexto do próximo ajuste quando esta versão volta a ser a da peça.
+  promptUsado?: string;
+}
+
 export interface BriefingPecaManual {
   prompt: string;
   formato: Formato;
@@ -138,17 +168,15 @@ export interface BriefingPecaManual {
   // produto é composto do zero: o modelo trata o anexo como o produto real da
   // peça, então anexar a foto errada é pior do que não anexar nenhuma.
   produtoRefId?: string;
-  // Arte pronta enviada pelo operador (a peça antiga do cliente, ou algo que
-  // ele mandou por WhatsApp). Quando presente, a geração deixa de criar do
-  // zero e passa a trabalhar sobre ela — ver modoTransformacao.
+  // Imagem enviada pelo operador junto do pedido: uma inspiração, a peça antiga do
+  // cliente ou algo que ele mandou por WhatsApp. O que a geração faz com ela depende
+  // de modoTransformacao.
   //
   // Isso existia numa tela separada (/melhorar) que gerava imagem sem
   // vincular a cliente nenhum, sem consumir pacote e sem aparecer no rateio.
   // Trazido para cá, vira peça normal: cobra do pacote e registra custo.
   arteBaseUrl?: string;
-  // melhoria_recompositiva: mesma campanha, composição claramente melhor.
-  // nova_versao_criativa: mesmas informações, design recriado do zero.
-  modoTransformacao?: "melhoria_recompositiva" | "nova_versao_criativa";
+  modoTransformacao?: ModoImagemEnviada;
   // Ajuste cirúrgico pedido no botão "Ajustar" da peça já entregue. Guarda a
   // arte que o operador está olhando e só o que ele pediu para mudar, porque
   // aqui a geração NÃO recria a peça: edita aquela imagem e preserva o resto.
@@ -157,6 +185,11 @@ export interface BriefingPecaManual {
   // o botão prometia ajuste e entregava recriação.
   ajusteSobreUrl?: string;
   instrucaoAjuste?: string;
+  // Formato pedido num ajuste. Só vira `formato` quando a arte nova sai: se o ajuste
+  // falhar, a peça continua no formato da imagem que ficou.
+  formatoNovo?: Formato;
+  // Todas as imagens que a peça já teve, da mais antiga à mais nova.
+  versoes?: VersaoPeca[];
   // Índice e total da leva: quando se pede mais de uma imagem, cada peça
   // recebe instrução de buscar uma direção criativa diferente das irmãs.
   variacao: number;
