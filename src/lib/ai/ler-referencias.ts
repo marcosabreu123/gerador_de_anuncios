@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import sharp from "sharp";
 import { RecusaModeloError } from "./completions";
 import { TEXT_PROMPT_BUILDER_MODEL } from "./models";
 
@@ -47,6 +46,9 @@ const LADO_MAXIMO_PX = 1024;
 // Referência que não abre não pode derrubar a leitura das outras.
 async function imagemParaLeitura(url: string): Promise<string | null> {
   try {
+    // Import aqui dentro de propósito: este arquivo também é carregado pela tela de nova
+    // geração, e sharp no topo derrubava a página inteira quando o binário não estava lá.
+    const { default: sharp } = await import("sharp");
     const res = await fetch(url);
     if (!res.ok) return null;
     const jpeg = await sharp(Buffer.from(await res.arrayBuffer()))

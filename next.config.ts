@@ -12,8 +12,11 @@ const nextConfig: NextConfig = {
   // file" (erro capturado em produção). Este include força os binários a
   // irem junto. Os pacotes @img só existem na plataforma do build, então na
   // Vercel (linux-x64) resolvem e no Windows são simplesmente ignorados.
+  //
+  // A tela de nova geração entra na lista porque relê as referências depois de abrir.
   outputFileTracingIncludes: {
     "/api/**": ["./node_modules/@img/**/*"],
+    "/clientes/*/nova-geracao": ["./node_modules/@img/**/*"],
   },
 };
 
