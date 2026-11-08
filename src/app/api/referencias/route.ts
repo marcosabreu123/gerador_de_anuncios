@@ -4,7 +4,7 @@ import type { TipoReferencia } from "@/lib/agencia/types";
 
 export const runtime = "nodejs";
 
-const TIPOS_VALIDOS: TipoReferencia[] = ["logo", "produto", "arte_aprovada", "referencia_visual"];
+const TIPOS_VALIDOS: TipoReferencia[] = ["logo", "produto", "arte_aprovada", "referencia_visual", "logo_parceiro"];
 
 // Registra um material já enviado ao Storage pelo navegador (ver
 // UploadMaterial). Rota em vez de Server Action porque o upload acontece no
@@ -40,12 +40,16 @@ export async function POST(request: NextRequest) {
   if (!TIPOS_VALIDOS.includes(tipo)) {
     return NextResponse.json({ error: "Tipo de material inválido." }, { status: 400 });
   }
+  // Sem o nome, a logo de parceiro nunca seria acionada (ver logo-parceiro.ts).
+  if (tipo === "logo_parceiro" && !body.descricao?.trim()) {
+    return NextResponse.json({ error: "Escreva o nome que aciona a logo." }, { status: 400 });
+  }
 
   const { error } = await supabase.from("referencias").insert({
     cliente_id: body.clienteId,
     tipo,
     url: body.url,
-    descricao: body.descricao ?? null,
+    descricao: body.descricao?.trim() || null,
   });
 
   if (error) {

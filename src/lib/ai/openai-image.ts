@@ -31,12 +31,16 @@ export type TipoEntradaImagem =
   | "arte_melhorar"
   | "arte_novo_formato"
   | "fundo"
-  | "elemento_extra";
+  | "elemento_extra"
+  | "logo_parceiro";
 
 export interface EntradaImagem {
   base64: string;
   mimeType: string;
   tipo: TipoEntradaImagem;
+  // Rótulo próprio, para quando o papel do anexo depende do pedido: a logo de um
+  // parceiro leva o nome dele, e na criação entra na arte, no ajuste só serve de consulta.
+  rotulo?: string;
 }
 
 const LABELS_ENTRADA: Record<TipoEntradaImagem, string> = {
@@ -60,6 +64,8 @@ const LABELS_ENTRADA: Record<TipoEntradaImagem, string> = {
     "uma imagem de referência de fundo anexada pelo lojista — use como base/inspiração para o novo fundo da arte, sem copiar textos ou marcas de terceiros que apareçam nela",
   elemento_extra:
     "um elemento visual adicional anexado pelo lojista (ex: selo, ícone, bandeira, embalagem) — inclua-o na arte de forma pequena, proporcional e integrada, sem competir com produto, preço ou headline",
+  logo_parceiro:
+    "a logo oficial de um programa ou parceiro citado no pedido — reproduza exatamente este desenho, sem redesenhar, separada da logo da marca",
 };
 
 function getClient(): OpenAI {
@@ -138,7 +144,7 @@ async function normalizarImagemEntrada(base64: string): Promise<{ bytes: Buffer;
 // como o Gemini tinha — descrevemos cada anexo em uma frase antes do prompt.
 function construirPromptComImagens(prompt: string, imagens: EntradaImagem[]): string {
   if (imagens.length === 0) return prompt;
-  const descricoes = imagens.map((img, i) => `Imagem anexada ${i + 1} é ${LABELS_ENTRADA[img.tipo]}.`);
+  const descricoes = imagens.map((img, i) => `Imagem anexada ${i + 1} é ${img.rotulo ?? LABELS_ENTRADA[img.tipo]}.`);
   return `${descricoes.join(" ")}\n\n${prompt}`;
 }
 

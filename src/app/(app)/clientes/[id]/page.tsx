@@ -254,6 +254,12 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
                 <span className="text-xs text-[var(--muted)] truncate">
                   {TIPOS_REFERENCIA[ref.tipo as TipoReferencia]?.label ?? ref.tipo}
                 </span>
+                {/* O nome é o que aciona a logo de parceiro: precisa estar à vista. */}
+                {ref.tipo === "logo_parceiro" && ref.descricao && (
+                  <span className="-mt-1 text-xs font-medium truncate" title={`Entra quando o pedido citar ${ref.descricao}`}>
+                    {ref.descricao}
+                  </span>
+                )}
                 <form action={removerReferencia} className="absolute top-1.5 right-1.5">
                   <input type="hidden" name="id" value={ref.id} />
                   <input type="hidden" name="cliente_id" value={id} />

@@ -14,6 +14,7 @@ import { imagemParaLeitura, leituraParaDiretor } from "@/lib/ai/ler-referencias"
 import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
 import { custoImagemPorUso, custoImagemUSD, custoTextoUSD, registrarGeracao } from "./custo";
+import { logosParceirosCitados, mesmoNome } from "./logo-parceiro";
 import { consumirImagemComoWorker } from "./pacotes";
 import { operadorEscreveu, type BrandKit, type BriefingPecaManual, type Cliente, type Referencia, type VersaoPeca } from "./types";
 import type { Formato } from "@/lib/types";
@@ -27,13 +28,17 @@ import type { Formato } from "@/lib/types";
 
 const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
 
-async function baixarComoEntrada(url: string, tipo: EntradaImagem["tipo"]): Promise<EntradaImagem | null> {
+async function baixarComoEntrada(
+  url: string,
+  tipo: EntradaImagem["tipo"],
+  rotulo?: string,
+): Promise<EntradaImagem | null> {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
     const mimeType = res.headers.get("content-type") ?? "image/jpeg";
     const buf = Buffer.from(await res.arrayBuffer());
-    return { base64: buf.toString("base64"), mimeType, tipo };
+    return { base64: buf.toString("base64"), mimeType, tipo, ...(rotulo ? { rotulo } : {}) };
   } catch (e) {
     // Referência indisponível não pode derrubar a peça inteira: a arte sai
     // sem aquele material, o que é melhor do que não sair.
@@ -42,14 +47,45 @@ async function baixarComoEntrada(url: string, tipo: EntradaImagem["tipo"]): Prom
   }
 }
 
+// Na criação a logo do parceiro entra na arte. No ajuste ela vai só para consulta:
+// o pedido pode ser justamente para tirá-la, e o rótulo vem antes da ordem.
+function rotuloDoParceiro(nome: string, ajustando: boolean): string {
+  return ajustando
+    ? `a logo oficial de "${nome}", só para consulta — se a arte tiver ou passar a ter essa logo, use exatamente este desenho, sem redesenhar`
+    : `a logo oficial de "${nome}", que o pedido cita — ela entra na arte inteira e legível, reproduzida exatamente como está, sem redesenhar, separada da logo da marca e sem se fundir a ela`;
+}
+
+async function baixarParceiros(
+  refs: Referencia[],
+  ajustando: boolean,
+): Promise<{ entrada: EntradaImagem; nome: string }[]> {
+  const baixadas = await Promise.all(
+    refs.map(async (r) => {
+      const nome = (r.descricao ?? "").trim();
+      const entrada = await baixarComoEntrada(r.url, "logo_parceiro", rotuloDoParceiro(nome, ajustando));
+      return entrada ? { entrada, nome } : null;
+    }),
+  );
+  return baixadas.filter((b): b is { entrada: EntradaImagem; nome: string } => Boolean(b));
+}
+
 // Materiais do cliente que entram como imagem de entrada. Limitado de
-// propósito: cada imagem extra encarece e alonga a chamada.
+// propósito: cada imagem extra encarece e alonga a chamada. "parceiros" são os
+// nomes das logos de parceiro anexadas, que o diretor de arte precisa encaixar.
 async function materiaisDaPeca(
   manual: BriefingPecaManual,
   referencias: Referencia[],
   caminho: { ajustando: boolean; mudandoFormato: boolean; imagemEnviada: boolean },
-): Promise<EntradaImagem[]> {
+): Promise<{ entradas: EntradaImagem[]; parceiros: string[] }> {
   const logo = referencias.find((r) => r.tipo === "logo");
+
+  // Logo de programa ou parceiro, como a do CNH do Brasil: só quando o pedido cita o nome.
+  const parceiros = await baixarParceiros(
+    logosParceirosCitados(referencias, caminho.ajustando ? manual.instrucaoAjuste : manual.prompt),
+    caminho.ajustando,
+  );
+  const nomesParceiros = parceiros.map((p) => p.nome);
+  const entradasParceiros = parceiros.map((p) => p.entrada);
 
   // Ajuste edita uma arte pronta: ela já traz logo e produto, e anexá-los de
   // novo só dá ao modelo motivo para redesenhar o que devia preservar. A logo
@@ -57,9 +93,8 @@ async function materiaisDaPeca(
   // a mudança de formato faz o gerador desenhar a peça de novo.
   if (caminho.ajustando) {
     const pedeLogo = caminho.mudandoFormato || /\b(logo|logotipo|logomarca)\b/i.test(manual.instrucaoAjuste ?? "");
-    if (!logo || !pedeLogo) return [];
-    const e = await baixarComoEntrada(logo.url, "logotipo");
-    return e ? [e] : [];
+    const e = logo && pedeLogo ? await baixarComoEntrada(logo.url, "logotipo") : null;
+    return { entradas: [...(e ? [e] : []), ...entradasParceiros], parceiros: nomesParceiros };
   }
 
   const produto = referencias.find((r) => r.id === manual.produtoRefId && r.tipo === "produto");
@@ -77,7 +112,10 @@ async function materiaisDaPeca(
     logo && baixarComoEntrada(logo.url, "logotipo"),
     estilo && baixarComoEntrada(estilo.url, "referencia"),
   ]);
-  return baixadas.filter((e): e is EntradaImagem => Boolean(e));
+  return {
+    entradas: [...baixadas.filter((e): e is EntradaImagem => Boolean(e)), ...entradasParceiros],
+    parceiros: nomesParceiros,
+  };
 }
 
 // "Criar nova versão": lê a arte em vez de anexá-la (ver ler-arte.ts) e completa
@@ -182,7 +220,7 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
   const transformandoArte = Boolean(urlDeEntrada);
   const novaVersao = !ajustando && transformandoArte && manual.modoTransformacao === "nova_versao_criativa";
 
-  const entradas = await materiaisDaPeca(manual, referencias, {
+  const { entradas, parceiros } = await materiaisDaPeca(manual, referencias, {
     ajustando,
     mudandoFormato,
     imagemEnviada: transformandoArte || comoReferencia,
@@ -213,6 +251,18 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
     } else {
       // A arte-base vai na frente: é a referência principal da geração.
       entradas.unshift(base);
+    }
+  }
+
+  // Na nova versão os textos da arte antiga voltam para a peça. Se eles citam o
+  // parceiro, a logo dele volta junto, mesmo que o operador não tenha escrito o nome.
+  if (arteAntiga) {
+    const faltam = logosParceirosCitados(referencias, arteAntiga.textos.join("\n")).filter(
+      (r) => !parceiros.some((nome) => mesmoNome(nome, r.descricao ?? "")),
+    );
+    for (const p of await baixarParceiros(faltam, false)) {
+      entradas.push(p.entrada);
+      parceiros.push(p.nome);
     }
   }
 
@@ -254,6 +304,7 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
             briefingLegado: briefing,
             arteAntiga,
             imagemDoPedido,
+            logosParceiros: parceiros,
           });
 
   // O novo formato não chama modelo de texto, então não há custo a registrar.
@@ -416,6 +467,7 @@ async function criarComDiretorArte(
     briefingLegado: Parameters<typeof montarPrompt>[0];
     arteAntiga?: LeituraDaArte;
     imagemDoPedido?: string;
+    logosParceiros: string[];
   },
 ): Promise<{ prompts: string[]; uso?: { modelo: string; entrada: number; saida: number } }> {
   try {
@@ -436,6 +488,7 @@ async function criarComDiretorArte(
       arteAntiga: ctx.arteAntiga,
       operadorEscreveu: operadorEscreveu(manual.prompt),
       imagemDoPedido: ctx.imagemDoPedido,
+      logosParceiros: ctx.logosParceiros,
     });
     return { prompts: [r.prompt], uso: r.uso };
   } catch (e) {

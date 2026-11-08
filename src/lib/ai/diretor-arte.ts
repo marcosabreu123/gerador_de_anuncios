@@ -4,6 +4,7 @@ import { fichaParaPrompt, type DialetoModelo } from "./formatos-modelo";
 import type { LeituraDaArte } from "./ler-arte";
 import { TEXT_PROMPT_BUILDER_MODEL } from "./models";
 import { blocoDeNicho, guiaDoNicho } from "./nichos";
+import { citaONome, mesmoNome } from "@/lib/agencia/logo-parceiro";
 import type { Formato } from "@/lib/types";
 
 // O diretor de arte do app.
@@ -294,6 +295,9 @@ export interface ContextoPeca {
   // Imagem que o operador mandou como referência deste pedido, em data URL. Vai para
   // o modelo olhar: em texto, ele não teria como saber o que o operador viu nela.
   imagemDoPedido?: string;
+  // Nomes das logos de programa ou parceiro anexadas porque o pedido as cita, como
+  // "CNH do Brasil" (ver logo-parceiro.ts). Entram na peça além da logo da marca.
+  logosParceiros?: string[];
 }
 
 export interface ResultadoDiretorArte {
@@ -374,7 +378,32 @@ function materiaisEmTexto(ctx: ContextoPeca): string {
   if (ctx.temReferencia) {
     linhas.push("Uma referência visual do cliente vai junto para o gerador de imagem, só como clima e acabamento. Não descreva nem repita os elementos dela.");
   }
+  for (const nome of ctx.logosParceiros ?? []) {
+    linhas.push(
+      `A logo oficial de "${nome}" está anexada porque o pedido cita esse nome. Ela entra na peça além da logo da marca: inteira, legível, reproduzida fielmente e separada dela, sem as duas se fundirem. Dê a ela um lugar na composição, num tamanho que não dispute com a headline, e não crie bloco de texto só com esse nome, porque a logo já o mostra.`,
+    );
+  }
   return linhas.join("\n");
+}
+
+// A logo de parceiro precisa de um lugar na ficha: sem ele o gerador recebe a imagem
+// e não sabe o que fazer com ela. E o nome sozinho como bloco de texto sai, pelo mesmo
+// motivo da assinatura: o gerador escreveria o nome e redesenharia a marca.
+function comLogosParceiros(ficha: FichaCriativa, nomes: string[]): FichaCriativa {
+  if (nomes.length === 0) return ficha;
+  const faltam = nomes.filter((nome) => !citaONome(ficha.composicao, nome));
+  return {
+    ...ficha,
+    textos: ficha.textos.filter((t) => !nomes.some((nome) => mesmoNome(t.conteudo, nome))),
+    composicao: [
+      ficha.composicao,
+      ...faltam.map(
+        (nome) => `The attached ${nome} logo also appears in the piece, in full and legible, reproduced exactly and kept separate from the brand logo.`,
+      ),
+    ]
+      .filter(Boolean)
+      .join(" "),
+  };
 }
 
 // Com logo anexada, a assinatura é a própria logo. Como bloco de texto ela caía na
@@ -457,7 +486,7 @@ export async function montarPromptDiretorArte(ctx: ContextoPeca): Promise<Result
 
   const bruta = normalizarFicha(JSON.parse(texto));
   if (!bruta) throw new Error("Ficha criativa inválida.");
-  const ficha = ctx.temLogotipo ? assinaturaViraLogo(bruta) : bruta;
+  const ficha = comLogosParceiros(ctx.temLogotipo ? assinaturaViraLogo(bruta) : bruta, ctx.logosParceiros ?? []);
 
   return {
     prompt: fichaParaPrompt(ficha, dialetoAtual(), DESCRICAO_FORMATO[ctx.formato]),

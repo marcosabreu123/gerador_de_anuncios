@@ -44,6 +44,11 @@ export default async function NovaGeracaoPage({ params }: { params: Promise<{ id
     ),
   }));
 
+  // Logo de parceiro só vai quando o pedido cita o nome: a lista diz isso ao operador.
+  const parceiros = referencias
+    .filter((r) => r.tipo === "logo_parceiro" && r.descricao?.trim())
+    .map((r) => ({ tipo: `parceiro-${r.id}`, label: `Logo ${r.descricao!.trim()}, se o pedido citar`, tem: true }));
+
   const semIdentidade = !brandKit?.estilo_visual && !brandKit?.cores_primarias;
 
   return (
@@ -62,7 +67,7 @@ export default async function NovaGeracaoPage({ params }: { params: Promise<{ id
         saldoDisponivel={saldo.disponivel}
         ehSocio={ehSocio(perfil)}
         fotosProduto={referencias.filter((r) => r.tipo === "produto")}
-        materiais={[...materiais, { tipo: "identidade", label: "Identidade visual", tem: !semIdentidade }]}
+        materiais={[...materiais, ...parceiros, { tipo: "identidade", label: "Identidade visual", tem: !semIdentidade }]}
       />
     </main>
   );

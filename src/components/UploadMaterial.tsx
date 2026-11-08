@@ -15,13 +15,17 @@ import { TIPOS_REFERENCIA, type TipoReferencia } from "@/lib/agencia/types";
 export default function UploadMaterial({ clienteId }: { clienteId: string }) {
   const router = useRouter();
   const [tipo, setTipo] = useState<TipoReferencia>("logo");
+  // Logo de parceiro é acionada pelo nome que o pedido cita (ver logo-parceiro.ts).
+  const [nomeParceiro, setNomeParceiro] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const parceiro = tipo === "logo_parceiro";
+  const faltaNome = parceiro && !nomeParceiro.trim();
 
   async function enviar(e: React.ChangeEvent<HTMLInputElement>) {
     const arquivos = Array.from(e.target.files ?? []);
-    if (arquivos.length === 0) return;
+    if (arquivos.length === 0 || faltaNome) return;
 
     setEnviando(true);
     setErro(null);
@@ -37,12 +41,13 @@ export default function UploadMaterial({ clienteId }: { clienteId: string }) {
             clienteId,
             tipo,
             url,
-            descricao: arquivo.name,
+            descricao: parceiro ? nomeParceiro.trim() : arquivo.name,
           }),
         });
         if (!resposta.ok) throw new Error("Imagem enviada, mas não consegui registrar no cliente.");
       }
 
+      if (parceiro) setNomeParceiro("");
       router.refresh();
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Falha no envio.");
@@ -70,24 +75,42 @@ export default function UploadMaterial({ clienteId }: { clienteId: string }) {
 
       <p className="text-[13px] text-[var(--muted)]">{TIPOS_REFERENCIA[tipo].ajuda}</p>
 
+      {parceiro && (
+        <label className="flex flex-col">
+          <span className="label">Nome que aciona a logo</span>
+          <input
+            value={nomeParceiro}
+            onChange={(e) => setNomeParceiro(e.target.value)}
+            className="input"
+            placeholder="Ex: CNH do Brasil"
+            maxLength={60}
+          />
+        </label>
+      )}
+
       <input
         ref={inputRef}
         type="file"
         accept="image/*"
-        multiple
+        multiple={!parceiro}
         onChange={enviar}
-        disabled={enviando}
+        disabled={enviando || faltaNome}
         className="hidden"
         id={`upload-${clienteId}`}
       />
       <label
         htmlFor={`upload-${clienteId}`}
+        aria-disabled={faltaNome}
         className={`flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-strong)] px-4 py-7 text-center text-sm font-medium cursor-pointer hover:bg-[var(--surface-muted)] transition-colors ${
-          enviando ? "opacity-60 pointer-events-none" : ""
+          enviando || faltaNome ? "opacity-60 pointer-events-none" : ""
         }`}
       >
         {enviando ? <span className="spinner" aria-hidden="true" /> : <Upload size={18} className="text-[var(--muted)]" aria-hidden="true" />}
-        {enviando ? "Enviando…" : `Enviar ${TIPOS_REFERENCIA[tipo].label.toLowerCase()}`}
+        {enviando
+          ? "Enviando…"
+          : faltaNome
+            ? "Escreva o nome antes de enviar"
+            : `Enviar ${TIPOS_REFERENCIA[tipo].label.toLowerCase()}`}
       </label>
 
       {erro && <p className="text-sm text-[var(--danger)]">{erro}</p>}

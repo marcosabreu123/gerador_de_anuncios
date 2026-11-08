@@ -44,7 +44,7 @@ export interface BrandKit {
   updated_at: string;
 }
 
-export type TipoReferencia = "logo" | "produto" | "arte_aprovada" | "referencia_visual";
+export type TipoReferencia = "logo" | "produto" | "arte_aprovada" | "referencia_visual" | "logo_parceiro";
 
 export const TIPOS_REFERENCIA: Record<TipoReferencia, { label: string; ajuda: string }> = {
   logo: {
@@ -62,6 +62,11 @@ export const TIPOS_REFERENCIA: Record<TipoReferencia, { label: string; ajuda: st
   referencia_visual: {
     label: "Referência visual",
     ajuda: "Inspiração de paleta, clima e estética — nunca copiada literalmente.",
+  },
+  // A descrição guarda o nome que aciona a logo (ver logo-parceiro.ts).
+  logo_parceiro: {
+    label: "Logo de parceiro",
+    ajuda: "Logo de programa ou parceiro, como a do CNH do Brasil. Entra na arte só quando o pedido citar o nome escrito aqui.",
   },
 };
 
