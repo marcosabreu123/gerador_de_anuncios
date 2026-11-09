@@ -4,15 +4,24 @@ import { ehSocio, requireOperador } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import NovaGeracaoForm from "@/components/NovaGeracaoForm";
 import { Avatar, CabecalhoPagina } from "@/components/ui";
+import { datasQueVemAi } from "@/lib/agencia/calendario";
 import { leituraEmDia } from "@/lib/agencia/leitura-referencias";
+import { pedidoParaRepetir } from "@/lib/agencia/repetir-pedido";
 import { saldoDoCliente } from "@/lib/agencia/pacotes";
 import { TIPOS_REFERENCIA, type BrandKit, type Cliente, type Referencia } from "@/lib/agencia/types";
 
 // Folga para a leitura das referências terminar depois que a tela já abriu.
 export const maxDuration = 60;
 
-export default async function NovaGeracaoPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function NovaGeracaoPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ repetir?: string }>;
+}) {
   const { id } = await params;
+  const { repetir: repetirId } = await searchParams;
   const { perfil } = await requireOperador();
   const supabase = await createClient();
 
@@ -20,10 +29,11 @@ export default async function NovaGeracaoPage({ params }: { params: Promise<{ id
   if (!clienteRaw) notFound();
   const cliente = clienteRaw as Cliente;
 
-  const [{ data: brandKitRaw }, { data: referenciasRaw }, saldo] = await Promise.all([
+  const [{ data: brandKitRaw }, { data: referenciasRaw }, saldo, repetir] = await Promise.all([
     supabase.from("brand_kits").select("*").eq("cliente_id", id).maybeSingle(),
     supabase.from("referencias").select("*").eq("cliente_id", id).order("created_at", { ascending: false }),
     saldoDoCliente(id),
+    repetirId ? pedidoParaRepetir(supabase, repetirId, id) : null,
   ]);
 
   const brandKit = (brandKitRaw as BrandKit) ?? null;
@@ -62,12 +72,16 @@ export default async function NovaGeracaoPage({ params }: { params: Promise<{ id
         descricao={cliente.nicho ?? "Nicho não informado"}
       />
 
+      {/* A chave faz outro pedido repetido começar do zero, e não do estado da tela anterior. */}
       <NovaGeracaoForm
+        key={repetirId ?? "novo"}
         clienteId={id}
         saldoDisponivel={saldo.disponivel}
         ehSocio={ehSocio(perfil)}
         fotosProduto={referencias.filter((r) => r.tipo === "produto")}
         materiais={[...materiais, ...parceiros, { tipo: "identidade", label: "Identidade visual", tem: !semIdentidade }]}
+        datas={datasQueVemAi(cliente.nicho)}
+        repetir={repetir}
       />
     </main>
   );

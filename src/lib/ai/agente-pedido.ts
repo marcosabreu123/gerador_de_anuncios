@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { rotaDeVariacao } from "./diretor-arte";
-import { ESTILOS_COMUNICACAO, INTENSIDADES_VISUAIS, textoEnvolveComida } from "./prompt-builder";
+import { ESTILOS_COMUNICACAO, INTENSIDADES_VISUAIS, TIPOS_IMAGEM, textoEnvolveComida } from "./prompt-builder";
 import type { BriefingCompleto, TipoPeca } from "@/lib/types";
 import type { BrandKit, BriefingPecaManual, Cliente, Referencia } from "@/lib/agencia/types";
 
@@ -83,8 +83,10 @@ export function pedidoManualParaBriefing(
   const contextoComida = `${cliente.nicho ?? ""} ${manual.prompt}`;
   const temCores = Boolean(brandKit?.cores_primarias?.trim());
 
+  const tipoImagem = manual.tipoImagem && manual.tipoImagem !== "ia_decide" ? manual.tipoImagem : null;
   const observacoes = [
     ...regrasDoCliente(brandKit),
+    tipoImagem && `Tipo de imagem escolhido pelo operador: ${TIPOS_IMAGEM[tipoImagem]}`,
     instrucaoDeVariacao(manual.variacao, manual.total),
   ].filter(Boolean) as string[];
 
@@ -111,7 +113,8 @@ export function pedidoManualParaBriefing(
     preferenciaCores: temCores ? "marca" : "segmento",
     coresMarca: brandKit?.cores_primarias ?? undefined,
 
-    modoComidaRealista: textoEnvolveComida(contextoComida),
+    // Ilustração desenha a comida também: o bloco de comida fotográfica brigaria com ela.
+    modoComidaRealista: tipoImagem !== "ilustracao" && textoEnvolveComida(contextoComida),
 
     // O pedido do operador é a fonte do conteúdo textual. "melhorar_ideia"
     // deixa o redator organizar a copy, sem poder inventar preço, telefone
@@ -163,6 +166,9 @@ export function direcaoDosControles(manual: BriefingPecaManual): string | undefi
   }
   if (manual.intensidade && manual.intensidade !== "ia_decide") {
     partes.push(`Impacto visual: ${INTENSIDADES_VISUAIS[manual.intensidade]}`);
+  }
+  if (manual.tipoImagem && manual.tipoImagem !== "ia_decide") {
+    partes.push(`Tipo de imagem: ${TIPOS_IMAGEM[manual.tipoImagem]}`);
   }
   return partes.length > 0 ? partes.join("\n") : undefined;
 }

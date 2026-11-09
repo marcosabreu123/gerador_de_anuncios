@@ -14,6 +14,7 @@ import {
   type IntensidadeVisual,
   type MensagemAjusteConversa,
   type ObjetivoMarketing,
+  type TipoImagem,
   type TipoUsoAnexoAjuste,
 } from "@/lib/types";
 
@@ -47,6 +48,15 @@ export const INTENSIDADES_VISUAIS: Record<Exclude<IntensidadeVisual, "ia_decide"
   discreta: "visual calmo, baixo contraste, poucos brilhos, poucos elementos chamativos — ideal para marcas sofisticadas",
   equilibrada: "mistura organização com impacto — nível padrão, adequado para a maioria das artes",
   impactante: "maior destaque para preço/CTA/oferta, maior contraste, maior profundidade, mais força visual e energia, sem exagerar e sem nunca perder legibilidade",
+};
+
+// Tipo de imagem da peça — terceira dimensão, independente das duas acima.
+export const TIPOS_IMAGEM: Record<Exclude<TipoImagem, "ia_decide">, string> = {
+  foto: "foto realista: a peça é uma fotografia publicitária, com cena, luz e materiais de verdade",
+  grafico:
+    "flyer gráfico, como os feitos no Canva: o fundo é design, com formas, cores chapadas ou degradês, ícones e elementos gráficos, e não um cenário fotográfico; produto ou objeto, quando entra, aparece recortado e limpo sobre esse fundo",
+  ilustracao:
+    "ilustração: a peça inteira é desenhada, com traço e acabamento de ilustração digital, inclusive o produto, os objetos e o fundo; nada de foto nem de render 3D realista",
 };
 
 const OBJETIVOS_MARKETING_HINT: Record<Exclude<ObjetivoMarketing, "ia_decide">, string> = {

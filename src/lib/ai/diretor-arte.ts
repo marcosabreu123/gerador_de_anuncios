@@ -121,6 +121,15 @@ Temperatura: quente para apetite, acolhimento e artesanal; fria para limpeza, te
 
 Realismo vem da imperfeição controlada: textura de superfície, migalha, gota de condensação, dobra de tecido, reflexo irregular. Perfeição total lê como render 3D.`;
 
+// Sem esta seção o diretor só sabia fazer foto: tudo acima fala de luz, lente e
+// realismo, e um pedido de ilustração voltava como fotografia.
+const TIPO_DE_IMAGEM = `## Tipo de imagem
+O padrão é foto publicitária realista. Quando o pedido ou a direção do operador pedir outro tipo de imagem, como ilustração, desenho, vetor, cartoon ou flyer gráfico de Canva, a peça inteira segue esse tipo, e isso vale mais que o padrão do segmento.
+
+Ilustração é desenho do começo ao fim: produto, objetos e fundo também são desenhados, no mesmo traço. Flyer gráfico tem fundo de design, com formas, cores, ícones e elementos gráficos, e não um cenário fotográfico; o produto, quando entra, pode ser foto recortada sobre esse fundo.
+
+Fora da foto, "estiloFotografico" descreve o estilo da ilustração ou do design gráfico, "camera" descreve só o enquadramento, e as regras de luz e realismo valem só no que fizer sentido para aquele tipo.`;
+
 const ANTI_IA = `## O que faz uma imagem parecer gerada por IA, e como evitar
 Este é o critério mais importante da peça. O cliente não sabe nomear, mas reconhece na hora.
 
@@ -178,6 +187,7 @@ export const NUCLEO_DIRETOR_ARTE = [
   TIPOGRAFIA,
   COR,
   LUZ,
+  TIPO_DE_IMAGEM,
   ANTI_IA,
   FIDELIDADE,
 ].join("\n\n");
@@ -370,7 +380,7 @@ function materiaisEmTexto(ctx: ContextoPeca): string {
   linhas.push(
     ctx.temFotoProduto
       ? "MATERIAIS: há uma foto real do produto anexada. Use-a como referência do produto (forma, cor, material, rótulo, proporção) e descarte o ambiente e o enquadramento dela."
-      : "MATERIAIS: não há foto do produto. Componha o produto do zero, com realismo fotográfico.",
+      : "MATERIAIS: não há foto do produto. Componha o produto do zero, no tipo de imagem da peça: com realismo fotográfico na foto, desenhado na ilustração.",
   );
   if (ctx.temLogotipo) {
     linhas.push("A logo da marca está anexada e deve ser reproduzida fielmente como assinatura discreta da peça. Não crie bloco de texto com o nome da empresa.");

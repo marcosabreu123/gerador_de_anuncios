@@ -4,7 +4,7 @@ import { materiaisDisponiveis, tituloDoPedido } from "@/lib/ai/agente-pedido";
 import { enfileirar } from "@/lib/agencia/fila";
 import { saldoDoCliente } from "@/lib/agencia/pacotes";
 import { transcreverPedido } from "@/lib/agencia/transcricao";
-import type { EstiloComunicacao, Formato, IntensidadeVisual } from "@/lib/types";
+import type { EstiloComunicacao, Formato, IntensidadeVisual, TipoImagem } from "@/lib/types";
 import {
   PEDIDO_SEM_TEXTO,
   type BriefingPecaManual,
@@ -34,6 +34,7 @@ const ESTILOS_VALIDOS: EstiloComunicacao[] = [
   "ia_decide",
 ];
 const INTENSIDADES_VALIDAS: IntensidadeVisual[] = ["discreta", "equilibrada", "impactante", "ia_decide"];
+const TIPOS_IMAGEM_VALIDOS: TipoImagem[] = ["foto", "grafico", "ilustracao", "ia_decide"];
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
   let formato: Formato = "feed-4-5";
   let estilo: EstiloComunicacao = "ia_decide";
   let intensidade: IntensidadeVisual = "ia_decide";
+  let tipoImagem: TipoImagem = "ia_decide";
   let origem: "audio" | "texto" = "texto";
   let forcarSemSaldo = false;
   let arteBaseUrl: string | undefined;
@@ -74,6 +76,7 @@ export async function POST(request: NextRequest) {
       formato = String(form.get("formato") ?? "feed-4-5") as Formato;
       estilo = String(form.get("estilo") ?? "ia_decide") as EstiloComunicacao;
       intensidade = String(form.get("intensidade") ?? "ia_decide") as IntensidadeVisual;
+      tipoImagem = String(form.get("tipoImagem") ?? "ia_decide") as TipoImagem;
       forcarSemSaldo = form.get("forcarSemSaldo") === "true";
       arteBaseUrl = (form.get("arteBaseUrl") as string) || undefined;
       modoTransformacao = (form.get("modoTransformacao") as ModoImagemEnviada) || modoTransformacao;
@@ -94,6 +97,7 @@ export async function POST(request: NextRequest) {
       formato = (body.formato as Formato) ?? "feed-4-5";
       estilo = (body.estilo as EstiloComunicacao) ?? "ia_decide";
       intensidade = (body.intensidade as IntensidadeVisual) ?? "ia_decide";
+      tipoImagem = (body.tipoImagem as TipoImagem) ?? "ia_decide";
       forcarSemSaldo = body.forcarSemSaldo === true;
       arteBaseUrl = (body.arteBaseUrl as string) || undefined;
       modoTransformacao = (body.modoTransformacao as ModoImagemEnviada) || modoTransformacao;
@@ -124,6 +128,7 @@ export async function POST(request: NextRequest) {
   if (!FORMATOS_VALIDOS.includes(formato)) formato = "feed-4-5";
   if (!ESTILOS_VALIDOS.includes(estilo)) estilo = "ia_decide";
   if (!INTENSIDADES_VALIDAS.includes(intensidade)) intensidade = "ia_decide";
+  if (!TIPOS_IMAGEM_VALIDOS.includes(tipoImagem)) tipoImagem = "ia_decide";
 
   const { data: cliente } = await supabase
     .from("clientes")
@@ -192,6 +197,7 @@ export async function POST(request: NextRequest) {
           formato,
           estilo,
           intensidade,
+          tipoImagem,
           variacao: i,
           total: quantidade,
           ...(produtoDoCliente ? { produtoRefId } : {}),

@@ -35,6 +35,15 @@ Preserve a intenção do operador. Aviso continua aviso, e o que ele pôs entre 
 
 Escreva como alguém do ramo falaria com o cliente daquele negócio.
 
+## Fale com quem lê
+A peça conversa com uma pessoa. Escreva para ela, de "você", e mostre o que ela ganha, com palavras da vida dela. Frase sobre a empresa, como "A loja oferece qualidade e bom atendimento", não fala com ninguém.
+
+## Oportunidade, sem pressão
+Quando existe um motivo real para agir agora, como um valor que vai mudar, uma data que chega ou uma turma que começa, mostre o que o leitor ganha agindo agora. Tom de alarme, contagem regressiva, "corra", "última chance" e "antes que seja tarde" espantam quem ainda está decidindo. Urgência só entra se o pedido trouxer, e mesmo assim como vantagem para o leitor.
+
+## Promessa que a empresa não controla
+Não prometa resultado nem prazo que dependa de outra pessoa ou de outro órgão: aprovação em prova, documento pronto até uma data, vaga de emprego, nota, cura, perda de peso, entrega em tantos dias. Se a ideia trouxer uma promessa assim, guarde a intenção numa forma que a empresa possa cumprir, como "comece ainda este ano" no lugar de "habilitação na mão até dezembro", e avise em "confira". Se o operador mandou escrever a promessa exatamente assim, ela fica, e o aviso vai em "confira" do mesmo jeito.
+
 ## Cadastro e referências são norte, não cardápio
 Tom de voz, estilo, tipografia e a leitura das referências mostram como a marca soa e se parece. Use isso para acertar o jeito, e crie a sua própria ideia. Bordão, exemplo ou frase que apareça ali não é texto pronto: não copie para a peça, a menos que o pedido peça. Objeto ou recurso de arte antiga também não é obrigação. As regras obrigatórias e o que a marca proíbe, esses sim, valem sempre.
 
@@ -44,6 +53,8 @@ Ele não descreve a peça, ele cria vontade. Parta de uma situação, de um dese
 Título que só repete o pedido é título perdido: nunca escreva "Promoção de hambúrguer", "Picanha por R$ 54,99" ou "Novo perfume na loja". O título não leva preço, porque o preço fica na oferta, onde ganha destaque, e não começa com "Promoção", "Oferta", "Novo" ou "Chegou". Ele também não reconta a oferta: a oferta diz o negócio, e o título cria a vontade de ler.
 
 Evite frase pronta de panfleto: "imperdível", "não perca", "venha conferir", "qualidade e sabor", "mais que um produto, uma experiência".
+
+Evite também o que denuncia texto de máquina: "não é X, é Y", "mais que X", lista de negações como "sem fila, sem espera, sem estresse", pergunta seguida da própria resposta, como "O resultado? Mais clientes.", travessão, e frase de efeito vazia, como "transforme sua vida", "realize seu sonho", "o futuro começa agora" ou "eleve seu nível".
 
 ## Cada bloco diz uma coisa nova
 Leia título, oferta, chamada e apoio em sequência, como o leitor vai ler. Cada bloco acrescenta algo. Dois blocos não dizem a mesma coisa nem giram em volta da mesma palavra: "Seu cabelo merece cuidado", "Cuide do seu cabelo" e "Agende seu cuidado" são a mesma frase três vezes. Peça com menos blocos é melhor do que peça com bloco repetido. Só o que o operador ditou fica como ele disse, mesmo que repita.
@@ -55,13 +66,14 @@ Leia título, oferta, chamada e apoio em sequência, como o leitor vai ler. Cada
 - "jaEstaBoa": true quando a ideia já traz um título forte, as informações e a ação, e a sua versão não venderia mais. Nesse caso os textos vêm vazios: reescrever só para trocar palavra obriga o operador a conferir de novo o que já estava certo.
 - "resumo": uma frase dizendo o que é a peça, com produto, condição e preço quando houver. Não comente o que faltou. É contexto para o diretor de arte e não aparece na arte.
 - "oferta": produto, condição e preço em uma linha curta. Vazio quando a ideia não tem oferta.
-- "titulos": três títulos de até seis palavras, cada um por um caminho diferente, sem a palavra "hoje" se o pedido não a usou.
+- "titulos": três títulos de até seis palavras, cada um por um caminho diferente, pelo menos um falando direto com o leitor, sem a palavra "hoje" se o pedido não a usou.
 - "titulo": o mais forte dos três. Se o operador já deu um título bom, é ele.
 - "palavras": as palavras principais da oferta e do título, separadas por vírgula. Nenhuma delas volta na chamada nem no apoio, nem em outra forma, como pedir, pedido e peça, a menos que o operador tenha ditado.
 - "chamada": a ação que o leitor deve tomar, em até seis palavras, mais o contato quando houver. Vazio quando a peça não pede ação.
 - "apoio": uma frase curta com uma informação que ainda não apareceu em nenhum bloco, como prazo, entrega ou o que diferencia a empresa. Contato não entra aqui. Vazio é o normal: só preencha se o leitor aprender algo novo.
 - "ideiaVisual": uma cena concreta em uma frase: onde, quando e o que está acontecendo, de um jeito que dê para enxergar. Uma ideia só, nascida do argumento, e não uma coleção de objetos. Se o operador descreveu a cena, é a cena dele. "Clima convidativo" não serve. Prefira cena sem pessoas, porque o gerador de imagem erra mão e rosto, e sem placa, letreiro, fachada ou tela de celular com conteúdo, porque ele inventa texto. Não ponha na cena outro produto: se a oferta é só o hambúrguer, batata e refrigerante ficam de fora. Não decida enquadramento, cor, fonte nem layout, e não diga como o produto é: quem define isso é a foto ou o diretor de arte.
 - "faltou": até três dados que só o operador tem e que entrariam na arte, como "Preço do combo" ou "Até quando vale". Em oferta, preço ou valor do desconto que não veio faz falta. Em pedido aberto ou data, o normal é lista vazia.
+- "confira": até dois pontos que o operador precisa acertar com o cliente antes de publicar, quando o briefing afirma algo que só o cliente garante ou quando você suavizou uma promessa da ideia. Cada um é uma frase curta para o operador, como "A escola mantém o valor deste ano para quem se matricular agora?" ou "Troquei o prazo de entrega da habilitação, que depende do DETRAN, por começar ainda este ano.". O normal é lista vazia.
 
 ## Fidelidade
 A ideia é livre, o fato não. A situação do leitor e o título são criação sua, mas o que a empresa faz, tem ou promete só entra se o operador disse ou se está no cadastro do cliente. Promessa que a loja não fez vira problema real para ela.
@@ -91,13 +103,14 @@ Pizzaria. Ideia: "pizza grande + refri 2l por 59,90 nas quartas"
   "jaEstaBoa": false,
   "resumo": "Promoção de pizza grande com refri 2L por R$ 59,90 nas quartas.",
   "oferta": "Pizza grande + refri 2L por R$ 59,90",
-  "titulos": ["Quarta sem louça pra lavar", "O meio da semana sem fogão", "O jantar de quarta tá resolvido"],
+  "titulos": ["Quarta sem louça pra lavar", "O meio da semana sem fogão", "Seu jantar de quarta tá resolvido"],
   "titulo": "Quarta sem louça pra lavar",
   "palavras": "pizza, refri, quarta, louça",
   "chamada": "Peça a sua",
   "apoio": "Vale toda semana",
   "ideiaVisual": "A caixa de pizza aberta na mesa de centro da sala, numa noite de quarta, com o refrigerante ao lado e a TV ligada ao fundo.",
-  "faltou": ["Canal para pedir"]
+  "faltou": ["Canal para pedir"],
+  "confira": []
 }
 
 Barbearia. Ideia: "arte pra segunda"
@@ -114,7 +127,8 @@ Barbearia. Ideia: "arte pra segunda"
   "chamada": "Marque seu horário",
   "apoio": "",
   "ideiaVisual": "A cadeira de barbeiro vazia logo cedo, com a capa dobrada no braço e a luz da manhã entrando de lado, à espera do primeiro cliente da semana.",
-  "faltou": []
+  "faltou": [],
+  "confira": []
 }
 
 Loja de roupas. Ideia: "post dia das mães"
@@ -131,7 +145,8 @@ Loja de roupas. Ideia: "post dia das mães"
   "chamada": "",
   "apoio": "Feliz Dia das Mães",
   "ideiaVisual": "Uma roupinha de bebê dobrada sobre um vestido de adulto, em cima da cama, com a luz da manhã entrando pela janela.",
-  "faltou": []
+  "faltou": [],
+  "confira": []
 }
 
 Restaurante. Ideia: "Rodízio de massas por R$ 49,90 às sextas. Título: Sexta é dia de repetir. Reserve pelo WhatsApp (11) 91234-5678. Mostrar a mesa posta com os pratos servidos."
@@ -148,7 +163,8 @@ Restaurante. Ideia: "Rodízio de massas por R$ 49,90 às sextas. Título: Sexta 
   "chamada": "",
   "apoio": "",
   "ideiaVisual": "",
-  "faltou": []
+  "faltou": [],
+  "confira": []
 }`;
 
 export interface ContextoIdeia {
@@ -200,6 +216,12 @@ function montarBriefing(resposta: Record<string, unknown>): string {
     .join("\n\n");
 }
 
+function listaDeTextos(valor: unknown, maximo: number): string[] {
+  return Array.isArray(valor)
+    ? valor.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim()).slice(0, maximo)
+    : [];
+}
+
 function numerosDe(texto: string): string[] {
   return texto.match(/\d+(?:[.,]\d+)*/g) ?? [];
 }
@@ -219,14 +241,32 @@ function promessasNovas(texto: string, fonte: string): string[] {
     .filter((p) => !semAcento(fonte).includes(semAcento(p)));
 }
 
+// Construções que denunciam texto de máquina: travessão, "não é X, é Y" e "mais que um".
+// O prompt já proíbe; aqui é a rede para o título, que é o que o leitor vê primeiro.
+const CARA_DE_IA =
+  /[—–]|(?<!\p{L})n[aã]o [eé](?!\p{L})[^.!?]*,\s*[eé](?!\p{L})|(?<!\p{L})mais (?:do )?que (?:um|uma)(?!\p{L})/iu;
+
+export function temCaraDeIA(texto: string): boolean {
+  return CARA_DE_IA.test(texto);
+}
+
 // O modelo já entrega três títulos, então dá para resolver em vez de só avisar: se o
-// escolhido promete o que ninguém disse, fica um dos outros. Sem opção limpa, o aviso
+// escolhido promete o que ninguém disse ou soa como máquina, fica um dos outros. O que
+// o operador ditou não passa por aqui, porque está na fonte. Sem opção limpa, o aviso
 // da tela cuida do resto.
-function tituloSemPromessaNova(resposta: Record<string, unknown>, fonte: string): unknown {
+function tituloLimpo(resposta: Record<string, unknown>, fonte: string): unknown {
   const { titulo, titulos } = resposta;
-  if (typeof titulo !== "string" || promessasNovas(titulo, fonte).length === 0) return titulo;
+  const limpo = (t: string) =>
+    promessasNovas(t, fonte).length === 0 && (!temCaraDeIA(t) || semAcento(fonte).includes(semAcento(t)));
+  if (typeof titulo !== "string" || limpo(titulo)) return titulo;
   const opcoes = Array.isArray(titulos) ? titulos.filter((t): t is string => typeof t === "string" && t.trim().length > 0) : [];
-  return opcoes.find((t) => promessasNovas(t, fonte).length === 0) ?? titulo;
+  return opcoes.find(limpo) ?? titulo;
+}
+
+// Travessão que o operador não escreveu vira vírgula nos textos da arte.
+function semTravessaoNovo(valor: unknown, fonte: string): unknown {
+  if (typeof valor !== "string" || /[—–]/.test(fonte)) return valor;
+  return valor.replace(/\s*[—–]\s*/g, ", ");
 }
 
 // A tela avisa antes de o operador aprovar, porque número errado e promessa que a
@@ -305,17 +345,19 @@ export async function melhorarIdeia(ctx: ContextoIdeia): Promise<IdeiaMelhorada>
 
   const resposta = JSON.parse(conteudo) as Record<string, unknown>;
   const cadastro = `${ctx.identidade} ${ctx.contatos ?? ""}`;
-  resposta.titulo = tituloSemPromessaNova(resposta, `${ctx.ideia} ${cadastro}`);
+  resposta.titulo = tituloLimpo(resposta, `${ctx.ideia} ${cadastro}`);
+  for (const campo of ["titulo", "oferta", "apoio", "chamada"]) {
+    resposta[campo] = semTravessaoNovo(resposta[campo], ctx.ideia);
+  }
 
   const briefing = resposta.jaEstaBoa === true ? null : montarBriefing(resposta);
   if (briefing === "") throw new Error("Briefing vazio.");
 
   return {
     briefing,
-    faltou: Array.isArray(resposta.faltou)
-      ? resposta.faltou.filter((x): x is string => typeof x === "string" && x.trim().length > 0).slice(0, 3)
-      : [],
-    avisos: briefing ? avisosDeFidelidade(ctx.ideia, briefing, cadastro) : [],
+    faltou: listaDeTextos(resposta.faltou, 3),
+    // O que só o cliente garante vale mesmo com a ideia aprovada como está.
+    avisos: [...(briefing ? avisosDeFidelidade(ctx.ideia, briefing, cadastro) : []), ...listaDeTextos(resposta.confira, 2)],
     uso: {
       modelo: TEXT_PROMPT_BUILDER_MODEL,
       entrada: completion.usage?.prompt_tokens ?? 0,

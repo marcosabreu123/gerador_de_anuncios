@@ -323,6 +323,17 @@ function limpar(texto: string): string {
 
 // Procura por palavra inteira, aceitando plural. Por substring "barato" caía em
 // bebidas (por causa de "bar") e "espaço" em beleza (por causa de "spa").
+function temTermo(alvo: string, termo: string): boolean {
+  const palavra = limpar(termo);
+  return [palavra, `${palavra}s`, `${palavra}es`].some((t) => alvo.includes(` ${t} `));
+}
+
+// O texto cita algum dos termos? Mesma regra de palavra inteira da busca de guia.
+export function citaAlgumTermo(texto: string, termos: string[]): boolean {
+  const alvo = ` ${limpar(texto)} `;
+  return alvo.trim().length > 0 && termos.some((termo) => temTermo(alvo, termo));
+}
+
 function acharGuia(texto: string): GuiaNicho | null {
   const alvo = ` ${limpar(texto)} `;
   if (!alvo.trim()) return null;
@@ -330,9 +341,7 @@ function acharGuia(texto: string): GuiaNicho | null {
   let melhor: { guia: GuiaNicho; peso: number } | null = null;
   for (const guia of Object.values(NICHOS)) {
     for (const termo of guia.termos) {
-      const palavra = limpar(termo);
-      const achou = [palavra, `${palavra}s`, `${palavra}es`].some((t) => alvo.includes(` ${t} `));
-      if (!achou) continue;
+      if (!temTermo(alvo, termo)) continue;
       // Termo mais longo é mais específico: "hamburgueria" ganha de "lanche".
       const peso = termo.length;
       if (!melhor || peso > melhor.peso) melhor = { guia, peso };

@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Layers } from "lucide-react";
+import { Layers, RotateCcw } from "lucide-react";
 import { ehSocio, requireOperador } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import PecasDoPedido from "@/components/PecasDoPedido";
@@ -34,7 +35,19 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
         voltar={cliente ? { href: `/clientes/${cliente.id}`, rotulo: cliente.nome } : undefined}
         titulo={pedido.titulo ?? "Pedido"}
         descricao={`${entregues} de ${pecas.length} ${pecas.length === 1 ? "peça pronta" : "peças prontas"}`}
-        acoes={<SeloStatus status={pedido.status} />}
+        acoes={
+          <>
+            <SeloStatus status={pedido.status} />
+            {/* Abre a nova geração com o texto e os controles deste pedido, para mudar
+                um trecho sem reescrever o resto. Cliente arquivado não produz. */}
+            {cliente?.ativo && pecas.length > 0 && (
+              <Link href={`/clientes/${cliente.id}/nova-geracao?repetir=${pedido.id}`} className="btn btn-outline btn-sm">
+                <RotateCcw size={14} aria-hidden="true" />
+                Repetir pedido
+              </Link>
+            )}
+          </>
+        }
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">

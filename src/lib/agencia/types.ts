@@ -1,5 +1,5 @@
 import type { LeituraDasReferencias } from "@/lib/ai/ler-referencias";
-import type { EstiloComunicacao, Formato, IntensidadeVisual } from "@/lib/types";
+import type { EstiloComunicacao, Formato, IntensidadeVisual, TipoImagem } from "@/lib/types";
 
 // Tipos do modelo de agência — espelham supabase/schema-agencia.sql.
 //
@@ -169,6 +169,7 @@ export interface BriefingPecaManual {
   formato: Formato;
   estilo?: EstiloComunicacao;
   intensidade?: IntensidadeVisual;
+  tipoImagem?: TipoImagem;
   // Foto de produto escolhida para este pedido (id em `referencias`). Sem ela o
   // produto é composto do zero: o modelo trata o anexo como o produto real da
   // peça, então anexar a foto errada é pior do que não anexar nenhuma.

@@ -8,8 +8,10 @@ import { lerRespostaJSON } from "@/lib/fetch-json";
 import GerandoMensagem from "@/components/GerandoMensagem";
 import { TituloCard } from "@/components/ui";
 import { enviarImagemParaStorage } from "@/lib/upload-storage";
+import type { DataProxima } from "@/lib/agencia/calendario";
+import type { PedidoParaRepetir } from "@/lib/agencia/repetir-pedido";
 import type { ModoImagemEnviada, Referencia } from "@/lib/agencia/types";
-import type { EstiloComunicacao, Formato, IntensidadeVisual } from "@/lib/types";
+import type { EstiloComunicacao, Formato, IntensidadeVisual, TipoImagem } from "@/lib/types";
 
 // Tela de produção. O operador escreve ou fala o pedido, ajusta os controles
 // e manda gerar — sem etapa intermediária de aprovar plano.
@@ -63,6 +65,13 @@ const ESTILOS: { valor: EstiloComunicacao; label: string }[] = [
   { valor: "minimalista", label: "Minimalista" },
 ];
 
+const TIPOS_IMAGEM: { valor: TipoImagem; label: string; ajuda: string }[] = [
+  { valor: "ia_decide", label: "IA decide", ajuda: "" },
+  { valor: "foto", label: "Foto realista", ajuda: "Cena fotográfica, com luz e materiais de verdade." },
+  { valor: "grafico", label: "Gráfico", ajuda: "Fundo de design, como um flyer feito no Canva." },
+  { valor: "ilustracao", label: "Ilustração", ajuda: "Tudo desenhado, inclusive o produto e o fundo." },
+];
+
 const INTENSIDADES: { valor: IntensidadeVisual; label: string }[] = [
   { valor: "ia_decide", label: "IA decide" },
   { valor: "discreta", label: "Discreta" },
@@ -76,33 +85,42 @@ export default function NovaGeracaoForm({
   ehSocio,
   fotosProduto,
   materiais,
+  datas,
+  repetir,
 }: {
   clienteId: string;
   saldoDisponivel: number;
   ehSocio: boolean;
   fotosProduto: Referencia[];
   materiais: { tipo: string; label: string; tem: boolean }[];
+  datas: DataProxima[];
+  repetir?: PedidoParaRepetir | null;
 }) {
   const router = useRouter();
-  const [prompt, setPrompt] = useState("");
-  const [quantidade, setQuantidade] = useState<number>(1);
-  const [formato, setFormato] = useState<Formato>("story-9-16");
-  const [estilo, setEstilo] = useState<EstiloComunicacao>("ia_decide");
-  const [intensidade, setIntensidade] = useState<IntensidadeVisual>("ia_decide");
+  const [prompt, setPrompt] = useState(repetir?.prompt ?? "");
+  const [quantidade, setQuantidade] = useState<number>(repetir?.quantidade ?? 1);
+  const [formato, setFormato] = useState<Formato>(repetir?.formato ?? "story-9-16");
+  const [estilo, setEstilo] = useState<EstiloComunicacao>(repetir?.estilo ?? "ia_decide");
+  const [intensidade, setIntensidade] = useState<IntensidadeVisual>(repetir?.intensidade ?? "ia_decide");
+  const [tipoImagem, setTipoImagem] = useState<TipoImagem>(repetir?.tipoImagem ?? "ia_decide");
   const [gravando, setGravando] = useState(false);
   const [transcrevendo, setTranscrevendo] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [podeForcar, setPodeForcar] = useState(false);
   // Imagem enviada junto do pedido. O modo diz o que a geração faz com ela.
-  const [arteBaseUrl, setArteBaseUrl] = useState<string | null>(null);
-  const [modoTransformacao, setModoTransformacao] = useState<ModoImagemEnviada>("referencia");
+  const [arteBaseUrl, setArteBaseUrl] = useState<string | null>(repetir?.arteBaseUrl ?? null);
+  const [modoTransformacao, setModoTransformacao] = useState<ModoImagemEnviada>(
+    repetir?.modoTransformacao ?? "referencia",
+  );
   const [subindoArte, setSubindoArte] = useState(false);
   // Com uma foto só ela já vem marcada. Com várias, a escolha é do operador: o
   // modelo trata o anexo como o produto da peça, e a foto errada estraga a arte.
-  const [produtoRefId, setProdutoRefId] = useState<string | null>(
-    fotosProduto.length === 1 ? fotosProduto[0].id : null,
-  );
+  // Ao repetir, vale a escolha do pedido antigo, inclusive "Nenhuma", se a foto ainda existir.
+  const [produtoRefId, setProdutoRefId] = useState<string | null>(() => {
+    if (repetir) return fotosProduto.some((f) => f.id === repetir.produtoRefId) ? repetir.produtoRefId : null;
+    return fotosProduto.length === 1 ? fotosProduto[0].id : null;
+  });
   const [sugestao, setSugestao] = useState<SugestaoDeBriefing | null>(null);
   const [melhorando, setMelhorando] = useState(false);
   const [erroMelhoria, setErroMelhoria] = useState<string | null>(null);
@@ -207,6 +225,16 @@ export default function NovaGeracaoForm({
     }
   }
 
+  // A data entra como pedido de data, que o redator e o diretor já sabem tratar. Com
+  // texto na caixa, ela vai junto em vez de apagar o que o operador escreveu.
+  function usarData(data: DataProxima) {
+    const atual = prompt.trim();
+    if (atual.toLowerCase().includes(data.nome.toLowerCase())) return;
+    setPrompt(atual ? `${atual}\n\nOcasião: ${data.nome}.` : `${data.pedido}.`);
+    setSugestao(null);
+    setErroMelhoria(null);
+  }
+
   function aprovarSugestao() {
     if (!sugestao?.briefing) return;
     // Numa segunda aprovação, "voltar" continua levando ao texto do operador.
@@ -234,6 +262,7 @@ export default function NovaGeracaoForm({
         form.append("formato", formato);
         form.append("estilo", estilo);
         form.append("intensidade", intensidade);
+        form.append("tipoImagem", tipoImagem);
         if (forcarSemSaldo) form.append("forcarSemSaldo", "true");
         if (produtoRefId) form.append("produtoRefId", produtoRefId);
         if (arteBaseUrl) {
@@ -252,6 +281,7 @@ export default function NovaGeracaoForm({
             formato,
             estilo,
             intensidade,
+            tipoImagem,
             forcarSemSaldo,
             ...(produtoRefId ? { produtoRefId } : {}),
             ...(arteBaseUrl ? { arteBaseUrl, modoTransformacao } : {}),
@@ -323,6 +353,12 @@ export default function NovaGeracaoForm({
             descricao="Escreva ou fale do seu jeito. O agente lê a identidade visual, o nicho e os materiais deste cliente antes de criar."
           />
 
+          {repetir && (
+            <p className="text-[13px] text-[var(--muted)]">
+              Repetindo o pedido “{repetir.titulo}”, com os mesmos controles. Mude o que quiser antes de gerar.
+            </p>
+          )}
+
           <textarea
             value={prompt}
             onChange={(e) => {
@@ -384,6 +420,24 @@ export default function NovaGeracaoForm({
               </>
             )}
           </div>
+
+          {datas.length > 0 && !gravando && !trabalhaSobreArte && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[13px] text-[var(--muted)]">Datas que vêm aí</span>
+              {datas.map((d) => (
+                <button
+                  key={d.nome}
+                  type="button"
+                  onClick={() => usarData(d)}
+                  disabled={melhorando}
+                  title={d.doRamo ? "Data do ramo deste cliente" : "Data do comércio"}
+                  className="chip"
+                >
+                  {d.nome} <span className="opacity-60">{d.quando}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {erroMelhoria && <p className="text-sm text-[var(--danger)]">{erroMelhoria}</p>}
 
@@ -540,6 +594,20 @@ export default function NovaGeracaoForm({
         </div>
 
         <section className="card p-5 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
+          <div className="lg:col-span-2 flex flex-col gap-2">
+            <Grupo titulo="Tipo de imagem">
+              {TIPOS_IMAGEM.map((t) => (
+                <Opcao key={t.valor} ativo={tipoImagem === t.valor} onClick={() => setTipoImagem(t.valor)}>
+                  {t.label}
+                </Opcao>
+              ))}
+            </Grupo>
+            <p className="text-[13px] text-[var(--muted)]">
+              {TIPOS_IMAGEM.find((t) => t.valor === tipoImagem)?.ajuda ||
+                "A IA escolhe pelo pedido: se ele pedir ilustração ou flyer gráfico, a arte segue."}
+            </p>
+          </div>
+
           <Grupo titulo="Estilo visual">
             {ESTILOS.map((e) => (
               <Opcao key={e.valor} ativo={estilo === e.valor} onClick={() => setEstilo(e.valor)}>

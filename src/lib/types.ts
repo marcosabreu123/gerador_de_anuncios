@@ -367,6 +367,12 @@ export type EstiloComunicacao = "premium" | "moderno" | "clean" | "vibrante" | "
 // em prompt-builder.ts.
 export type IntensidadeVisual = "discreta" | "equilibrada" | "impactante" | "ia_decide";
 
+// Que tipo de imagem a peça é: foto, flyer gráfico ou ilustração. Outra dimensão,
+// separada do estilo e do impacto, porque "Premium" serve tanto para uma foto
+// quanto para um desenho. Sem ela o diretor tratava toda peça como foto, e um
+// pedido de ilustração saía fotográfico.
+export type TipoImagem = "foto" | "grafico" | "ilustracao" | "ia_decide";
+
 export type PreferenciaCores = "segmento" | "marca" | "referencia" | "ia_decide";
 
 // Submodo do modo comida realista quando o segmento é açougue/carnes (ver
