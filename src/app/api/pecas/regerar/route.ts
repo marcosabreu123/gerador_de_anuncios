@@ -19,7 +19,8 @@ interface Body {
 // O worker baixa estas imagens do servidor: só valem as do nosso Storage, para a
 // rota não virar porta para buscar endereço qualquer.
 function doNossoStorage(url: string): boolean {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  // Sem barra no fim: é assim que o supabase-js monta o endereço público.
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, "");
   const bucket = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
   return Boolean(base) && url.startsWith(`${base}/storage/v1/object/public/${bucket}/`) && !url.includes("..");
 }
