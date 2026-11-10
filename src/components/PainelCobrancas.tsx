@@ -327,14 +327,17 @@ function Vencimento({ linha }: { linha: Linha }) {
   );
 }
 
-// Situação do pagamento com o valor ao lado: o que falta receber, ou o que o
-// plano custou quando está pago.
+// Situação do pagamento com o valor ao lado: o que falta receber, ou o que a
+// venda paga custou (o plano, ou o último pacote avulso).
 function Pagamento({ linha }: { linha: Linha }) {
   if (linha.pagamento === "sem_registro") return <span className="text-[13px] text-[var(--muted)]">—</span>;
   const pendente = linha.pagamento === "pendente";
-  const valor = pendente ? linha.aReceberCentavos : linha.plano?.valorCentavos;
+  const valor = pendente ? linha.aReceberCentavos : linha.vendaPaga?.valorCentavos;
   return (
-    <span className="flex items-center gap-2">
+    <span
+      className="flex items-center gap-2"
+      title={!pendente && linha.vendaPaga?.tipo === "avulso" ? "Último pacote de créditos" : undefined}
+    >
       <span className={`badge ${pendente ? "badge-warning" : "badge-success"}`}>{pendente ? "Pendente" : "Pago"}</span>
       {valor !== undefined && <span className="text-[13px] tabular-nums">{centavosParaBRL(valor)}</span>}
     </span>

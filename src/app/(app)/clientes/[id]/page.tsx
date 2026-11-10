@@ -393,15 +393,15 @@ export default async function ClientePage({
       {gestao && (
         <div className="flex flex-col gap-4">
           {/* Teste é decisão comercial: quem a agência atende sem cobrar, para
-              experimentar. Produz normalmente, mas fica fora do dinheiro. */}
+              experimentar. Produz sem usar crédito e fica fora do dinheiro. */}
           <form action={alternarTesteCliente} className="card p-5 flex flex-col items-start gap-3">
             <input type="hidden" name="id" value={id} />
             <TituloCard
               titulo={cliente.em_teste ? "Cliente em teste" : "Atender em teste"}
               descricao={
                 cliente.em_teste
-                  ? "Fora da receita, das cobranças e dos totais do painel, onde o custo dele aparece à parte. Quando ele começar a pagar, tire do teste."
-                  : "Para quem a agência atende sem cobrar. Ele produz normalmente, mas sai da receita, das cobranças e dos totais do painel."
+                  ? "Não usa crédito e fica fora da receita, das cobranças e dos totais do painel, onde o custo dele aparece à parte. Quando ele começar a pagar, tire do teste."
+                  : "Para quem a agência atende sem cobrar. Ele produz sem usar crédito e sai da receita, das cobranças e dos totais do painel."
               }
             />
             <BotaoEnviar className="btn btn-outline">{cliente.em_teste ? "Tirar do teste" : "Marcar como teste"}</BotaoEnviar>
@@ -445,7 +445,10 @@ export default async function ClientePage({
           <>
             {situacaoCliente === "arquivado" && <span className="badge badge-warning">Arquivado</span>}
             {situacaoCliente === "em_teste" && (
-              <span className="badge badge-accent" title="Fora da receita, das cobranças e dos totais do painel">
+              <span
+                className="badge badge-accent"
+                title="Não usa crédito e fica fora da receita, das cobranças e dos totais do painel"
+              >
                 Em teste
               </span>
             )}
@@ -463,20 +466,23 @@ export default async function ClientePage({
                   Plano {prazoDoPlano(diasDoPlano!).toLowerCase()}
                 </span>
               )}
-            <span
-              className={`badge ${saldo.disponivel === 0 ? "badge-danger" : ""}`}
-              title="Créditos disponíveis. Cada arte aprovada usa 1."
-            >
-              {saldo.disponivel === 0
-                ? "Sem crédito"
-                : `${saldo.disponivel} ${saldo.disponivel === 1 ? "crédito" : "créditos"}`}
-            </span>
+            {/* Cliente em teste não usa crédito: o saldo dele não diz nada agora. */}
+            {!saldo.emTeste && (
+              <span
+                className={`badge ${saldo.disponivel === 0 ? "badge-danger" : ""}`}
+                title="Créditos disponíveis. Cada arte aprovada usa 1."
+              >
+                {saldo.disponivel === 0
+                  ? "Sem crédito"
+                  : `${saldo.disponivel} ${saldo.disponivel === 1 ? "crédito" : "créditos"}`}
+              </span>
+            )}
             {novoPedido}
           </>
         }
       />
 
-      {saldo.disponivel === 0 && cliente.ativo && (
+      {saldo.disponivel === 0 && cliente.ativo && !saldo.emTeste && (
         <div className="card p-4 flex flex-wrap items-start gap-3">
           <AlertTriangle size={18} className="text-[var(--danger)] shrink-0 mt-0.5" aria-hidden="true" />
           <div className="flex-1 min-w-[220px]">

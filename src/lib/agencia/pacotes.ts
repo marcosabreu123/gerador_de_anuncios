@@ -6,7 +6,8 @@ import type { Pacote, Pagamento } from "./types";
 
 // Créditos do cliente. 1 crédito = 1 arte aprovada: gerar, variar, ajustar e
 // mudar de formato não gastam crédito. Todo o gasto de API até a aprovação sai da
-// margem da agência e aparece no painel como custo por arte aprovada.
+// margem da agência e aparece no painel como custo por arte aprovada. Cliente em
+// teste não usa crédito.
 //
 // No banco o crédito ainda se chama imagem (qtd_imagens, qtd_usadas): mudar o nome
 // das colunas não mudaria nada para quem usa.
@@ -46,15 +47,16 @@ export interface SaldoCliente {
   // Vencimento do último plano, quando já passou. É o que bloqueia a geração
   // quando o cliente não tem outro saldo.
   planoVencidoEm: string | null;
+  // Cliente em teste gera e aprova sem crédito.
+  emTeste: boolean;
 }
 
 export async function saldoDoCliente(clienteId: string): Promise<SaldoCliente> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("pacotes")
-    .select("*")
-    .eq("cliente_id", clienteId)
-    .order("created_at", { ascending: false });
+  const [{ data }, { data: cliente }] = await Promise.all([
+    supabase.from("pacotes").select("*").eq("cliente_id", clienteId).order("created_at", { ascending: false }),
+    supabase.from("clientes").select("em_teste").eq("id", clienteId).maybeSingle(),
+  ]);
 
   const pacotes = (data ?? []) as Pacote[];
   const hoje = hojeSP();
@@ -70,14 +72,18 @@ export async function saldoDoCliente(clienteId: string): Promise<SaldoCliente> {
     hoje,
     plano,
     planoVencidoEm: plano?.validade && plano.validade < hoje ? plano.validade : null,
+    emTeste: Boolean(cliente?.em_teste),
   };
 }
 
 // Por que a produção não pode começar, ou nulo quando pode. Gerar não gasta
 // crédito, mas sem nenhum a arte não teria como ser aprovada: a API seria gasta
-// num trabalho que o cliente não pagou.
-export function bloqueioDeGeracao(saldo: Pick<SaldoCliente, "disponivel" | "planoVencidoEm">): string | null {
-  if (saldo.disponivel > 0) return null;
+// num trabalho que o cliente não pagou. Cliente em teste não usa crédito, então
+// nada trava a produção dele.
+export function bloqueioDeGeracao(
+  saldo: Pick<SaldoCliente, "disponivel" | "planoVencidoEm"> & { emTeste?: boolean },
+): string | null {
+  if (saldo.emTeste || saldo.disponivel > 0) return null;
   // Plano vencido é o motivo mais comum: dizer isso poupa o operador de procurar
   // por que os créditos sumiram.
   return saldo.planoVencidoEm

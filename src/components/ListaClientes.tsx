@@ -63,7 +63,8 @@ function passaNoFiltro(c: ClienteCard, filtro: FiltroClientes): boolean {
     case "em_producao":
       return c.temPedidoEmAndamento;
     case "sem_credito":
-      return c.saldo === 0;
+      // Cliente em teste não usa crédito: ficar sem não trava nada.
+      return c.situacao !== "em_teste" && c.saldo === 0;
     default:
       return true;
   }
@@ -211,6 +212,8 @@ export default function ListaClientes({
 
 function CardCliente({ cliente: c }: { cliente: ClienteCard }) {
   const selo = SELO_SITUACAO[c.situacao];
+  // Em teste não usa crédito; o selo "Em teste" já diz isso.
+  const mostraCredito = c.situacao !== "em_teste";
   const linha = [
     textoDoUltimoPedido(c.diasSemPedido),
     c.aprovadasNoMes > 0 ? `${c.aprovadasNoMes} ${c.aprovadasNoMes === 1 ? "aprovada" : "aprovadas"} no mês` : null,
@@ -230,17 +233,21 @@ function CardCliente({ cliente: c }: { cliente: ClienteCard }) {
         </div>
         {selo && <span className={`badge ${selo.tom} shrink-0`}>{selo.rotulo}</span>}
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className={`badge ${c.saldo === 0 ? "badge-danger" : ""}`}>
-          {c.saldo === 0 ? "Sem crédito" : `${c.saldo} ${c.saldo === 1 ? "crédito" : "créditos"}`}
-        </span>
-        {c.temPedidoEmAndamento && <span className="badge badge-accent">Em produção</span>}
-        {c.cobranca.map((s) => (
-          <span key={s.rotulo} className={`badge ${s.tom}`}>
-            {s.rotulo}
-          </span>
-        ))}
-      </div>
+      {(mostraCredito || c.temPedidoEmAndamento || c.cobranca.length > 0) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {mostraCredito && (
+            <span className={`badge ${c.saldo === 0 ? "badge-danger" : ""}`}>
+              {c.saldo === 0 ? "Sem crédito" : `${c.saldo} ${c.saldo === 1 ? "crédito" : "créditos"}`}
+            </span>
+          )}
+          {c.temPedidoEmAndamento && <span className="badge badge-accent">Em produção</span>}
+          {c.cobranca.map((s) => (
+            <span key={s.rotulo} className={`badge ${s.tom}`}>
+              {s.rotulo}
+            </span>
+          ))}
+        </div>
+      )}
       <p className="text-xs text-[var(--muted)] truncate -mt-1" title={linha}>
         {linha}
       </p>

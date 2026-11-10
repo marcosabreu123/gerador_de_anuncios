@@ -157,11 +157,22 @@ export default function PainelDoMes({
             </div>
             <div className="quadro p-4 flex flex-col justify-center">
               <p className="text-[13px] text-[var(--muted)]">Tempo humano por arte</p>
-              <p className="text-2xl font-semibold tracking-tight mt-1">{decimal(totais.tempo_por_arte_min)} min</p>
+              {/* Sem tempo anotado, "0 min" pareceria trabalho de graça. */}
+              <p className="text-2xl font-semibold tracking-tight mt-1">
+                {totais.tempo_por_arte_min > 0 ? `${decimal(totais.tempo_por_arte_min)} min` : "—"}
+              </p>
               <p className="text-xs text-[var(--muted)] mt-1.5">
-                Num pacote de {PACOTE_ENTRADA.qtdImagens} créditos por{" "}
-                {formatarBRL(PACOTE_ENTRADA.valorCentavos / 100)}, é o tempo de gente que aperta a conta, não a
-                API.
+                {totais.tempo_por_arte_min > 0 ? (
+                  <>
+                    Num pacote de {PACOTE_ENTRADA.qtdImagens} créditos por{" "}
+                    {formatarBRL(PACOTE_ENTRADA.valorCentavos / 100)}, é o tempo de gente que aperta a conta, não a
+                    API.
+                  </>
+                ) : totais.artes_aprovadas > 0 ? (
+                  "Ninguém anotou tempo nas peças do mês. O campo “Seu tempo” fica em cada peça do pedido."
+                ) : (
+                  "Sem arte aprovada ainda."
+                )}
               </p>
             </div>
           </div>

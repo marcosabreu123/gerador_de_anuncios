@@ -286,7 +286,8 @@ export interface ResultadoAprovacao {
 // versão de uma arte já debitada e aprovar de novo não cobra outra vez.
 //
 // Sem crédito, só o sócio aprova, e a arte fica sem débito: produzir fiado é
-// decisão comercial, como o "gerar mesmo assim" da tela de pedido.
+// decisão comercial, como o "gerar mesmo assim" da tela de pedido. Cliente em
+// teste não usa crédito: aprova direto, sem débito.
 export async function aprovarPeca(form: FormData): Promise<ResultadoAprovacao> {
   const { perfil } = await requireOperador();
   const supabase = await createClient();
@@ -305,7 +306,9 @@ export async function aprovarPeca(form: FormData): Promise<ResultadoAprovacao> {
   }
 
   const socio = ehSocio(perfil);
-  if (!peca.pacote_consumido) {
+  // Sem conseguir ler o cliente, vale a regra normal: debita.
+  const { data: dono } = await supabase.from("clientes").select("em_teste").eq("id", peca.cliente_id).maybeSingle();
+  if (!peca.pacote_consumido && !dono?.em_teste) {
     // Marca antes de debitar: dois cliques em "Aprovar" não podem gastar dois créditos.
     const { data: reservada, error: erroReserva } = await supabase
       .from("pecas")

@@ -78,6 +78,7 @@ export default async function NovaGeracaoPage({
         clienteId={id}
         saldoDisponivel={saldo.disponivel}
         planoVencidoEm={saldo.disponivel === 0 ? saldo.planoVencidoEm : null}
+        emTeste={saldo.emTeste}
         ehSocio={ehSocio(perfil)}
         fotosProduto={referencias.filter((r) => r.tipo === "produto")}
         materiais={[...materiais, ...parceiros, { tipo: "identidade", label: "Identidade visual", tem: !semIdentidade }]}

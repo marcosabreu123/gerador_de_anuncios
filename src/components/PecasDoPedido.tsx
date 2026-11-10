@@ -44,6 +44,7 @@ export default function PecasDoPedido({
   pedidoId,
   ehSocio,
   creditos,
+  emTeste = false,
   custoPorPeca,
 }: {
   pecas: Peca[];
@@ -51,6 +52,8 @@ export default function PecasDoPedido({
   ehSocio: boolean;
   // Créditos do cliente agora: cada arte aprovada usa 1.
   creditos: number;
+  // Cliente em teste aprova sem crédito.
+  emTeste?: boolean;
   // Só para o sócio: o que a API já gastou em cada peça, com ajustes e falhas.
   custoPorPeca?: Record<string, number>;
 }) {
@@ -235,11 +238,17 @@ export default function PecasDoPedido({
 
       {esperandoAprovacao && (
         <p className="text-[13px] text-[var(--muted)]">
-          Cada arte aprovada usa 1 crédito, uma vez só. O cliente tem{" "}
-          <span className={creditos < 1 ? "text-[var(--danger)] font-medium" : "text-[var(--foreground)]"}>
-            {creditos === 1 ? "1 crédito" : `${creditos} créditos`}
-          </span>
-          .
+          {emTeste ? (
+            "Cliente em teste: aprovar não usa crédito."
+          ) : (
+            <>
+              Cada arte aprovada usa 1 crédito, uma vez só. O cliente tem{" "}
+              <span className={creditos < 1 ? "text-[var(--danger)] font-medium" : "text-[var(--foreground)]"}>
+                {creditos === 1 ? "1 crédito" : `${creditos} créditos`}
+              </span>
+              .
+            </>
+          )}
         </p>
       )}
 
@@ -319,7 +328,13 @@ export default function PecasDoPedido({
                       <input type="hidden" name="id" value={peca.id} />
                       <BotaoEnviar
                         className="btn btn-primary btn-sm"
-                        title={peca.pacote_consumido ? "O crédito desta arte já foi usado" : "Usa 1 crédito do cliente"}
+                        title={
+                          emTeste
+                            ? "Cliente em teste: não usa crédito"
+                            : peca.pacote_consumido
+                              ? "O crédito desta arte já foi usado"
+                              : "Usa 1 crédito do cliente"
+                        }
                       >
                         <Check size={14} aria-hidden="true" />
                         Aprovar

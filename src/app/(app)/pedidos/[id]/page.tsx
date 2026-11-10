@@ -85,6 +85,7 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
             pedidoId={id}
             ehSocio={socio}
             creditos={saldo.disponivel}
+            emTeste={saldo.emTeste}
             custoPorPeca={socio ? custoPorPeca : undefined}
           />
         )}

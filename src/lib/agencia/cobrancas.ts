@@ -148,6 +148,9 @@ export interface LinhaCobranca {
   // Dias até o vencimento do plano: negativo depois que venceu, nulo sem plano.
   dias: number | null;
   pagamento: SituacaoPagamento;
+  // A venda paga que a coluna "Pagamento" mostra: o plano ou, sem plano pago, o
+  // último pacote avulso.
+  vendaPaga: { tipo: "plano" | "avulso"; valorCentavos: number } | null;
   // O que o botão "Marcar como pago" confirma: o pagamento em aberto mais antigo.
   pendente: { id: string; valorCentavos: number } | null;
   aReceberCentavos: number;
@@ -189,7 +192,18 @@ export function montarLinhas({
       const abertos = pagos
         .filter((pg) => pg.status === "pendente")
         .sort((a, b) => a.created_at.localeCompare(b.created_at));
-      const planoPago = Boolean(plano && pagos.some((pg) => pg.pacote_id === plano.id && pg.status === "confirmado"));
+      const foiPago = (p: Pacote | null) =>
+        Boolean(p && pagos.some((pg) => pg.pacote_id === p.id && pg.status === "confirmado"));
+      // Quem só compra pacote avulso também paga: sem plano pago, vale a última
+      // venda avulsa que não foi cancelada.
+      const avulso = dele
+        .filter((p) => p.tipo === "imagens" && p.status !== "cancelado")
+        .reduce<Pacote | null>((ultimo, p) => (!ultimo || p.created_at > ultimo.created_at ? p : ultimo), null);
+      const vendaPaga = plano && foiPago(plano)
+        ? { tipo: "plano" as const, valorCentavos: plano.valor_centavos }
+        : avulso && foiPago(avulso)
+          ? { tipo: "avulso" as const, valorCentavos: avulso.valor_centavos }
+          : null;
 
       return {
         clienteId: c.id,
@@ -206,7 +220,8 @@ export function montarLinhas({
           venceEm: plano.validade!,
         },
         dias: plano ? diasEntre(hoje, plano.validade!) : null,
-        pagamento: abertos.length > 0 ? "pendente" : planoPago ? "pago" : "sem_registro",
+        pagamento: abertos.length > 0 ? "pendente" : vendaPaga ? "pago" : "sem_registro",
+        vendaPaga,
         pendente: abertos[0] ? { id: abertos[0].id, valorCentavos: abertos[0].valor_centavos } : null,
         aReceberCentavos: abertos.reduce((soma, pg) => soma + pg.valor_centavos, 0),
         imagens: imagensDisponiveis(dele, hoje),

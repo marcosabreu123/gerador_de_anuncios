@@ -85,6 +85,7 @@ export default function NovaGeracaoForm({
   clienteId,
   saldoDisponivel,
   planoVencidoEm,
+  emTeste = false,
   ehSocio,
   fotosProduto,
   materiais,
@@ -95,6 +96,8 @@ export default function NovaGeracaoForm({
   saldoDisponivel: number;
   // Vencimento do plano quando é ele que zerou o saldo.
   planoVencidoEm?: string | null;
+  // Cliente em teste gera sem crédito.
+  emTeste?: boolean;
   ehSocio: boolean;
   fotosProduto: Referencia[];
   materiais: { tipo: string; label: string; tem: boolean }[];
@@ -377,8 +380,9 @@ export default function NovaGeracaoForm({
   }
 
   // Gerar não gasta crédito: cada arte aprovada usa 1. Sem nenhum, a arte não
-  // teria como ser aprovada, então a geração espera um sócio.
-  const semCredito = saldoDisponivel < 1;
+  // teria como ser aprovada, então a geração espera um sócio. Cliente em teste
+  // não usa crédito.
+  const semCredito = !emTeste && saldoDisponivel < 1;
   const bloqueadoSemSaldo = semCredito && !ehSocio;
   const semIdentidade = materiais.some((m) => m.tipo === "identidade" && !m.tem);
   const proporcao = FORMATOS.find((f) => f.valor === formato)?.proporcao;
@@ -796,8 +800,14 @@ export default function NovaGeracaoForm({
 
         <div className="flex flex-col gap-2.5 border-t border-[var(--border)] pt-4">
           <p className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[13px] text-[var(--muted)]">
-            <span>1 crédito por arte aprovada</span>
-            <span className={semCredito ? "text-[var(--danger)] font-medium" : ""}>Créditos: {saldoDisponivel}</span>
+            {emTeste ? (
+              <span>Cliente em teste: não usa crédito</span>
+            ) : (
+              <>
+                <span>1 crédito por arte aprovada</span>
+                <span className={semCredito ? "text-[var(--danger)] font-medium" : ""}>Créditos: {saldoDisponivel}</span>
+              </>
+            )}
           </p>
 
           {erro && <p className="text-sm text-[var(--danger)]">{erro}</p>}
