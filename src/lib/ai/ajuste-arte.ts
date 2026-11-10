@@ -37,20 +37,40 @@ Em "mudanca":
 Em "manter":
 - Uma frase curta, de até 30 palavras, com as partes da arte que ficam iguais. Por exemplo: o fundo, os demais textos, a logo, e a posição e o tamanho do que não mudou.
 - Não cite nada que esteja em "mudanca".
-- Não copie os textos da arte.`;
+- Não copie os textos da arte.
 
-function ordemDeEdicao(mudanca: string, manter: string): string {
-  return `Edite esta arte. Mudança obrigatória: ${mudanca}
+Quando vierem imagens de referência do ajuste:
+- Elas mostram o que o operador quer trazer para a arte, como um produto, uma pessoa, um objeto ou um jeito de desenhar. Use de cada uma só o que o pedido indicar.
+- Chame cada uma pelo nome com que ela chega, como "imagem de referência 1 do ajuste", e diga o que ela mostra: "o hambúrguer duplo com cheddar da imagem de referência 1 do ajuste".
+- Produto, pessoa ou objeto trazido de uma referência mantém a forma, as cores e os detalhes que tem nela, no tamanho e na luz da arte.
+- O resto da imagem fica de fora: fundo, texto, preço, marca e logo dela só entram se o pedido mandar.`;
+
+// O nome com que cada imagem anexada ao ajuste chega ao gerador e a quem escreve a
+// ordem. É por ele que a ordem diz o que tirar de cada uma.
+export function nomeDaReferenciaDoAjuste(numero: number): string {
+  return `imagem de referência ${numero} do ajuste`;
+}
+
+function ordemDeEdicao(mudanca: string, manter: string, comReferencias: boolean): string {
+  // Com referências anexadas, "esta arte" fica ambíguo: são várias imagens.
+  return `Edite ${comReferencias ? "a imagem base" : "esta arte"}. Mudança obrigatória: ${mudanca}
 
 Essa mudança é o motivo da edição: ela precisa aparecer no resultado.
 
 Mantenha igual: ${manter}`;
 }
 
-export async function montarOrdemDeAjuste(arte: EntradaImagem, pedido: string): Promise<PromptGerado> {
+export async function montarOrdemDeAjuste(
+  arte: EntradaImagem,
+  pedido: string,
+  // Imagens que o operador anexou ao ajuste, na ordem dos nomes (1, 2, 3).
+  referencias: EntradaImagem[] = [],
+): Promise<PromptGerado> {
+  const comReferencias = referencias.length > 0;
   const fallback = ordemDeEdicao(
-    pedido,
+    comReferencias ? `${pedido} (as imagens de referência do ajuste mostram o que o pedido cita)` : pedido,
     "tudo o que o pedido não citou, inclusive os demais textos, a logo e a posição dos elementos.",
+    comReferencias,
   );
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { prompt: fallback, usouFallback: true };
@@ -69,10 +89,18 @@ export async function montarOrdemDeAjuste(arte: EntradaImagem, pedido: string): 
           role: "user",
           content: [
             { type: "text", text: `PEDIDO DO OPERADOR:\n${pedido}` },
+            ...(comReferencias ? [{ type: "text" as const, text: "ARTE A EDITAR:" }] : []),
             {
               type: "image_url",
               image_url: { url: `data:${arte.mimeType};base64,${arte.base64}`, detail: "high" },
             },
+            ...referencias.flatMap((r, i) => [
+              { type: "text" as const, text: `${nomeDaReferenciaDoAjuste(i + 1).toUpperCase()}:` },
+              {
+                type: "image_url" as const,
+                image_url: { url: `data:${r.mimeType};base64,${r.base64}`, detail: "high" as const },
+              },
+            ]),
           ],
         },
       ],
@@ -87,7 +115,11 @@ export async function montarOrdemDeAjuste(arte: EntradaImagem, pedido: string): 
     if (typeof mudanca !== "string" || !mudanca.trim()) return { prompt: fallback, usouFallback: true, uso };
 
     return {
-      prompt: ordemDeEdicao(mudanca.trim(), typeof manter === "string" && manter.trim() ? manter.trim() : "o resto da arte."),
+      prompt: ordemDeEdicao(
+        mudanca.trim(),
+        typeof manter === "string" && manter.trim() ? manter.trim() : "o resto da arte.",
+        comReferencias,
+      ),
       usouFallback: false,
       uso,
     };

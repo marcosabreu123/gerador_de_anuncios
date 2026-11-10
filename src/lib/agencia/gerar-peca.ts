@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { montarPrompt, montarPromptMelhorarArteExistente } from "@/lib/ai/prompt-builder";
-import { montarOrdemDeAjuste } from "@/lib/ai/ajuste-arte";
+import { montarOrdemDeAjuste, nomeDaReferenciaDoAjuste } from "@/lib/ai/ajuste-arte";
 import {
   contatosParaInstrucao,
   direcaoDosControles,
@@ -69,6 +69,23 @@ async function baixarParceiros(
   return baixadas.filter((b): b is { entrada: EntradaImagem; nome: string } => Boolean(b));
 }
 
+// Imagens que o operador anexou ao pedido de ajuste. Cada uma leva o nome que a
+// ordem de edição usa para dizer o que tirar dela. Sem uma delas, a ordem citaria
+// uma imagem que o gerador não recebeu, então a peça falha e a fila tenta de novo.
+async function referenciasDoAjuste(urls: string[]): Promise<EntradaImagem[]> {
+  const baixadas = await Promise.all(
+    urls.map((url, i) =>
+      baixarComoEntrada(
+        url,
+        "referencia_ajuste",
+        `a ${nomeDaReferenciaDoAjuste(i + 1)}, anexada pelo operador, e não a arte a ser editada — use dela só o que a ordem abaixo indicar; texto, preço, marca e logo dela não entram na arte se a ordem não pedir`,
+      ),
+    ),
+  );
+  if (baixadas.some((b) => !b)) throw new Error("Não consegui abrir uma das imagens anexadas ao ajuste.");
+  return baixadas as EntradaImagem[];
+}
+
 // Materiais do cliente que entram como imagem de entrada. Limitado de
 // propósito: cada imagem extra encarece e alonga a chamada. "parceiros" são os
 // nomes das logos de parceiro anexadas, que o diretor de arte precisa encaixar.
@@ -93,8 +110,11 @@ async function materiaisDaPeca(
   // a mudança de formato faz o gerador desenhar a peça de novo.
   if (caminho.ajustando) {
     const pedeLogo = caminho.mudandoFormato || /\b(logo|logotipo|logomarca)\b/i.test(manual.instrucaoAjuste ?? "");
-    const e = logo && pedeLogo ? await baixarComoEntrada(logo.url, "logotipo") : null;
-    return { entradas: [...(e ? [e] : []), ...entradasParceiros], parceiros: nomesParceiros };
+    const [e, anexadas] = await Promise.all([
+      logo && pedeLogo ? baixarComoEntrada(logo.url, "logotipo") : null,
+      referenciasDoAjuste(manual.imagensAjuste ?? []),
+    ]);
+    return { entradas: [...(e ? [e] : []), ...entradasParceiros, ...anexadas], parceiros: nomesParceiros };
   }
 
   const produto = referencias.find((r) => r.id === manual.produtoRefId && r.tipo === "produto");
@@ -282,7 +302,11 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
   const { prompts, uso } = mudandoFormato
     ? { prompts: [promptNovoFormato(formato, manual.instrucaoAjuste!)], uso: undefined }
     : arteDoAjuste
-      ? await montarOrdemDeAjuste(arteDoAjuste, manual.instrucaoAjuste!).then((r) => ({
+      ? await montarOrdemDeAjuste(
+          arteDoAjuste,
+          manual.instrucaoAjuste!,
+          entradas.filter((e) => e.tipo === "referencia_ajuste"),
+        ).then((r) => ({
           prompts: [r.prompt],
           uso: r.uso,
         }))
@@ -395,6 +419,7 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
       criadaEm: new Date().toISOString(),
       formato,
       ajuste: ajustando ? manual.instrucaoAjuste : undefined,
+      ...(ajustando && manual.imagensAjuste?.length ? { imagensAjuste: manual.imagensAjuste } : {}),
       promptUsado: imagens[0].promptUsado,
     }),
   };

@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Download, Maximize2, PencilLine } from "lucide-react";
+import { Check, Download, ImagePlus, Maximize2, PencilLine, X } from "lucide-react";
 import { lerRespostaJSON } from "@/lib/fetch-json";
 import { baixarArte } from "@/lib/download";
+import { enviarImagemParaStorage } from "@/lib/upload-storage";
 import { aprovarPeca, registrarTempoPeca, usarVersaoPeca } from "@/app/(app)/clientes/actions";
 import BotaoEnviar from "@/components/BotaoEnviar";
 import Modal from "@/components/Modal";
 import { SeloStatus } from "@/components/ui";
-import type { BriefingPecaManual, Peca, VersaoPeca } from "@/lib/agencia/types";
+import { MAX_IMAGENS_AJUSTE, type BriefingPecaManual, type Peca, type VersaoPeca } from "@/lib/agencia/types";
 
 // Acompanhamento do lote. As peças são produzidas pelo worker da fila, então
 // a tela precisa se atualizar sozinha — o operador aprova e vai fazer outra
@@ -17,6 +18,9 @@ import type { BriefingPecaManual, Peca, VersaoPeca } from "@/lib/agencia/types";
 
 const INTERVALO_ATUALIZACAO_MS = 6000;
 const INTERVALO_CUTUCAO_MS = 30_000;
+
+// Os formatos que o gerador de imagem aceita.
+const TIPOS_ANEXO = ["image/png", "image/jpeg", "image/webp"];
 
 function versoesDa(peca: Peca): VersaoPeca[] {
   return (peca.briefing as BriefingPecaManual | null)?.versoes ?? [];
@@ -29,6 +33,14 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
   const [erro, setErro] = useState<string | null>(null);
   const [ampliada, setAmpliada] = useState<string | null>(null);
   const [versaoAberta, setVersaoAberta] = useState<{ pecaId: string; url: string } | null>(null);
+  // Imagens anexadas ao ajuste: um produto, uma pessoa ou um estilo para levar à arte.
+  const [anexos, setAnexos] = useState<string[]>([]);
+  const [enviandoAnexo, setEnviandoAnexo] = useState(false);
+  const [erroAnexo, setErroAnexo] = useState<string | null>(null);
+  const [arrastando, setArrastando] = useState(false);
+  const inputAnexo = useRef<HTMLInputElement>(null);
+  // As peças de um pedido são todas do mesmo cliente.
+  const clienteId = pecas[0]?.cliente_id;
 
   const emAndamento = pecas.some((p) => p.status === "pendente" || p.status === "gerando");
   const paradas = pecas.filter((p) => p.status === "pendente").length;
@@ -63,18 +75,51 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
     return () => clearInterval(timer);
   }, [paradas]);
 
+  // Do botão, de imagem colada na caixa ou arrastada para o ajuste.
+  async function anexar(arquivos: File[]) {
+    const imagens = arquivos.filter((a) => a.type.startsWith("image/"));
+    if (imagens.length === 0 || enviandoAnexo || !clienteId) return;
+    setErroAnexo(null);
+
+    const aceitas = imagens.filter((a) => TIPOS_ANEXO.includes(a.type));
+    const vagas = MAX_IMAGENS_AJUSTE - anexos.length;
+    const avisos = [
+      aceitas.length < imagens.length && "Só entram imagens PNG, JPG ou WEBP.",
+      aceitas.length > vagas && `O limite é de ${MAX_IMAGENS_AJUSTE} imagens por ajuste.`,
+    ].filter(Boolean);
+    if (avisos.length) setErroAnexo(avisos.join(" "));
+    if (aceitas.length === 0 || vagas <= 0) return;
+
+    setEnviandoAnexo(true);
+    try {
+      const urls = await Promise.all(
+        aceitas.slice(0, vagas).map((a) => enviarImagemParaStorage(a, `ajustes/${clienteId}`)),
+      );
+      setAnexos((atual) => [...atual, ...urls].slice(0, MAX_IMAGENS_AJUSTE));
+    } catch (e) {
+      setErroAnexo(e instanceof Error ? e.message : "Falha ao enviar a imagem.");
+    } finally {
+      setEnviandoAnexo(false);
+    }
+  }
+
   async function regerar(pecaId: string, texto?: string) {
     setErro(null);
     try {
       const res = await fetch("/api/pecas/regerar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pecaId, instrucao: texto }),
+        // "Tentar de novo" não leva imagem: as anexadas são de um ajuste.
+        body: JSON.stringify({ pecaId, instrucao: texto, ...(texto && anexos.length ? { imagens: anexos } : {}) }),
       });
       const json = await lerRespostaJSON<{ error?: string }>(res);
       if (!res.ok) throw new Error(json.error ?? "Erro ao regerar.");
       setAjustando(null);
       setInstrucao("");
+      if (texto) {
+        setAnexos([]);
+        setErroAnexo(null);
+      }
       router.refresh();
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao regerar a peça.");
@@ -103,6 +148,20 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
       )}
 
       {erro && <p className="text-sm text-[var(--danger)]">{erro}</p>}
+
+      {/* Um só para todas as peças: quem abre é o botão "Anexar imagem" do ajuste. */}
+      <input
+        ref={inputAnexo}
+        type="file"
+        accept={TIPOS_ANEXO.join(",")}
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const arquivos = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          void anexar(arquivos);
+        }}
+      />
 
       <div className={unica ? "" : "grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4"}>
         {pecas.map((peca) => (
@@ -219,7 +278,25 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
               )}
 
               {peca.imagem_url && (unica || ajustando === peca.id) && (
-                <div className={`flex flex-col gap-2 ${unica ? "flex-1 border-t border-[var(--border)] pt-3" : ""}`}>
+                <div
+                  className={`flex flex-col gap-2 rounded-lg ${unica ? "flex-1 border-t border-[var(--border)] pt-3" : ""} ${
+                    arrastando ? "outline-2 outline-dashed outline-offset-4 outline-[var(--border-strong)]" : ""
+                  }`}
+                  onDragOver={(e) => {
+                    if (!e.dataTransfer.types.includes("Files")) return;
+                    e.preventDefault();
+                    setArrastando(true);
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setArrastando(false);
+                  }}
+                  onDrop={(e) => {
+                    if (!e.dataTransfer.types.includes("Files")) return;
+                    e.preventDefault();
+                    setArrastando(false);
+                    void anexar(Array.from(e.dataTransfer.files));
+                  }}
+                >
                   {unica && (
                     <label htmlFor={`ajuste-${peca.id}`} className="text-sm font-medium">
                       Ajustar esta arte
@@ -229,17 +306,78 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
                     id={`ajuste-${peca.id}`}
                     value={instrucao}
                     onChange={(e) => setInstrucao(e.target.value)}
+                    onPaste={(e) => {
+                      // Imagem copiada do WhatsApp ou do navegador vira anexo; texto cola normal.
+                      const arquivos = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith("image/"));
+                      if (arquivos.length === 0) return;
+                      e.preventDefault();
+                      void anexar(arquivos);
+                    }}
                     className={`input resize-y ${unica ? "flex-1 min-h-24" : "min-h-[72px]"}`}
-                    placeholder="O que mudar? Ex: deixa o preço maior, passa para story."
+                    placeholder="O que mudar? Ex: deixa o preço maior, passa para story, coloca o lanche da imagem 1. Dá para colar imagem aqui."
                   />
-                  <button
-                    type="button"
-                    onClick={() => regerar(peca.id, instrucao)}
-                    disabled={!instrucao.trim()}
-                    className="btn btn-primary btn-sm self-start"
-                  >
-                    Regerar com esse ajuste
-                  </button>
+
+                  {anexos.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex flex-wrap gap-2.5 pt-1.5">
+                        {anexos.map((url, i) => (
+                          <div key={url} className="relative">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={url}
+                              alt={`Imagem anexada ${i + 1}`}
+                              className="h-14 w-14 rounded-lg object-cover border border-[var(--border)]"
+                            />
+                            {anexos.length > 1 && (
+                              <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1 text-[11px] leading-4 text-white">
+                                {i + 1}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setAnexos((atual) => atual.filter((u) => u !== url))}
+                              aria-label={`Tirar a imagem ${i + 1}`}
+                              title="Tirar esta imagem"
+                              className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-5 h-5 rounded-full bg-[var(--foreground)] text-[var(--background)]"
+                            >
+                              <X size={12} aria-hidden="true" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[13px] text-[var(--muted)]">
+                        {anexos.length > 1
+                          ? "Diga no texto o que usar de cada imagem, pelo número."
+                          : "Diga no texto o que usar da imagem."}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => regerar(peca.id, instrucao)}
+                      disabled={!instrucao.trim() || enviandoAnexo}
+                      className="btn btn-primary btn-sm"
+                    >
+                      Regerar com esse ajuste
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => inputAnexo.current?.click()}
+                      disabled={enviandoAnexo || anexos.length >= MAX_IMAGENS_AJUSTE}
+                      title={`Até ${MAX_IMAGENS_AJUSTE} imagens: um produto, uma pessoa ou um estilo para levar à arte`}
+                      className="btn btn-outline btn-sm"
+                    >
+                      {enviandoAnexo ? (
+                        <span className="spinner" aria-hidden="true" />
+                      ) : (
+                        <ImagePlus size={14} aria-hidden="true" />
+                      )}
+                      {enviandoAnexo ? "Enviando…" : "Anexar imagem"}
+                    </button>
+                  </div>
+                  {erroAnexo && <p className="text-[13px] text-[var(--danger)]">{erroAnexo}</p>}
                 </div>
               )}
 
@@ -292,6 +430,20 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
           <p className="text-[13px] text-[var(--muted)]">
             {versao.ajuste ? `Pedido: ${versao.ajuste}` : "Primeira versão desta arte."}
           </p>
+          {versao.imagensAjuste && versao.imagensAjuste.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[13px] text-[var(--muted)]">Imagens anexadas:</span>
+              {versao.imagensAjuste.map((url, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={url}
+                  src={url}
+                  alt={`Imagem anexada ${i + 1}`}
+                  className="h-12 w-12 rounded-md object-cover border border-[var(--border)]"
+                />
+              ))}
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             {versao.url === pecaDaVersao.imagem_url ? (
               <span className="text-sm">Esta é a versão em uso.</span>

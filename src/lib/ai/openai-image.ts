@@ -32,7 +32,8 @@ export type TipoEntradaImagem =
   | "arte_novo_formato"
   | "fundo"
   | "elemento_extra"
-  | "logo_parceiro";
+  | "logo_parceiro"
+  | "referencia_ajuste";
 
 export interface EntradaImagem {
   base64: string;
@@ -66,6 +67,9 @@ const LABELS_ENTRADA: Record<TipoEntradaImagem, string> = {
     "um elemento visual adicional anexado pelo lojista (ex: selo, ícone, bandeira, embalagem) — inclua-o na arte de forma pequena, proporcional e integrada, sem competir com produto, preço ou headline",
   logo_parceiro:
     "a logo oficial de um programa ou parceiro citado no pedido — reproduza exatamente este desenho, sem redesenhar, separada da logo da marca",
+  // Na prática vai com rótulo numerado (ver gerar-peca.ts), que a ordem de edição cita.
+  referencia_ajuste:
+    "uma imagem de referência anexada ao pedido de ajuste, e não a arte a ser editada — use dela só o que a ordem abaixo indicar; texto, preço, marca e logo dela não entram na arte se a ordem não pedir",
 };
 
 function getClient(): OpenAI {

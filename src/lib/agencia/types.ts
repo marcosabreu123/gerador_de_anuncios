@@ -152,6 +152,10 @@ export function operadorEscreveu(prompt: string): boolean {
   return !Object.values<string>(PEDIDO_SEM_TEXTO).includes(prompt.trim());
 }
 
+// Imagens que dá para anexar a um ajuste. Cada uma soma uns US$ 0,015 e alonga a
+// edição, que precisa caber no tempo do worker.
+export const MAX_IMAGENS_AJUSTE = 3;
+
 // Cada imagem que a peça já teve. O ajuste troca a arte em uso, mas a anterior pode
 // ter ficado melhor: a lista guarda todas para o operador resgatar.
 export interface VersaoPeca {
@@ -160,6 +164,8 @@ export interface VersaoPeca {
   formato: Formato;
   // O que o operador pediu para chegar nesta versão. A primeira não tem.
   ajuste?: string;
+  // Imagens que ele anexou a esse pedido de ajuste.
+  imagensAjuste?: string[];
   // Vira contexto do próximo ajuste quando esta versão volta a ser a da peça.
   promptUsado?: string;
 }
@@ -191,6 +197,10 @@ export interface BriefingPecaManual {
   // o botão prometia ajuste e entregava recriação.
   ajusteSobreUrl?: string;
   instrucaoAjuste?: string;
+  // Imagens anexadas ao pedido de ajuste: um produto, uma pessoa ou um estilo para
+  // trazer para a arte. O texto do ajuste diz o que usar de cada uma, e elas valem
+  // só para o ajuste em curso.
+  imagensAjuste?: string[];
   // Formato pedido num ajuste. Só vira `formato` quando a arte nova sai: se o ajuste
   // falhar, a peça continua no formato da imagem que ficou.
   formatoNovo?: Formato;

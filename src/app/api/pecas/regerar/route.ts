@@ -1,7 +1,7 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { enfileirar } from "@/lib/agencia/fila";
-import type { BriefingPecaManual } from "@/lib/agencia/types";
+import { MAX_IMAGENS_AJUSTE, type BriefingPecaManual } from "@/lib/agencia/types";
 import { formatoPedidoExplicitamente } from "@/lib/image-dimensions";
 
 export const runtime = "nodejs";
@@ -12,6 +12,16 @@ interface Body {
   // Ajuste em linguagem natural ("deixa o preço maior", "fundo mais escuro").
   // Entra como direção adicional na próxima geração.
   instrucao?: string;
+  // Imagens anexadas ao ajuste, já enviadas ao Storage pelo navegador.
+  imagens?: unknown;
+}
+
+// O worker baixa estas imagens do servidor: só valem as do nosso Storage, para a
+// rota não virar porta para buscar endereço qualquer.
+function doNossoStorage(url: string): boolean {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const bucket = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
+  return Boolean(base) && url.startsWith(`${base}/storage/v1/object/public/${bucket}/`) && !url.includes("..");
 }
 
 // Regera uma peça, opcionalmente com um ajuste pedido pelo operador.
@@ -45,15 +55,28 @@ export async function POST(request: NextRequest) {
   }
   if (!body.pecaId) return NextResponse.json({ error: "Informe a peça." }, { status: 400 });
 
+  const instrucao = body.instrucao?.trim();
+  const imagens = body.imagens ?? [];
+  if (!Array.isArray(imagens) || imagens.some((u) => typeof u !== "string" || !doNossoStorage(u))) {
+    return NextResponse.json({ error: "Imagem anexada inválida. Envie de novo." }, { status: 400 });
+  }
+  if (imagens.length > MAX_IMAGENS_AJUSTE) {
+    return NextResponse.json({ error: `Anexe no máximo ${MAX_IMAGENS_AJUSTE} imagens.` }, { status: 400 });
+  }
+  // A imagem sozinha não diz o que fazer com ela.
+  if (imagens.length > 0 && !instrucao) {
+    return NextResponse.json({ error: "Escreva o que fazer com a imagem anexada." }, { status: 400 });
+  }
+
   const { data: peca } = await supabase.from("pecas").select("*").eq("id", body.pecaId).maybeSingle();
   if (!peca) return NextResponse.json({ error: "Peça não encontrada." }, { status: 404 });
 
-  const instrucao = body.instrucao?.trim();
   const briefing = (peca.briefing ?? {}) as BriefingPecaManual;
 
-  // Formato pedido num ajuste que falhou não pode valer para o próximo.
+  // Formato pedido e imagens anexadas num ajuste que falhou não podem valer para o próximo.
   const semFormatoPendente = { ...briefing };
   delete semFormatoPendente.formatoNovo;
+  delete semFormatoPendente.imagensAjuste;
 
   if (instrucao) {
     // O ajuste entra no próprio prompt e ACUMULA: o segundo pedido não pode
@@ -75,6 +98,7 @@ export async function POST(request: NextRequest) {
           ajusteSobreUrl: peca.imagem_url as string,
           instrucaoAjuste: instrucao,
           ...(formatoNovo ? { formatoNovo } : {}),
+          ...(imagens.length > 0 ? { imagensAjuste: imagens as string[] } : {}),
         }
       : formatoNovo
         ? { formato: formatoNovo }
@@ -84,7 +108,7 @@ export async function POST(request: NextRequest) {
       .from("pecas")
       .update({ briefing: { ...semFormatoPendente, ...ajuste, prompt: promptAcumulado } })
       .eq("id", peca.id);
-  } else if (briefing.ajusteSobreUrl || briefing.instrucaoAjuste || briefing.formatoNovo) {
+  } else if (briefing.ajusteSobreUrl || briefing.instrucaoAjuste || briefing.formatoNovo || briefing.imagensAjuste) {
     // "Tentar de novo" sem instrução: refazer, não repetir o ajuste anterior.
     // Sem limpar, uma peça que falhou depois de um ajuste voltaria editando a
     // imagem velha com o pedido velho.
