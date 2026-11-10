@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { diasEntre, hojeSP } from "@/lib/datas";
 
-// Situação de cada cliente na carteira. A lista de clientes e o painel contam do
-// mesmo jeito, então a regra fica aqui, em funções puras.
+// Situação de cada cliente na carteira. A Produção, os Clientes e o painel contam
+// do mesmo jeito, então a regra fica aqui, em funções puras.
 //
 // Ativo é quem está pedindo. Inativo é quem parou de pedir, mesmo que ainda tenha
 // crédito: é com ele que o sócio precisa falar. Em teste fica à parte, fora da
@@ -37,6 +37,13 @@ export function situacaoDoCliente(
   return dias > DIAS_PARA_INATIVO ? "inativo" : "ativo";
 }
 
+export const ROTULO_SITUACAO: Record<SituacaoCliente, string> = {
+  ativo: "Ativo",
+  inativo: "Inativo",
+  em_teste: "Em teste",
+  arquivado: "Arquivado",
+};
+
 export function textoDoUltimoPedido(dias: number | null): string {
   if (dias === null) return "Nenhum pedido ainda";
   if (dias === 0) return "Último pedido hoje";
@@ -44,22 +51,28 @@ export function textoDoUltimoPedido(dias: number | null): string {
   return `Último pedido há ${dias} dias`;
 }
 
-// Filtros da lista de clientes. Aqui, e não no componente, porque a página do
-// servidor confere o ?filtro= do endereço e não enxerga valores de um módulo
-// "use client".
-export const FILTROS_CLIENTES = [
+// O mesmo, curto, para caber numa coluna de tabela.
+export function ultimoPedidoCurto(dias: number | null): string {
+  if (dias === null) return "Nunca";
+  if (dias === 0) return "Hoje";
+  if (dias === 1) return "Ontem";
+  return `Há ${dias} dias`;
+}
+
+// Filtros da Produção. Aqui, e não no componente, porque a página do servidor
+// confere o ?filtro= do endereço e não enxerga valores de um módulo "use client".
+export const FILTROS_PRODUCAO = [
   "todos",
-  "ativos",
-  "inativos",
-  "em_teste",
   "em_producao",
+  "para_aprovar",
   "sem_credito",
+  "em_teste",
   "arquivados",
 ] as const;
-export type FiltroClientes = (typeof FILTROS_CLIENTES)[number];
+export type FiltroProducao = (typeof FILTROS_PRODUCAO)[number];
 
-export function filtroDeClientes(valor: string | undefined): FiltroClientes {
-  return (FILTROS_CLIENTES as readonly string[]).includes(valor ?? "") ? (valor as FiltroClientes) : "todos";
+export function filtroDaProducao(valor: string | undefined): FiltroProducao {
+  return (FILTROS_PRODUCAO as readonly string[]).includes(valor ?? "") ? (valor as FiltroProducao) : "todos";
 }
 
 // Último pedido de cada cliente, numa consulta só (ver schema-gestao-clientes.sql).

@@ -12,16 +12,10 @@ import type { Pacote, Pagamento } from "./types";
 // No banco o crédito ainda se chama imagem (qtd_imagens, qtd_usadas): mudar o nome
 // das colunas não mudaria nada para quem usa.
 
-export const PACOTE_ENTRADA = {
-  nome: "Pacote 10 créditos",
-  qtdImagens: 10,
-  valorCentavos: 3490,
-} as const;
-
-// Debita 1 crédito do pacote ativo que vence antes (o plano antes do avulso; no
-// empate, o mais antigo). Retorna o que sobrou naquele pacote, ou -1 se o cliente
-// não tem crédito. Atômico via função SQL: duas aprovações simultâneas não podem
-// gastar o mesmo último crédito.
+// Debita 1 crédito do pacote ativo que vence antes (no empate, o mais antigo).
+// Retorna o que sobrou naquele pacote, ou -1 se o cliente não tem crédito. Atômico
+// via função SQL: duas aprovações simultâneas não podem gastar o mesmo último
+// crédito.
 //
 // Client admin porque a função só aceita o service role (schema-cobrancas.sql):
 // quem debita é sempre o servidor, nunca o navegador.
@@ -88,17 +82,21 @@ export function bloqueioDeGeracao(
   // por que os créditos sumiram.
   return saldo.planoVencidoEm
     ? `O plano deste cliente venceu em ${formatarDia(saldo.planoVencidoEm)}. Renove para gerar.`
-    : "O cliente está sem crédito. Venda um pacote ou plano para gerar.";
+    : "O cliente está sem crédito. Registre um plano para gerar.";
 }
 
-// Quantos clientes pedem ação na cobrança: o número ao lado de "Cobranças" no
+// Quantos clientes pedem ação na cobrança: o número ao lado de "Clientes" no
 // menu do sócio. Roda em toda tela, então lê só o necessário e nunca derruba a
 // página: sem o número, o menu continua de pé. Cliente em teste não é cobrado.
 export async function contarAlertasCobranca(): Promise<number> {
   try {
     const supabase = await createClient();
     const [{ data: clientes }, { data: planos }, { data: abertos }] = await Promise.all([
-      supabase.from("clientes").select("id, nome, nicho").eq("ativo", true).eq("em_teste", false),
+      supabase
+        .from("clientes")
+        .select("id, nome, nicho, ativo, em_teste, created_at")
+        .eq("ativo", true)
+        .eq("em_teste", false),
       supabase.from("pacotes").select("*").eq("tipo", "tempo").neq("status", "cancelado"),
       supabase.from("pagamentos").select("*").eq("status", "pendente"),
     ]);

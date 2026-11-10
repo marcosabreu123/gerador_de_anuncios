@@ -316,6 +316,22 @@ body {
     border-radius: 10px;
   }
 
+  /* Número grande dos indicadores do topo. O tamanho segue a largura do card
+     (cqi) para o valor nunca ser cortado: no celular sobram ~130px por card e
+     "-R$ 1.140,90" não cabia em 24px. Com 14cqi cabe até "-R$ 100.000,00". */
+  .indicador {
+    container-type: inline-size;
+  }
+  .valor-indicador {
+    font-size: clamp(1.0625rem, 14cqi, 1.5rem);
+    line-height: calc(2 / 1.5);
+  }
+  @media (min-width: 1024px) {
+    .valor-indicador {
+      font-size: clamp(1.0625rem, 14cqi, 1.875rem);
+    }
+  }
+
   .input {
     width: 100%;
     min-height: 40px;

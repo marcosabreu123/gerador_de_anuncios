@@ -1,114 +1,101 @@
-import { ehSocio, requireOperador } from "@/lib/auth";
+import { requireSocio } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import ListaClientes, { type ClienteCard, type SeloCard } from "@/components/ListaClientes";
-import { mesAtual } from "@/lib/agencia/relatorio";
-import {
-  JANELA_PADRAO,
-  imagensDisponiveis,
-  montarLinhas,
-  prazoDoPlano,
-  situacaoDoPlano,
-} from "@/lib/agencia/cobrancas";
-import { diasDesde, filtroDeClientes, situacaoDoCliente, ultimosPedidos } from "@/lib/agencia/situacao-cliente";
+import PainelClientes, { type PagamentoDaLista } from "@/components/PainelClientes";
 import { hojeSP } from "@/lib/datas";
-import type { Cliente, Pacote, Pagamento } from "@/lib/agencia/types";
+import { filtroDeClientes, montarLinhas, precosSugeridos, type ClienteDaCarteira } from "@/lib/agencia/cobrancas";
+import { mesAtual } from "@/lib/agencia/relatorio";
+import { ultimosPedidos } from "@/lib/agencia/situacao-cliente";
+import type { Pacote, Pagamento } from "@/lib/agencia/types";
 
-// Acessível a sócio E colaborador: é a tela de produção. O que muda por
-// papel é o que aparece dentro do cliente (financeiro só para sócio).
-export default async function ClientesPage({ searchParams }: { searchParams: Promise<{ filtro?: string }> }) {
-  const { perfil } = await requireOperador();
-  const socio = ehSocio(perfil);
+// Quantos pagamentos a lista de baixo mostra. O resto continua na página de cada
+// cliente.
+const PAGAMENTOS_NA_LISTA = 40;
+
+// A carteira: de cada cliente, a situação, o plano, o vencimento, o pagamento e
+// os créditos. É aqui que o sócio cadastra cliente novo, com o primeiro plano ou
+// em teste. Só sócio, como tudo que mostra dinheiro.
+export default async function ClientesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ filtro?: string; novo?: string }>;
+}) {
+  await requireSocio();
+  const { filtro, novo } = await searchParams;
   const supabase = await createClient();
-  const periodo = mesAtual();
-  const filtro = filtroDeClientes((await searchParams).filtro);
-
-  // Tudo em consultas agregadas em vez de uma por card — com 100 clientes,
-  // uma consulta por card deixaria a página inutilizável.
-  const [
-    { data: clientesRaw },
-    { data: pacotesRaw },
-    { data: aprovadas },
-    { data: pedidosAtivos },
-    { data: logos },
-    { data: abertos },
-    ultimos,
-  ] = await Promise.all([
-    supabase.from("clientes").select("*").order("ativo", { ascending: false }).order("nome"),
-    supabase.from("pacotes").select("*"),
-    supabase
-      .from("pecas")
-      .select("cliente_id")
-      .eq("status", "aprovada")
-      .gte("aprovada_em", periodo.inicio)
-      .lte("aprovada_em", periodo.fim),
-    supabase.from("pedidos").select("cliente_id").in("status", ["processando", "planejado"]),
-    supabase.from("referencias").select("cliente_id, url").eq("tipo", "logo"),
-    // Cobrança é do sócio: o colaborador nem consulta os pagamentos.
-    socio ? supabase.from("pagamentos").select("*").eq("status", "pendente") : { data: [] },
-    ultimosPedidos(supabase),
-  ]);
-
-  // Mesmo dia da tela do cliente e da cobrança (ver lib/datas.ts).
   const hoje = hojeSP();
-  const clientes = (clientesRaw ?? []) as Cliente[];
+  const periodo = mesAtual();
+
+  const [{ data: clientesRaw }, { data: pacotesRaw }, { data: pagamentosRaw }, { data: logos }, ultimos] =
+    await Promise.all([
+      supabase.from("clientes").select("id, nome, nicho, ativo, em_teste, created_at").order("nome"),
+      supabase.from("pacotes").select("*").order("created_at", { ascending: false }),
+      supabase.from("pagamentos").select("*"),
+      supabase.from("referencias").select("cliente_id, url").eq("tipo", "logo"),
+      ultimosPedidos(supabase),
+    ]);
+
+  const clientes = (clientesRaw ?? []) as ClienteDaCarteira[];
   const pacotes = (pacotesRaw ?? []) as Pacote[];
+  const pagamentos = (pagamentosRaw ?? []) as Pagamento[];
 
-  const pacotesPorCliente = new Map<string, Pacote[]>();
-  for (const p of pacotes) {
-    const lista = pacotesPorCliente.get(p.cliente_id);
-    if (lista) lista.push(p);
-    else pacotesPorCliente.set(p.cliente_id, [p]);
-  }
+  const linhas = montarLinhas({
+    clientes,
+    pacotes,
+    pagamentos,
+    logos: new Map((logos ?? []).map((l) => [l.cliente_id as string, l.url as string])),
+    ultimos,
+    hoje,
+  });
 
-  const aprovadasPorCliente = new Map<string, number>();
-  for (const p of aprovadas ?? []) {
-    aprovadasPorCliente.set(p.cliente_id, (aprovadasPorCliente.get(p.cliente_id) ?? 0) + 1);
-  }
+  // Mesma conta da receita do painel, para os dois números baterem: sem os
+  // clientes em teste.
+  const inicio = Date.parse(periodo.inicio);
+  const fim = Date.parse(periodo.fim);
+  const emTeste = new Set(clientes.filter((c) => c.em_teste).map((c) => c.id));
+  const recebidoNoMesCentavos = pagamentos
+    .filter((pg) => pg.status === "confirmado" && pg.pago_em && !emTeste.has(pg.cliente_id))
+    .filter((pg) => {
+      const quando = Date.parse(pg.pago_em!);
+      return quando >= inicio && quando <= fim;
+    })
+    .reduce((soma, pg) => soma + pg.valor_centavos, 0);
 
-  const emAndamento = new Set((pedidosAtivos ?? []).map((p) => p.cliente_id));
-  const logoPorCliente = new Map((logos ?? []).map((l) => [l.cliente_id, l.url as string]));
+  const nomeDoCliente = new Map(clientes.map((c) => [c.id, c.nome]));
+  const nomeDoPacote = new Map(pacotes.map((p) => [p.id, p.nome]));
+  const momento = (pg: Pagamento) => pg.pago_em ?? pg.created_at;
+  const historico: PagamentoDaLista[] = [...pagamentos]
+    .sort((a, b) => Date.parse(momento(b)) - Date.parse(momento(a)))
+    .slice(0, PAGAMENTOS_NA_LISTA)
+    .map((pg) => ({
+      id: pg.id,
+      clienteId: pg.cliente_id,
+      cliente: nomeDoCliente.get(pg.cliente_id) ?? "Cliente",
+      descricao: (pg.pacote_id && nomeDoPacote.get(pg.pacote_id)) || "Pagamento avulso",
+      valorCentavos: pg.valor_centavos,
+      metodo: pg.metodo,
+      status: pg.status,
+      dia: hojeSP(new Date(momento(pg))),
+    }));
 
-  // A mesma conta da tela de cobranças, para o card não discordar dela. Cliente em
-  // teste ou arquivado não é cobrado.
-  const selosDeCobranca = new Map<string, SeloCard[]>();
-  if (socio) {
-    const linhas = montarLinhas({
-      clientes: clientes.filter((c) => c.ativo && !c.em_teste),
-      pacotes: pacotes.filter((p) => p.tipo === "tempo" && p.status !== "cancelado"),
-      pagamentos: (abertos ?? []) as Pagamento[],
-      logos: new Map(),
-      hoje,
-    });
-    for (const l of linhas) {
-      const selos: SeloCard[] = [];
-      const plano = situacaoDoPlano(l.dias, JANELA_PADRAO);
-      if (plano === "vencido") selos.push({ rotulo: "Plano vencido", tom: "badge-danger" });
-      if (plano === "vencendo" && l.dias !== null) selos.push({ rotulo: prazoDoPlano(l.dias), tom: "badge-warning" });
-      if (l.pagamento === "pendente") selos.push({ rotulo: "Pagamento pendente", tom: "badge-warning" });
-      if (selos.length > 0) selosDeCobranca.set(l.clienteId, selos);
-    }
-  }
-
-  const cards: ClienteCard[] = clientes.map((c) => {
-    const ultimo = ultimos.get(c.id) ?? null;
-    return {
-      id: c.id,
-      nome: c.nome,
-      nicho: c.nicho,
-      logo: logoPorCliente.get(c.id) ?? null,
-      situacao: situacaoDoCliente(c, ultimo, hoje),
-      diasSemPedido: diasDesde(ultimo, hoje),
-      saldo: imagensDisponiveis(pacotesPorCliente.get(c.id) ?? [], hoje),
-      aprovadasNoMes: aprovadasPorCliente.get(c.id) ?? 0,
-      temPedidoEmAndamento: emAndamento.has(c.id),
-      cobranca: selosDeCobranca.get(c.id) ?? [],
-    };
+  const mes = new Date().toLocaleDateString("pt-BR", {
+    month: "long",
+    year: "numeric",
+    timeZone: "America/Sao_Paulo",
   });
 
   return (
     <main className="pagina flex flex-col gap-6">
-      {/* A chave remonta a lista quando o painel abre outro filtro pelo endereço. */}
-      <ListaClientes key={filtro} clientes={cards} filtroInicial={filtro} />
+      <PainelClientes
+        linhas={linhas}
+        historico={historico}
+        recebidoNoMesCentavos={recebidoNoMesCentavos}
+        mes={mes}
+        filtroInicial={filtroDeClientes(filtro)}
+        cadastroAberto={novo === "1"}
+        hoje={hoje}
+        // O último valor cobrado em cada duração, para o cadastro já vir preenchido.
+        precos={precosSugeridos(pacotes)}
+      />
     </main>
   );
 }

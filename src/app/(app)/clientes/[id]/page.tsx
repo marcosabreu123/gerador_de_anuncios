@@ -5,8 +5,8 @@ import { ehSocio, requireOperador } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import Abas, { type Aba } from "@/components/Abas";
 import BotaoEnviar from "@/components/BotaoEnviar";
-import type { RenovacaoPlano } from "@/components/FormVenderPacote";
-import PacotesDoCliente from "@/components/PacotesDoCliente";
+import type { RenovacaoPlano } from "@/components/CamposPlano";
+import PlanoDoCliente from "@/components/PlanoDoCliente";
 import UploadMaterial from "@/components/UploadMaterial";
 import { Avatar, CabecalhoPagina, EstadoVazio, SeloStatus, TituloCard } from "@/components/ui";
 import { diasEntre, formatarDia } from "@/lib/datas";
@@ -17,7 +17,7 @@ import {
   precosSugeridos,
   situacaoDoPlano,
 } from "@/lib/agencia/cobrancas";
-import { PACOTE_ENTRADA, saldoDoCliente } from "@/lib/agencia/pacotes";
+import { saldoDoCliente } from "@/lib/agencia/pacotes";
 import { situacaoDoCliente, textoDoUltimoPedido, diasDesde } from "@/lib/agencia/situacao-cliente";
 import {
   alternarArquivoCliente,
@@ -53,9 +53,9 @@ export default async function ClientePage({
   const { data: clienteRaw } = await supabase.from("clientes").select("*").eq("id", id).maybeSingle();
   if (!clienteRaw) notFound();
   const cliente = clienteRaw as Cliente;
-  // Colaborador produz, mas não vê nem mexe em dinheiro: pacote vendido,
-  // valor e pagamento são gestão. Os créditos ele vê, porque é informação
-  // operacional — precisa saber se pode gerar.
+  // Colaborador produz, mas não vê nem mexe em dinheiro: plano, valor e
+  // pagamento são gestão. Os créditos ele vê, porque é informação operacional —
+  // precisa saber se pode gerar.
   const gestao = ehSocio(perfil);
 
   const [
@@ -72,8 +72,8 @@ export default async function ClientePage({
     gestao
       ? supabase.from("pagamentos").select("*").eq("cliente_id", id).order("created_at", { ascending: false })
       : { data: [] },
-    // Últimas vendas da agência: dão o preço sugerido quando o cliente nunca
-    // comprou aquela modalidade.
+    // Últimos planos da agência: dão o preço sugerido quando o cliente nunca teve
+    // um plano daquela duração.
     gestao
       ? supabase
           .from("pacotes")
@@ -118,11 +118,10 @@ export default async function ClientePage({
         valorCentavos: planoRenovado.valor_centavos,
       }
     : null;
-  const precos = {
-    imagens: PACOTE_ENTRADA.valorCentavos,
-    ...precosSugeridos(saldo.pacotes, (precosRaw ?? []) as Pacote[]),
-  };
-  const linkRenovar = plano && `/clientes/${id}?renovar=${plano.id}#pacotes`;
+  const precos = precosSugeridos(saldo.pacotes, (precosRaw ?? []) as Pacote[]);
+  const linkRenovar = plano && `/clientes/${id}?renovar=${plano.id}#plano`;
+  // Sair do teste é começar a pagar: só com plano em dia.
+  const planoEmDia = Boolean(plano?.validade && plano.validade >= hoje);
 
   // Os pedidos vêm do mais novo: o primeiro é o último pedido do cliente.
   const ultimoPedido = pedidos[0]?.created_at ?? null;
@@ -357,7 +356,7 @@ export default async function ClientePage({
   );
 
   const financeiro = (
-    <PacotesDoCliente clienteId={id} saldo={saldo} pagamentos={pagamentos} precos={precos} renovacao={renovacao} />
+    <PlanoDoCliente clienteId={id} saldo={saldo} pagamentos={pagamentos} precos={precos} renovacao={renovacao} />
   );
 
   const dados = (
@@ -393,19 +392,33 @@ export default async function ClientePage({
       {gestao && (
         <div className="flex flex-col gap-4">
           {/* Teste é decisão comercial: quem a agência atende sem cobrar, para
-              experimentar. Produz sem usar crédito e fica fora do dinheiro. */}
-          <form action={alternarTesteCliente} className="card p-5 flex flex-col items-start gap-3">
-            <input type="hidden" name="id" value={id} />
-            <TituloCard
-              titulo={cliente.em_teste ? "Cliente em teste" : "Atender em teste"}
-              descricao={
-                cliente.em_teste
-                  ? "Não usa crédito e fica fora da receita, das cobranças e dos totais do painel, onde o custo dele aparece à parte. Quando ele começar a pagar, tire do teste."
-                  : "Para quem a agência atende sem cobrar. Ele produz sem usar crédito e sai da receita, das cobranças e dos totais do painel."
-              }
-            />
-            <BotaoEnviar className="btn btn-outline">{cliente.em_teste ? "Tirar do teste" : "Marcar como teste"}</BotaoEnviar>
-          </form>
+              experimentar. Produz sem usar crédito e fica fora do dinheiro.
+              Sair do teste é começar a pagar: sem plano em dia, o caminho é
+              registrar o primeiro, que já tira o cliente do teste. */}
+          {cliente.em_teste && !planoEmDia ? (
+            <section className="card p-5 flex flex-col items-start gap-3">
+              <TituloCard
+                titulo="Cliente em teste"
+                descricao="Não usa crédito e fica fora da receita e das cobranças. O custo dele aparece à parte no Painel. Quando ele começar a pagar, registre o primeiro plano: isso tira o cliente do teste."
+              />
+              <a href="#plano" className="btn btn-outline">
+                Registrar plano
+              </a>
+            </section>
+          ) : (
+            <form action={alternarTesteCliente} className="card p-5 flex flex-col items-start gap-3">
+              <input type="hidden" name="id" value={id} />
+              <TituloCard
+                titulo={cliente.em_teste ? "Cliente em teste" : "Atender em teste"}
+                descricao={
+                  cliente.em_teste
+                    ? "Não usa crédito e fica fora da receita e das cobranças. Ele já tem plano em dia: dá para tirar do teste."
+                    : "Para quem a agência atende sem cobrar. Ele produz sem usar crédito e sai da receita e das cobranças. O custo dele aparece à parte no Painel."
+                }
+              />
+              <BotaoEnviar className="btn btn-outline">{cliente.em_teste ? "Tirar do teste" : "Marcar como teste"}</BotaoEnviar>
+            </form>
+          )}
 
           {/* Arquivar é decisão comercial (o cliente saiu), então fica com o
               sócio. Não apaga nada: o histórico continua valendo no relatório. */}
@@ -415,7 +428,7 @@ export default async function ClientePage({
               titulo={cliente.ativo ? "Arquivar cliente" : "Reativar cliente"}
               descricao={
                 cliente.ativo
-                  ? "Some da lista de clientes ativos. Pedidos, peças e pacotes continuam guardados."
+                  ? "Sai da Produção e da carteira. Pedidos, peças e planos continuam guardados."
                   : "Este cliente está arquivado. Reativar devolve ele à lista de ativos."
               }
             />
@@ -430,14 +443,14 @@ export default async function ClientePage({
     { id: "geral", rotulo: "Visão geral", conteudo: visaoGeral },
     { id: "identidade", rotulo: "Identidade visual", conteudo: identidade },
     { id: "materiais", rotulo: "Materiais", conteudo: materiais },
-    ...(gestao ? [{ id: "pacotes", rotulo: "Pacotes e pagamentos", conteudo: financeiro }] : []),
+    ...(gestao ? [{ id: "plano", rotulo: "Plano e pagamentos", conteudo: financeiro }] : []),
     { id: "dados", rotulo: "Dados", conteudo: dados },
   ];
 
   return (
     <main className="pagina flex flex-col gap-6">
       <CabecalhoPagina
-        voltar={{ href: "/clientes", rotulo: "Clientes" }}
+        voltar={{ href: "/producao", rotulo: "Produção" }}
         inicio={<Avatar nome={cliente.nome} src={logo} tamanho={52} />}
         titulo={cliente.nome}
         descricao={cliente.nicho ?? "Nicho não informado"}
@@ -445,12 +458,15 @@ export default async function ClientePage({
           <>
             {situacaoCliente === "arquivado" && <span className="badge badge-warning">Arquivado</span>}
             {situacaoCliente === "em_teste" && (
-              <span
-                className="badge badge-accent"
-                title="Não usa crédito e fica fora da receita, das cobranças e dos totais do painel"
-              >
+              <span className="badge badge-accent" title="Não usa crédito e fica fora da receita e das cobranças">
                 Em teste
               </span>
+            )}
+            {/* Todo cliente que paga precisa de plano. */}
+            {gestao && cliente.ativo && !cliente.em_teste && !plano && (
+              <a href="#plano" className="badge badge-warning" title="Registre o primeiro plano na aba Plano e pagamentos">
+                Sem plano
+              </a>
             )}
             {situacaoCliente === "inativo" && (
               <span className="badge badge-warning" title={textoDoUltimoPedido(diasDesde(ultimoPedido, hoje))}>
@@ -495,14 +511,19 @@ export default async function ClientePage({
                   ? "A geração fica bloqueada até renovar. Se a renovação já foi combinada, dá para gerar mesmo assim."
                   : "A geração fica bloqueada até um sócio renovar o plano."
                 : gestao
-                  ? "Venda um pacote antes de produzir, ou gere mesmo assim se o pagamento já foi combinado."
-                  : "Avise um sócio para lançar o pacote. Sem crédito, a geração fica bloqueada."}
+                  ? "Registre um plano antes de produzir, ou gere mesmo assim se o pagamento já foi combinado."
+                  : "Avise um sócio para registrar o plano. Sem crédito, a geração fica bloqueada."}
             </p>
           </div>
           {gestao && semSaldoPorVencimento && linkRenovar && (
             <Link href={linkRenovar} scroll={false} className="btn btn-outline btn-sm">
               Renovar plano
             </Link>
+          )}
+          {gestao && !plano && (
+            <a href="#plano" className="btn btn-outline btn-sm">
+              Registrar plano
+            </a>
           )}
         </div>
       )}

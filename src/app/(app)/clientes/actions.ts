@@ -1,13 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { ehSocio, requireOperador, requireSocio } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { diaValido, hojeSP } from "@/lib/datas";
-import { duracaoValida, nomeDoPlano, vencimentoDoPlano } from "@/lib/agencia/cobrancas";
+import { duracaoValida, nomeDoPlano, ultimoPlano, vencimentoDoPlano } from "@/lib/agencia/cobrancas";
 import { debitarCredito } from "@/lib/agencia/pacotes";
-import { METODOS_PAGAMENTO, reaisParaCentavos, type BriefingPecaManual } from "@/lib/agencia/types";
+import {
+  METODOS_PAGAMENTO,
+  reaisParaCentavos,
+  type BriefingPecaManual,
+  type Pacote,
+} from "@/lib/agencia/types";
 
 // Server Actions do cadastro da agência. CRUD simples vai direto por action
 // (sem rota de API) — rota só onde há processamento pesado ou chamada de IA.
@@ -30,14 +34,132 @@ function listaDeLinhas(form: FormData, campo: string): string[] {
     .filter(Boolean);
 }
 
-export async function criarCliente(form: FormData) {
-  const { authId } = await requireOperador();
+// ---------- Plano ----------
+
+interface DadosPlano {
+  meses: number;
+  qtd: number;
+  valorCentavos: number;
+  assinadoEm: string;
+  metodo: string;
+  jaPago: boolean;
+}
+
+// Campos do plano, iguais no cadastro do cliente e na página dele. O menor plano
+// é de 1 mês, contado do dia da contratação.
+function lerPlano(form: FormData, hoje: string): { erro: string } | { plano: DadosPlano } {
+  const meses = Number(form.get("meses"));
+  if (!duracaoValida(meses)) return { erro: "Escolha a duração do plano." };
+  const qtd = Number(form.get("qtd_imagens"));
+  if (!Number.isInteger(qtd) || qtd < 1 || qtd > 10_000) {
+    return { erro: "Informe quantos créditos o plano tem, em número inteiro." };
+  }
+  const valorCentavos = reaisParaCentavos(texto(form, "valor_reais"));
+  if (valorCentavos === null) return { erro: "Informe o valor do plano." };
+  const assinadoEm = diaValido(texto(form, "assinado_em")) ?? hoje;
+  if (assinadoEm > hoje) return { erro: "A data de contratação não pode ser depois de hoje." };
+  const metodo = texto(form, "metodo") ?? "pix";
+  return {
+    plano: {
+      meses,
+      qtd,
+      valorCentavos,
+      assinadoEm,
+      metodo: Object.hasOwn(METODOS_PAGAMENTO, metodo) ? metodo : "pix",
+      jaPago: form.get("ja_pago") === "on",
+    },
+  };
+}
+
+// Registra o plano e o pagamento dele: um pagamento por plano, no valor total,
+// mesmo no anual. No controle manual os dois acontecem juntos (o cliente paga e o
+// saldo entra). Quando houver gateway, o pagamento passa a nascer "pendente".
+//
+// Sair do teste é começar a pagar: com o plano registrado, o cliente deixa de ser
+// teste.
+async function gravarPlano(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  clienteId: string,
+  plano: DadosPlano,
+  authId: string,
+): Promise<{ falhou?: "plano" | "pagamento" }> {
+  // Com plano em vigor, o novo começa quando ele acaba (ver vencimentoDoPlano).
+  const { data: cobertura } = await supabase
+    .from("pacotes")
+    .select("validade")
+    .eq("cliente_id", clienteId)
+    .eq("tipo", "tempo")
+    .neq("status", "cancelado")
+    .not("validade", "is", null)
+    .order("validade", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: pacote, error } = await supabase
+    .from("pacotes")
+    .insert({
+      cliente_id: clienteId,
+      nome: nomeDoPlano(plano.meses),
+      tipo: "tempo",
+      meses: plano.meses,
+      qtd_imagens: plano.qtd,
+      valor_centavos: plano.valorCentavos,
+      validade: vencimentoDoPlano(plano.assinadoEm, plano.meses, cobertura?.validade ?? null),
+      assinado_em: plano.assinadoEm,
+    })
+    .select("id")
+    .single();
+  if (error || !pacote) {
+    console.error("[cobranca] erro ao registrar plano:", error);
+    return { falhou: "plano" };
+  }
+
+  // Lançado depois do dia em que foi pago, o pagamento fica no dia da contratação:
+  // é nesse mês que a receita entra no painel.
+  const pagoEm = plano.assinadoEm < hojeSP() ? `${plano.assinadoEm}T15:00:00.000Z` : new Date().toISOString();
+
+  const { error: erroPagamento } = await supabase.from("pagamentos").insert({
+    pacote_id: pacote.id,
+    cliente_id: clienteId,
+    valor_centavos: plano.valorCentavos,
+    metodo: plano.metodo,
+    status: plano.jaPago ? "confirmado" : "pendente",
+    pago_em: plano.jaPago ? pagoEm : null,
+    registrado_por: authId,
+  });
+
+  await supabase
+    .from("clientes")
+    .update({ em_teste: false, updated_at: new Date().toISOString() })
+    .eq("id", clienteId)
+    .eq("em_teste", true);
+
+  if (erroPagamento) {
+    console.error("[cobranca] erro ao registrar pagamento:", erroPagamento);
+    return { falhou: "pagamento" };
+  }
+  return {};
+}
+
+// Cadastro de cliente novo. Todo cliente entra com o primeiro plano ou em teste,
+// e as duas coisas são decisão comercial: só o sócio cadastra.
+export async function criarCliente(form: FormData): Promise<{ erro?: string; id?: string }> {
+  const { authId } = await requireSocio();
   const supabase = await createClient();
 
   const nome = texto(form, "nome");
-  if (!nome) return;
+  if (!nome) return { erro: "Informe o nome da empresa." };
 
-  const { data } = await supabase
+  const emTeste = form.get("modo") === "teste";
+  let plano: DadosPlano | null = null;
+  if (!emTeste) {
+    // Confere o plano antes de cadastrar: com erro nele, nada é gravado.
+    const lido = lerPlano(form, hojeSP());
+    if ("erro" in lido) return { erro: lido.erro };
+    plano = lido.plano;
+  }
+
+  const { data, error } = await supabase
     .from("clientes")
     .insert({
       nome,
@@ -45,13 +167,25 @@ export async function criarCliente(form: FormData) {
       contato_nome: texto(form, "contato_nome"),
       contato_telefone: texto(form, "contato_telefone"),
       observacoes: texto(form, "observacoes"),
+      em_teste: emTeste,
       criado_por: authId,
     })
     .select("id")
     .single();
+  if (error || !data) {
+    console.error("[clientes] erro ao cadastrar cliente:", error);
+    return { erro: "Não consegui cadastrar. Tente de novo." };
+  }
 
-  revalidatePath("/clientes");
-  if (data) redirect(`/clientes/${data.id}`);
+  const resultado = plano ? await gravarPlano(supabase, data.id, plano, authId) : {};
+  revalidarCobranca(data.id);
+  if (resultado.falhou === "plano") {
+    return { id: data.id, erro: "O cliente foi cadastrado, mas o plano não. Registre o plano na página dele." };
+  }
+  if (resultado.falhou === "pagamento") {
+    return { id: data.id, erro: "O cliente e o plano foram cadastrados, mas o pagamento não. Confira na página dele." };
+  }
+  return { id: data.id };
 }
 
 export async function atualizarCliente(form: FormData) {
@@ -72,7 +206,10 @@ export async function atualizarCliente(form: FormData) {
     })
     .eq("id", id);
 
+  // O nome aparece também nas listas.
   revalidatePath(`/clientes/${id}`);
+  revalidatePath("/producao");
+  revalidatePath("/clientes");
 }
 
 export async function salvarBrandKit(form: FormData) {
@@ -135,91 +272,27 @@ export async function removerReferencia(form: FormData) {
 function revalidarCobranca(clienteId: string | null) {
   if (clienteId) revalidatePath(`/clientes/${clienteId}`);
   revalidatePath("/clientes");
-  revalidatePath("/cobrancas");
+  revalidatePath("/producao");
   revalidatePath("/dashboard");
+  revalidatePath("/financeiro");
 }
 
-// Vende um plano por tempo ou um pacote avulso de créditos, e registra o
-// pagamento junto: um pagamento por venda, no valor total, mesmo no plano anual.
-// No controle manual os dois acontecem juntos (o cliente paga e o saldo entra).
-// Quando houver gateway, o pagamento passa a nascer "pendente".
-export async function venderPacote(form: FormData): Promise<{ erro?: string }> {
+// Registra um plano na página do cliente: o primeiro, uma renovação ou um plano
+// novo. A agência não vende mais pacote avulso de créditos.
+export async function registrarPlano(form: FormData): Promise<{ erro?: string }> {
   const { authId } = await requireSocio();
   const supabase = await createClient();
   const clienteId = texto(form, "cliente_id");
   if (!clienteId) return { erro: "Cliente não informado." };
 
-  const tipo = form.get("tipo") === "tempo" ? "tempo" : "imagens";
-  const qtd = Number(form.get("qtd_imagens"));
-  if (!Number.isInteger(qtd) || qtd < 1 || qtd > 10_000) {
-    return { erro: "Informe quantos créditos entram, em número inteiro." };
-  }
-  const valorCentavos = reaisParaCentavos(texto(form, "valor_reais"));
-  if (valorCentavos === null) return { erro: "Informe o valor cobrado." };
+  const lido = lerPlano(form, hojeSP());
+  if ("erro" in lido) return { erro: lido.erro };
 
-  const hoje = hojeSP();
-  const assinadoEm = diaValido(texto(form, "assinado_em")) ?? hoje;
-  if (assinadoEm > hoje) return { erro: "A data de assinatura não pode ser depois de hoje." };
-
-  const metodoPedido = texto(form, "metodo") ?? "pix";
-  const metodo = metodoPedido in METODOS_PAGAMENTO ? metodoPedido : "pix";
-  const jaPago = form.get("ja_pago") === "on";
-
-  let plano: { meses: number; validade: string } | null = null;
-  if (tipo === "tempo") {
-    const meses = Number(form.get("meses"));
-    if (!duracaoValida(meses)) return { erro: "Escolha a duração do plano." };
-    // Com plano em vigor, o novo começa quando ele acaba (ver vencimentoDoPlano).
-    const { data: cobertura } = await supabase
-      .from("pacotes")
-      .select("validade")
-      .eq("cliente_id", clienteId)
-      .eq("tipo", "tempo")
-      .neq("status", "cancelado")
-      .not("validade", "is", null)
-      .order("validade", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    plano = { meses, validade: vencimentoDoPlano(assinadoEm, meses, cobertura?.validade ?? null) };
-  }
-
-  const { data: pacote, error } = await supabase
-    .from("pacotes")
-    .insert({
-      cliente_id: clienteId,
-      nome: plano ? nomeDoPlano(plano.meses) : `Pacote ${qtd} ${qtd === 1 ? "crédito" : "créditos"}`,
-      tipo,
-      meses: plano?.meses ?? null,
-      qtd_imagens: qtd,
-      valor_centavos: valorCentavos,
-      validade: plano?.validade ?? null,
-      assinado_em: assinadoEm,
-    })
-    .select("id")
-    .single();
-  if (error || !pacote) {
-    console.error("[cobranca] erro ao registrar pacote:", error);
-    return { erro: "Não consegui registrar. Tente de novo." };
-  }
-
-  // Lançado depois do dia em que foi pago, o pagamento fica no dia da assinatura:
-  // é nesse mês que a receita entra no painel.
-  const pagoEm = assinadoEm < hoje ? `${assinadoEm}T15:00:00.000Z` : new Date().toISOString();
-
-  const { error: erroPagamento } = await supabase.from("pagamentos").insert({
-    pacote_id: pacote.id,
-    cliente_id: clienteId,
-    valor_centavos: valorCentavos,
-    metodo,
-    status: jaPago ? "confirmado" : "pendente",
-    pago_em: jaPago ? pagoEm : null,
-    registrado_por: authId,
-  });
-
+  const resultado = await gravarPlano(supabase, clienteId, lido.plano, authId);
   revalidarCobranca(clienteId);
-  if (erroPagamento) {
-    console.error("[cobranca] erro ao registrar pagamento:", erroPagamento);
-    return { erro: "O plano entrou, mas o pagamento não. Confira a lista e tente marcar de novo." };
+  if (resultado.falhou === "plano") return { erro: "Não consegui registrar o plano. Tente de novo." };
+  if (resultado.falhou === "pagamento") {
+    return { erro: "O plano entrou, mas o pagamento não. Confira o histórico e tente marcar de novo." };
   }
   return {};
 }
@@ -255,25 +328,6 @@ export async function cancelarPacote(form: FormData) {
   await supabase.from("pagamentos").update({ status: "estornado" }).eq("pacote_id", id).eq("status", "pendente");
 
   revalidarCobranca(clienteId);
-}
-
-// Registra o tempo humano gasto na peça. É o número que decide se o pacote
-// de R$ 34,90 por 10 créditos fecha a conta — custo de API quase nunca é o
-// gargalo, tempo de gente é.
-export async function registrarTempoPeca(form: FormData) {
-  await requireOperador();
-  const supabase = await createClient();
-  const id = texto(form, "id");
-  const pedidoId = texto(form, "pedido_id");
-  const minutos = Number(form.get("minutos"));
-  if (!id || !Number.isFinite(minutos) || minutos < 0) return;
-
-  await supabase
-    .from("pecas")
-    .update({ tempo_operacao_segundos: Math.round(minutos * 60) })
-    .eq("id", id);
-
-  if (pedidoId) revalidatePath(`/pedidos/${pedidoId}`);
 }
 
 export interface ResultadoAprovacao {
@@ -334,8 +388,8 @@ export async function aprovarPeca(form: FormData): Promise<ResultadoAprovacao> {
         return {
           semCredito: true,
           erro: socio
-            ? "O cliente está sem crédito. Venda um pacote ou plano, ou aprove sem debitar."
-            : "O cliente está sem crédito para aprovar. Peça a um sócio para lançar o pacote.",
+            ? "O cliente está sem crédito. Registre um plano, ou aprove sem debitar."
+            : "O cliente está sem crédito para aprovar. Peça a um sócio para registrar o plano.",
         };
       }
     }
@@ -436,8 +490,11 @@ export async function alternarArquivoCliente(form: FormData) {
 }
 
 // Marca ou desmarca o cliente em teste: alguém que a agência atende para
-// experimentar, sem cobrar. Ele produz normalmente, mas sai da receita, das
-// cobranças e dos totais do painel, onde o custo dele aparece à parte.
+// experimentar, sem cobrar. Ele produz normalmente, mas sai da receita e das
+// cobranças, e o custo dele aparece à parte no painel.
+//
+// Sair do teste é começar a pagar, então só sai quem tem plano em dia. Sem plano,
+// é registrar o primeiro que tira o cliente do teste (ver gravarPlano).
 export async function alternarTesteCliente(form: FormData) {
   await requireSocio();
   const supabase = await createClient();
@@ -446,6 +503,17 @@ export async function alternarTesteCliente(form: FormData) {
 
   const { data: cliente } = await supabase.from("clientes").select("em_teste").eq("id", id).maybeSingle();
   if (!cliente) return;
+
+  if (cliente.em_teste) {
+    const { data: planos } = await supabase
+      .from("pacotes")
+      .select("*")
+      .eq("cliente_id", id)
+      .eq("tipo", "tempo")
+      .neq("status", "cancelado");
+    const plano = ultimoPlano((planos ?? []) as Pacote[]);
+    if (!plano?.validade || plano.validade < hojeSP()) return;
+  }
 
   await supabase
     .from("clientes")

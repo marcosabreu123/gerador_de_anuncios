@@ -7,8 +7,9 @@ import { formatarDia, hojeSP } from "@/lib/datas";
 import { seloDoPacote } from "@/lib/agencia/cobrancas";
 import { centavosParaBRL, rotuloDoMetodo, type Pacote, type Pagamento } from "@/lib/agencia/types";
 
-// Planos e pacotes do cliente, cada um com o próprio pagamento. Juntos porque é
-// assim que o sócio pensa a conta: "o plano de março foi pago?".
+// Planos do cliente, cada um com o próprio pagamento. Juntos porque é assim que o
+// sócio pensa a conta: "o plano de março foi pago?". Pacotes avulsos antigos
+// também aparecem: a agência não vende mais, mas o registro continua.
 export default function HistoricoPacotes({
   clienteId,
   pacotes,
@@ -26,7 +27,7 @@ export default function HistoricoPacotes({
   const semPacote = pagamentos.filter((pg) => !pg.pacote_id || !pacotes.some((p) => p.id === pg.pacote_id));
 
   if (pacotes.length === 0 && semPacote.length === 0) {
-    return <p className="text-sm text-[var(--muted)]">Nenhum plano ou pacote vendido ainda.</p>;
+    return <p className="text-sm text-[var(--muted)]">Nenhum plano registrado ainda.</p>;
   }
 
   return (
@@ -44,7 +45,7 @@ export default function HistoricoPacotes({
           p.status !== "cancelado" && !vencido && (p.tipo === "tempo" || restante > 0 || Boolean(pendente));
 
         const detalhes = [
-          `Assinado em ${formatarDia(p.assinado_em)}`,
+          `Contratado em ${formatarDia(p.assinado_em)}`,
           p.validade && `${vencido ? "venceu" : "vence"} em ${formatarDia(p.validade)}`,
           `${p.qtd_usadas} de ${p.qtd_imagens} ${p.qtd_imagens === 1 ? "crédito usado" : "créditos usados"}`,
         ].filter(Boolean);
@@ -77,7 +78,7 @@ export default function HistoricoPacotes({
                   )}
                   {renovavel && (
                     <Link
-                      href={`/clientes/${clienteId}?renovar=${p.id}#pacotes`}
+                      href={`/clientes/${clienteId}?renovar=${p.id}#plano`}
                       scroll={false}
                       className="btn btn-outline btn-sm"
                     >

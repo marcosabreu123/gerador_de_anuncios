@@ -10,15 +10,20 @@ export interface Aba {
 
 // As abas só escondem o painel, sem desmontar: o que foi digitado num formulário
 // continua lá se o operador trocar de aba antes de salvar. O id vai para o
-// endereço para dar para abrir direto numa aba (#identidade, por exemplo).
+// endereço para dar para abrir direto numa aba (#identidade, por exemplo), e um
+// link para #plano na própria página também troca de aba.
 export default function Abas({ abas }: { abas: Aba[] }) {
   const [ativa, setAtiva] = useState(abas[0].id);
 
   useEffect(() => {
     // O hash só existe no client: lido depois do mount para bater com o SSR.
-    const pedida = window.location.hash.slice(1);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (abas.some((a) => a.id === pedida)) setAtiva(pedida);
+    const abrirPedida = () => {
+      const pedida = window.location.hash.slice(1);
+      if (abas.some((a) => a.id === pedida)) setAtiva(pedida);
+    };
+    abrirPedida();
+    window.addEventListener("hashchange", abrirPedida);
+    return () => window.removeEventListener("hashchange", abrirPedida);
   }, [abas]);
 
   function abrir(id: string) {

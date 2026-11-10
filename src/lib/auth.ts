@@ -55,13 +55,13 @@ export async function requireOperador() {
   return resultado;
 }
 
-// Acesso de gestão: painel, custo, pacotes, pagamentos e configurações.
-// Só sócio. Colaborador que tentar abrir uma dessas telas volta para a área
-// que lhe cabe, em vez de ver um erro seco.
+// Acesso de gestão: painel, clientes, planos, pagamentos, financeiro e
+// configurações. Só sócio. Colaborador que tentar abrir uma dessas telas volta
+// para a Produção, que é a área dele, em vez de ver um erro seco.
 export async function requireSocio() {
   const resultado = await requireOperador();
   if (resultado.perfil.papel !== "socio") {
-    redirect("/clientes");
+    redirect("/producao");
   }
   return resultado;
 }

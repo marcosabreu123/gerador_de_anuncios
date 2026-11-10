@@ -22,7 +22,7 @@ export default async function Home() {
           Artes<span className="text-[var(--accent)]"> IA</span>
         </h1>
         <p className="text-sm text-[var(--muted)] mt-3 max-w-sm">
-          Produção de artes publicitárias para os clientes da agência, com controle de pacote e custo por
+          Produção de artes publicitárias para os clientes da agência, com controle de plano e custo por
           cliente.
         </p>
       </div>

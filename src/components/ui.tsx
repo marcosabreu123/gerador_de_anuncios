@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft, type LucideIcon } from "lucide-react";
+import { ROTULO_SITUACAO, type SituacaoCliente } from "@/lib/agencia/situacao-cliente";
 import type { StatusPeca, StatusPedido } from "@/lib/agencia/types";
 
 // Peças de interface que se repetem nas telas. Nenhuma tem estado, então servem
@@ -181,4 +182,39 @@ const SELOS: Record<StatusPedido | StatusPeca, { rotulo: string; tom: string }> 
 export function SeloStatus({ status }: { status: StatusPedido | StatusPeca }) {
   const selo = SELOS[status];
   return <span className={`badge shrink-0 ${selo.tom}`}>{selo.rotulo}</span>;
+}
+
+// Verde para quem está pedindo, cinza para quem parou, azul para o teste. O
+// arquivado é só o contorno. A cor nunca anda sozinha: a legenda e a dica dizem
+// o nome da situação.
+const COR_SITUACAO: Record<SituacaoCliente, string> = {
+  ativo: "bg-[var(--success)]",
+  inativo: "bg-[var(--muted)]",
+  em_teste: "bg-[var(--accent)]",
+  arquivado: "border-[1.5px] border-[var(--muted)]",
+};
+
+export function PontoSituacao({ situacao, dica }: { situacao: SituacaoCliente; dica?: string }) {
+  const texto = dica ?? ROTULO_SITUACAO[situacao];
+  return (
+    <span
+      role="img"
+      aria-label={texto}
+      title={texto}
+      className={`inline-block w-2 h-2 rounded-full shrink-0 ${COR_SITUACAO[situacao]}`}
+    />
+  );
+}
+
+export function LegendaSituacao({ situacoes }: { situacoes: SituacaoCliente[] }) {
+  return (
+    <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]" aria-label="Legenda">
+      {situacoes.map((s) => (
+        <li key={s} className="flex items-center gap-1.5">
+          <span aria-hidden="true" className={`inline-block w-2 h-2 rounded-full ${COR_SITUACAO[s]}`} />
+          {ROTULO_SITUACAO[s]}
+        </li>
+      ))}
+    </ul>
+  );
 }

@@ -1,11 +1,16 @@
 import { diasEntre, somarMeses } from "@/lib/datas";
-import type { Pacote, Pagamento, TipoPacote } from "./types";
+import { diasDesde, situacaoDoCliente, type SituacaoCliente } from "./situacao-cliente";
+import type { Cliente, Pacote, Pagamento, TipoPacote } from "./types";
 
-// Regras dos planos por tempo e da situação de cobrança de cada cliente.
+// Regras dos planos e da situação de cobrança de cada cliente.
 //
-// Só funções puras: a tela de cobranças, a do cliente, o menu e a rota de geração
-// leem os mesmos pacotes e não podem discordar sobre quem está vencido. O
-// formulário de venda roda as mesmas contas no navegador para mostrar o
+// Todo cliente que paga tem plano, de 1 mês no mínimo, contado da contratação. A
+// agência não vende mais pacote avulso: os que existem ficaram nos registros
+// antigos. Cliente em teste é a exceção: não paga, então não tem plano.
+//
+// Só funções puras: a aba Clientes, a página do cliente, o menu e a rota de
+// geração leem os mesmos pacotes e não podem discordar sobre quem está vencido. O
+// formulário do plano roda as mesmas contas no navegador para mostrar o
 // vencimento antes de salvar.
 
 export const DURACOES_PLANO = [
@@ -54,9 +59,13 @@ export function ultimoPlano(pacotes: Pacote[]): Pacote | null {
   return ultimo;
 }
 
-// Imagens que dá para usar hoje: pacotes ativos, com saldo e dentro da validade.
-// O pacote avulso não vence, então continua valendo depois que o plano acaba.
-export function imagensDisponiveis(pacotes: Pacote[], hoje: string): number {
+// Créditos que dá para usar hoje: pacotes ativos, com saldo e dentro da validade.
+// Os créditos do plano vencem com ele. Um pacote avulso antigo, que não vence,
+// continuaria valendo.
+export function imagensDisponiveis(
+  pacotes: Pick<Pacote, "status" | "validade" | "qtd_imagens" | "qtd_usadas">[],
+  hoje: string,
+): number {
   return pacotes
     .filter((p) => p.status === "ativo" && (!p.validade || p.validade >= hoje))
     .reduce((soma, p) => soma + Math.max(0, p.qtd_imagens - p.qtd_usadas), 0);
@@ -75,7 +84,8 @@ export const SELO_SITUACAO: Record<SituacaoPlano, { rotulo: string; tom: string 
   vencido: { rotulo: "Vencido", tom: "badge-danger" },
   vencendo: { rotulo: "Vencendo", tom: "badge-warning" },
   em_dia: { rotulo: "Em dia", tom: "badge-success" },
-  sem_plano: { rotulo: "Sem plano", tom: "" },
+  // Todo cliente que paga precisa de plano: sem ele, é pendência.
+  sem_plano: { rotulo: "Sem plano", tom: "badge-warning" },
 };
 
 export function prazoDoPlano(dias: number): string {
@@ -125,7 +135,7 @@ export function precosSugeridos(
   return precos;
 }
 
-// ---------- Carteira (tela de cobranças) ----------
+// ---------- Carteira (aba Clientes) ----------
 
 export interface PlanoResumo {
   id: string;
@@ -144,18 +154,23 @@ export interface LinhaCobranca {
   nome: string;
   nicho: string | null;
   logo: string | null;
+  situacao: SituacaoCliente;
+  emTeste: boolean;
+  // Dias desde o último pedido. Nulo para quem nunca pediu.
+  diasSemPedido: number | null;
   plano: PlanoResumo | null;
   // Dias até o vencimento do plano: negativo depois que venceu, nulo sem plano.
   dias: number | null;
   pagamento: SituacaoPagamento;
-  // A venda paga que a coluna "Pagamento" mostra: o plano ou, sem plano pago, o
-  // último pacote avulso.
-  vendaPaga: { tipo: "plano" | "avulso"; valorCentavos: number } | null;
+  // Valor do plano pago, que a coluna "Pagamento" mostra ao lado do "Pago".
+  pagoCentavos: number | null;
   // O que o botão "Marcar como pago" confirma: o pagamento em aberto mais antigo.
   pendente: { id: string; valorCentavos: number } | null;
   aReceberCentavos: number;
   imagens: number;
 }
+
+export type ClienteDaCarteira = Pick<Cliente, "id" | "nome" | "nicho" | "ativo" | "em_teste" | "created_at">;
 
 function agrupar<T>(itens: T[], chave: (item: T) => string): Map<string, T[]> {
   const grupos = new Map<string, T[]>();
@@ -173,12 +188,16 @@ export function montarLinhas({
   pacotes,
   pagamentos,
   logos,
+  ultimos = new Map(),
   hoje,
 }: {
-  clientes: { id: string; nome: string; nicho: string | null }[];
+  clientes: ClienteDaCarteira[];
   pacotes: Pacote[];
   pagamentos: Pagamento[];
   logos: Map<string, string>;
+  // Último pedido de cada cliente (ver ultimosPedidos). Sem ele, a situação conta
+  // só pelo cadastro.
+  ultimos?: Map<string, string>;
   hoje: string;
 }): LinhaCobranca[] {
   const pacotesPor = agrupar(pacotes, (p) => p.cliente_id);
@@ -192,24 +211,17 @@ export function montarLinhas({
       const abertos = pagos
         .filter((pg) => pg.status === "pendente")
         .sort((a, b) => a.created_at.localeCompare(b.created_at));
-      const foiPago = (p: Pacote | null) =>
-        Boolean(p && pagos.some((pg) => pg.pacote_id === p.id && pg.status === "confirmado"));
-      // Quem só compra pacote avulso também paga: sem plano pago, vale a última
-      // venda avulsa que não foi cancelada.
-      const avulso = dele
-        .filter((p) => p.tipo === "imagens" && p.status !== "cancelado")
-        .reduce<Pacote | null>((ultimo, p) => (!ultimo || p.created_at > ultimo.created_at ? p : ultimo), null);
-      const vendaPaga = plano && foiPago(plano)
-        ? { tipo: "plano" as const, valorCentavos: plano.valor_centavos }
-        : avulso && foiPago(avulso)
-          ? { tipo: "avulso" as const, valorCentavos: avulso.valor_centavos }
-          : null;
+      const planoPago = Boolean(plano && pagos.some((pg) => pg.pacote_id === plano.id && pg.status === "confirmado"));
+      const ultimo = ultimos.get(c.id) ?? null;
 
       return {
         clienteId: c.id,
         nome: c.nome,
         nicho: c.nicho,
         logo: logos.get(c.id) ?? null,
+        situacao: situacaoDoCliente(c, ultimo, hoje),
+        emTeste: Boolean(c.em_teste),
+        diasSemPedido: diasDesde(ultimo, hoje),
         plano: plano && {
           id: plano.id,
           nome: plano.nome,
@@ -220,8 +232,8 @@ export function montarLinhas({
           venceEm: plano.validade!,
         },
         dias: plano ? diasEntre(hoje, plano.validade!) : null,
-        pagamento: abertos.length > 0 ? "pendente" : vendaPaga ? "pago" : "sem_registro",
-        vendaPaga,
+        pagamento: abertos.length > 0 ? "pendente" : planoPago ? "pago" : "sem_registro",
+        pagoCentavos: planoPago ? plano!.valor_centavos : null,
         pendente: abertos[0] ? { id: abertos[0].id, valorCentavos: abertos[0].valor_centavos } : null,
         aReceberCentavos: abertos.reduce((soma, pg) => soma + pg.valor_centavos, 0),
         imagens: imagensDisponiveis(dele, hoje),
@@ -230,23 +242,48 @@ export function montarLinhas({
     .sort(ordemDeCobranca);
 }
 
-// Quem vence antes vem primeiro, com os vencidos no topo; os sem plano no fim.
-function ordemDeCobranca(a: LinhaCobranca, b: LinhaCobranca): number {
-  if (a.dias === null || b.dias === null) {
-    if (a.dias === b.dias) return a.nome.localeCompare(b.nome, "pt-BR");
-    return a.dias === null ? 1 : -1;
-  }
-  return a.dias - b.dias || a.nome.localeCompare(b.nome, "pt-BR");
+// O que pede ação primeiro: plano vencido, cliente pagante sem plano, depois os
+// planos pela data de vencimento. Em teste e arquivados no fim.
+function pesoNaCarteira(l: LinhaCobranca): number {
+  if (l.situacao === "arquivado") return 4;
+  if (l.emTeste) return 3;
+  if (l.dias === null) return 1;
+  return l.dias < 0 ? 0 : 2;
 }
 
-// Filtros da tela de cobranças. Aqui, e não no componente, porque a página do
+function ordemDeCobranca(a: LinhaCobranca, b: LinhaCobranca): number {
+  return (
+    pesoNaCarteira(a) - pesoNaCarteira(b) ||
+    (a.dias ?? 0) - (b.dias ?? 0) ||
+    a.nome.localeCompare(b.nome, "pt-BR")
+  );
+}
+
+// Filtros da aba Clientes. Aqui, e não no componente, porque a página do
 // servidor confere o ?filtro= do endereço e não enxerga valores de um módulo
 // "use client".
-export const FILTROS_COBRANCA = ["todos", "vencendo", "vencidos", "pendentes", "pagos", "em_dia", "sem_plano"] as const;
-export type FiltroCobranca = (typeof FILTROS_COBRANCA)[number];
+export const FILTROS_CLIENTES = [
+  "todos",
+  "vencendo",
+  "vencidos",
+  "pendentes",
+  "sem_plano",
+  "em_dia",
+  "em_teste",
+  "inativos",
+  "arquivados",
+] as const;
+export type FiltroClientes = (typeof FILTROS_CLIENTES)[number];
 
-// Quem pede ação do sócio: plano vencido ou vencendo, ou pagamento em aberto.
+export function filtroDeClientes(valor: string | undefined): FiltroClientes {
+  return (FILTROS_CLIENTES as readonly string[]).includes(valor ?? "") ? (valor as FiltroClientes) : "todos";
+}
+
+// Quem pede ação do sócio: plano vencido ou vencendo, pagamento em aberto, ou
+// cliente pagante sem plano. Cliente em teste não é cobrado e arquivado saiu da
+// carteira.
 export function precisaAtencao(linha: LinhaCobranca, janela: number = JANELA_PADRAO): boolean {
+  if (linha.emTeste || linha.situacao === "arquivado") return false;
   const situacao = situacaoDoPlano(linha.dias, janela);
-  return situacao === "vencido" || situacao === "vencendo" || linha.pagamento === "pendente";
+  return situacao !== "em_dia" || linha.pagamento === "pendente";
 }

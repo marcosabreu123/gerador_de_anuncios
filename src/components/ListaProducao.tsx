@@ -3,11 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus, Search, SearchX, Store } from "lucide-react";
-import { criarCliente } from "@/app/(app)/clientes/actions";
-import BotaoEnviar from "@/components/BotaoEnviar";
-import Modal from "@/components/Modal";
 import { Avatar, CabecalhoPagina, EstadoVazio } from "@/components/ui";
-import { textoDoUltimoPedido, type FiltroClientes, type SituacaoCliente } from "@/lib/agencia/situacao-cliente";
+import { textoDoUltimoPedido, type FiltroProducao, type SituacaoCliente } from "@/lib/agencia/situacao-cliente";
 
 export interface SeloCard {
   rotulo: string;
@@ -24,8 +21,10 @@ export interface ClienteCard {
   diasSemPedido: number | null;
   saldo: number;
   aprovadasNoMes: number;
+  // Artes prontas esperando aprovação.
+  paraAprovar: number;
   temPedidoEmAndamento: boolean;
-  // Plano vencendo ou vencido e pagamento em aberto. Vazio para o colaborador.
+  // Plano vencendo, vencido ou faltando, e pagamento em aberto. Vazio para o colaborador.
   cobranca: SeloCard[];
 }
 
@@ -35,55 +34,54 @@ const SELO_SITUACAO: Partial<Record<SituacaoCliente, SeloCard>> = {
   arquivado: { rotulo: "Arquivado", tom: "" },
 };
 
-const ROTULO_FILTRO: Record<FiltroClientes, string> = {
+const ROTULO_FILTRO: Record<FiltroProducao, string> = {
   todos: "Todos",
-  ativos: "Ativos",
-  inativos: "Inativos",
-  em_teste: "Em teste",
   em_producao: "Em produção",
+  para_aprovar: "Para aprovar",
   sem_credito: "Sem crédito",
+  em_teste: "Em teste",
   arquivados: "Arquivados",
 };
 
 // Some da fila de chips quando não tem ninguém, a não ser que esteja escolhido.
-const SO_COM_CLIENTES: FiltroClientes[] = ["em_teste", "arquivados"];
+const SO_COM_CLIENTES: FiltroProducao[] = ["em_teste", "arquivados"];
 
-function passaNoFiltro(c: ClienteCard, filtro: FiltroClientes): boolean {
+function passaNoFiltro(c: ClienteCard, filtro: FiltroProducao): boolean {
   // Arquivado só aparece em "Arquivados": cliente que saiu não ocupa a grade de
   // quem está sendo atendido hoje.
   if (filtro === "arquivados") return c.situacao === "arquivado";
   if (c.situacao === "arquivado") return false;
   switch (filtro) {
-    case "ativos":
-      return c.situacao === "ativo";
-    case "inativos":
-      return c.situacao === "inativo";
-    case "em_teste":
-      return c.situacao === "em_teste";
     case "em_producao":
       return c.temPedidoEmAndamento;
+    case "para_aprovar":
+      return c.paraAprovar > 0;
     case "sem_credito":
       // Cliente em teste não usa crédito: ficar sem não trava nada.
       return c.situacao !== "em_teste" && c.saldo === 0;
+    case "em_teste":
+      return c.situacao === "em_teste";
     default:
       return true;
   }
 }
 
-// Lista de clientes pensada para escala: com 20, 50 ou 100 empresas, o que
-// importa é achar rápido e enxergar quem precisa de atenção. Por isso cards
-// compactos, busca no topo e o cadastro escondido atrás de um botão — criar
-// cliente é eventual, achar cliente é o tempo todo.
-export default function ListaClientes({
+// A Produção pensada para escala: com 20, 50 ou 100 empresas, o que importa é
+// achar rápido e enxergar o que espera alguém. Por isso cards compactos, busca no
+// topo e atalhos para o que está em produção ou pronto para aprovar. Cadastrar
+// cliente fica na aba Clientes, com o plano.
+export default function ListaProducao({
   clientes,
   filtroInicial = "todos",
+  podeCadastrar,
 }: {
   clientes: ClienteCard[];
-  filtroInicial?: FiltroClientes;
+  filtroInicial?: FiltroProducao;
+  // Só o sócio cadastra: o cadastro já pede o plano ou o teste.
+  podeCadastrar: boolean;
 }) {
   const [busca, setBusca] = useState("");
-  const [filtro, setFiltro] = useState<FiltroClientes>(filtroInicial);
-  const [formAberto, setFormAberto] = useState(false);
+  const [filtro, setFiltro] = useState<FiltroProducao>(filtroInicial);
 
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -95,31 +93,31 @@ export default function ListaClientes({
   }, [clientes, busca, filtro]);
 
   const contagem = useMemo(() => {
-    const n = {} as Record<FiltroClientes, number>;
-    for (const f of Object.keys(ROTULO_FILTRO) as FiltroClientes[]) {
+    const n = {} as Record<FiltroProducao, number>;
+    for (const f of Object.keys(ROTULO_FILTRO) as FiltroProducao[]) {
       n[f] = clientes.filter((c) => passaNoFiltro(c, f)).length;
     }
     return n;
   }, [clientes]);
 
   // O endereço guarda o filtro: recarregar ou voltar não perde a lista que estava aberta.
-  function escolherFiltro(novo: FiltroClientes) {
+  function escolherFiltro(novo: FiltroProducao) {
     setFiltro(novo);
-    window.history.replaceState(null, "", novo === "todos" ? "/clientes" : `/clientes?filtro=${novo}`);
+    window.history.replaceState(null, "", novo === "todos" ? "/producao" : `/producao?filtro=${novo}`);
   }
 
-  const botaoNovo = (
-    <button type="button" onClick={() => setFormAberto(true)} className="btn btn-primary">
+  const botaoNovo = podeCadastrar && (
+    <Link href="/clientes?novo=1" className="btn btn-outline">
       <Plus size={16} aria-hidden="true" />
       Novo cliente
-    </button>
+    </Link>
   );
 
   return (
     <>
       <CabecalhoPagina
-        titulo="Clientes"
-        descricao="Cada cliente guarda a própria identidade visual, os materiais e os créditos."
+        titulo="Produção"
+        descricao="Escolha o cliente para abrir um pedido ou aprovar as artes prontas."
         acoes={botaoNovo}
       />
 
@@ -139,60 +137,35 @@ export default function ListaClientes({
           />
         </div>
 
-        {/* Atalhos que respondem "quem precisa de mim agora?" — a pergunta real
-            de quem gerencia dezenas de contas. */}
+        {/* Atalhos que respondem "o que espera alguém agora?". */}
         <div className="flex gap-2 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="Filtrar clientes">
-          {(Object.keys(ROTULO_FILTRO) as FiltroClientes[])
+          {(Object.keys(ROTULO_FILTRO) as FiltroProducao[])
             .filter((f) => !SO_COM_CLIENTES.includes(f) || contagem[f] > 0 || f === filtro)
             .map((f) => (
-              <Chip key={f} ativo={filtro === f} onClick={() => escolherFiltro(f)}>
-                {ROTULO_FILTRO[f]} <Contagem>{contagem[f]}</Contagem>
-              </Chip>
+              <button
+                key={f}
+                type="button"
+                onClick={() => escolherFiltro(f)}
+                aria-pressed={filtro === f}
+                className={`${filtro === f ? "chip chip-selected" : "chip"} shrink-0`}
+              >
+                {ROTULO_FILTRO[f]} <span className="opacity-60 tabular-nums">{contagem[f]}</span>
+              </button>
             ))}
         </div>
       </div>
-
-      {formAberto && (
-        <Modal titulo="Novo cliente" aoFechar={() => setFormAberto(false)}>
-          <form action={criarCliente} className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="flex flex-col">
-                <span className="label">Nome da empresa *</span>
-                <input name="nome" required className="input" placeholder="Ex: Burger do Zé" />
-              </label>
-              <label className="flex flex-col">
-                <span className="label">Nicho</span>
-                <input name="nicho" className="input" placeholder="Ex: fast-food, gastrobar" />
-              </label>
-              <label className="flex flex-col">
-                <span className="label">Contato</span>
-                <input name="contato_nome" className="input" />
-              </label>
-              <label className="flex flex-col">
-                <span className="label">Telefone</span>
-                <input name="contato_telefone" className="input" />
-              </label>
-            </div>
-            <label className="flex flex-col">
-              <span className="label">Sobre a empresa</span>
-              <textarea
-                name="observacoes"
-                className="input min-h-[76px] resize-y"
-                placeholder="O que ela faz, para quem e como a pessoa compra. A IA lê isto antes de criar qualquer arte."
-              />
-            </label>
-            <BotaoEnviar className="btn btn-primary self-end">Cadastrar</BotaoEnviar>
-          </form>
-        </Modal>
-      )}
 
       {visiveis.length === 0 ? (
         <div className="card">
           {contagem.todos === 0 && filtro === "todos" && !busca ? (
             <EstadoVazio
               icone={Store}
-              titulo="Nenhum cliente ativo"
-              descricao="Cadastre a primeira empresa para começar a produzir."
+              titulo="Nenhum cliente ainda"
+              descricao={
+                podeCadastrar
+                  ? "Cadastre a primeira empresa na aba Clientes, com o plano ou em teste."
+                  : "Peça a um sócio para cadastrar a primeira empresa."
+              }
               acao={botaoNovo}
             />
           ) : (
@@ -233,14 +206,15 @@ function CardCliente({ cliente: c }: { cliente: ClienteCard }) {
         </div>
         {selo && <span className={`badge ${selo.tom} shrink-0`}>{selo.rotulo}</span>}
       </div>
-      {(mostraCredito || c.temPedidoEmAndamento || c.cobranca.length > 0) && (
+      {(mostraCredito || c.temPedidoEmAndamento || c.paraAprovar > 0 || c.cobranca.length > 0) && (
         <div className="flex flex-wrap items-center gap-1.5">
+          {c.paraAprovar > 0 && <span className="badge badge-accent">{c.paraAprovar} para aprovar</span>}
+          {c.temPedidoEmAndamento && <span className="badge">Em produção</span>}
           {mostraCredito && (
             <span className={`badge ${c.saldo === 0 ? "badge-danger" : ""}`}>
               {c.saldo === 0 ? "Sem crédito" : `${c.saldo} ${c.saldo === 1 ? "crédito" : "créditos"}`}
             </span>
           )}
-          {c.temPedidoEmAndamento && <span className="badge badge-accent">Em produção</span>}
           {c.cobranca.map((s) => (
             <span key={s.rotulo} className={`badge ${s.tom}`}>
               {s.rotulo}
@@ -253,29 +227,4 @@ function CardCliente({ cliente: c }: { cliente: ClienteCard }) {
       </p>
     </Link>
   );
-}
-
-function Chip({
-  ativo,
-  onClick,
-  children,
-}: {
-  ativo: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={ativo}
-      className={`${ativo ? "chip chip-selected" : "chip"} shrink-0`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Contagem({ children }: { children: React.ReactNode }) {
-  return <span className="opacity-60 tabular-nums">{children}</span>;
 }

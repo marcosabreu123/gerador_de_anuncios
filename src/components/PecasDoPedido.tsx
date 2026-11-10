@@ -6,7 +6,7 @@ import { Check, Download, ImagePlus, Maximize2, PencilLine, Proportions, X } fro
 import { lerRespostaJSON } from "@/lib/fetch-json";
 import { baixarArte } from "@/lib/download";
 import { enviarImagemParaStorage } from "@/lib/upload-storage";
-import { aprovarPeca, registrarTempoPeca, usarVersaoPeca } from "@/app/(app)/clientes/actions";
+import { aprovarPeca, usarVersaoPeca } from "@/app/(app)/clientes/actions";
 import BotaoEnviar from "@/components/BotaoEnviar";
 import Modal from "@/components/Modal";
 import { SeloStatus } from "@/components/ui";
@@ -573,33 +573,6 @@ export default function PecasDoPedido({
                   </div>
                   {erroAnexo && <p className="text-[13px] text-[var(--danger)]">{erroAnexo}</p>}
                 </div>
-              )}
-
-              {/* Tempo humano: é o número que decide se o pacote fecha a conta,
-                  já que o custo de API raramente é o gargalo. Só aparece quando
-                  há arte: em peça na fila o campo não diz nada. */}
-              {peca.imagem_url && (
-                <form
-                  action={registrarTempoPeca}
-                  className="flex items-center gap-2 border-t border-[var(--border)] pt-3 mt-auto"
-                >
-                  <input type="hidden" name="id" value={peca.id} />
-                  <input type="hidden" name="pedido_id" value={pedidoId} />
-                  <label className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-[13px] text-[var(--muted)]">Seu tempo (min)</span>
-                    <input
-                      name="minutos"
-                      type="number"
-                      min={0}
-                      step="0.5"
-                      defaultValue={
-                        peca.tempo_operacao_segundos ? peca.tempo_operacao_segundos / 60 : undefined
-                      }
-                      className="input w-20 min-h-8 py-1"
-                    />
-                  </label>
-                  <BotaoEnviar className="btn btn-ghost btn-sm">Salvar</BotaoEnviar>
-                </form>
               )}
             </div>
           </div>

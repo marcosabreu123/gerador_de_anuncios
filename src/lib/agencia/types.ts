@@ -1,6 +1,7 @@
 import type { LeituraDasReferencias } from "@/lib/ai/ler-referencias";
 import type { EstiloComunicacao, Formato, IntensidadeVisual, TipoImagem } from "@/lib/types";
 import type { ObjetivoArte, TextoObrigatorio } from "./objetivos";
+import type { SituacaoCliente } from "./situacao-cliente";
 
 // Tipos do modelo de agência — espelham supabase/schema-agencia.sql.
 //
@@ -85,8 +86,9 @@ export interface Referencia {
 
 export type StatusPacote = "ativo" | "esgotado" | "expirado" | "cancelado";
 
-// imagens: pacote avulso, que não vence. tempo: plano de 1, 3, 6 ou 12 meses,
-// com as imagens para usar no período (ver schema-cobrancas.sql).
+// tempo: plano de 1, 3, 6 ou 12 meses, com os créditos para usar no período (ver
+// schema-cobrancas.sql). imagens: pacote avulso, que não vencia. A agência parou de
+// vendê-lo; ele só existe nos registros antigos.
 export type TipoPacote = "imagens" | "tempo";
 
 export interface Pacote {
@@ -324,7 +326,12 @@ export interface FilaJob {
 export interface ResumoCustoCliente {
   cliente_id: string;
   cliente_nome: string;
+  situacao: SituacaoCliente;
   em_teste: boolean;
+  // Dias desde o último pedido. Nulo para quem nunca pediu.
+  dias_sem_pedido: number | null;
+  // Pedidos abertos no período.
+  pedidos: number;
   // Aprovadas no período. É a arte aprovada que gasta crédito do cliente.
   artes_aprovadas: number;
   // Feitas no período e ainda sem aprovação: trabalho que não virou crédito.
@@ -333,10 +340,26 @@ export interface ResumoCustoCliente {
   // O multiplicador que realmente define a margem: quantas imagens foram
   // precisas por arte aprovada, contando as variações que ninguém aprovou.
   geracoes_por_arte: number;
+  // Custo de geração: tudo que a OpenAI cobrou pelas chamadas do cliente.
   custo_brl: number;
   receita_brl: number;
   margem_brl: number;
-  tempo_operacao_segundos: number;
+  // Créditos para usar hoje. Nulo para cliente em teste, que não usa crédito.
+  creditos: number | null;
+}
+
+// Teve alguma coisa no mês: pedido, geração, arte, pagamento. Aqui, e não no
+// relatório, porque a tabela do painel roda no navegador e o relatório só no
+// servidor.
+export function teveMovimento(r: ResumoCustoCliente): boolean {
+  return (
+    r.pedidos > 0 ||
+    r.geracoes > 0 ||
+    r.custo_brl > 0 ||
+    r.receita_brl > 0 ||
+    r.artes_aprovadas > 0 ||
+    r.aguardando_aprovacao > 0
+  );
 }
 
 export function formatarBRL(valor: number): string {
@@ -345,6 +368,11 @@ export function formatarBRL(valor: number): string {
 
 export function centavosParaBRL(centavos: number): string {
   return formatarBRL(centavos / 100);
+}
+
+// Crédito da OpenAI, que é cobrado em dólar: "US$ 6,60".
+export function formatarUSD(valor: number): string {
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "USD" });
 }
 
 // Valor digitado em reais ("1.200,00", "300", "34.90") para centavos. Nulo se

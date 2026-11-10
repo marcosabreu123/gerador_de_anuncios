@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { hojeSP } from "@/lib/datas";
-import { diasDesde, situacaoDoCliente, ultimosPedidos, type SituacaoCliente } from "./situacao-cliente";
+import { imagensDisponiveis } from "./cobrancas";
+import { diasDesde, situacaoDoCliente, ultimosPedidos } from "./situacao-cliente";
 import type { ResumoCustoCliente } from "./types";
 
 // Agregações para o painel dos sócios. O rateio só é possível porque
@@ -8,8 +9,12 @@ import type { ResumoCustoCliente } from "./types";
 // não havia nada disso, e o custo por cliente era literalmente desconhecido.
 //
 // A conta do mês gira em torno da arte aprovada: é ela que gasta o crédito do
-// cliente. Todo o gasto de API até a aprovação (variações que ninguém escolheu,
-// ajustes, outros formatos e falhas) é dividido pelas artes aprovadas.
+// cliente. Todo o custo de geração até a aprovação (variações que ninguém
+// escolheu, ajustes, outros formatos e falhas) é dividido pelas artes aprovadas.
+//
+// O custo aqui é o que cada arte gastou para gerar. O dinheiro que saiu para a
+// OpenAI, a recarga, fica no Financeiro. Os dois nunca se somam: a recarga já
+// paga estas gerações.
 
 export interface PeriodoRelatorio {
   inicio: string; // ISO
@@ -51,18 +56,10 @@ export function artesPorDia(instantes: string[], periodo: PeriodoRelatorio): Pro
   return dias;
 }
 
-export interface ClienteNaCarteira {
-  id: string;
-  nome: string;
-  situacao: SituacaoCliente;
-  // Dias desde o último pedido. Nulo para quem nunca pediu.
-  dias_sem_pedido: number | null;
-}
-
 export interface RelatorioDoMes {
+  // Todos os clientes, inclusive quem não teve nada no mês e os arquivados.
   resumos: ResumoCustoCliente[];
   producao: ProducaoDoDia[];
-  carteira: ClienteNaCarteira[];
 }
 
 export async function relatorioDoMes(periodo: PeriodoRelatorio): Promise<RelatorioDoMes> {
@@ -74,6 +71,8 @@ export async function relatorioDoMes(periodo: PeriodoRelatorio): Promise<Relator
     { data: feitas },
     { data: aprovadas },
     { data: pagamentos },
+    { data: pedidos },
+    { data: pacotes },
     ultimos,
   ] = await Promise.all([
     supabase.from("clientes").select("id, nome, ativo, em_teste, created_at"),
@@ -82,10 +81,10 @@ export async function relatorioDoMes(periodo: PeriodoRelatorio): Promise<Relator
       .select("cliente_id, custo_brl, tipo")
       .gte("created_at", periodo.inicio)
       .lte("created_at", periodo.fim),
-    // Feitas no mês: dão o tempo humano e o que ainda está sem aprovação.
+    // Feitas no mês: dão o que ainda está sem aprovação.
     supabase
       .from("pecas")
-      .select("cliente_id, status, tempo_operacao_segundos")
+      .select("cliente_id, status")
       .gte("created_at", periodo.inicio)
       .lte("created_at", periodo.fim),
     // Aprovadas no mês, mesmo que feitas antes: é a aprovação que gasta crédito.
@@ -103,17 +102,31 @@ export async function relatorioDoMes(periodo: PeriodoRelatorio): Promise<Relator
       .eq("status", "confirmado")
       .gte("pago_em", periodo.inicio)
       .lte("pago_em", periodo.fim),
+    supabase.from("pedidos").select("cliente_id").gte("created_at", periodo.inicio).lte("created_at", periodo.fim),
+    // Créditos de hoje: o saldo é agora, não do mês.
+    supabase.from("pacotes").select("cliente_id, status, validade, qtd_imagens, qtd_usadas"),
     ultimosPedidos(supabase),
   ]);
 
   const hoje = hojeSP();
+  const pacotesPor = new Map<string, NonNullable<typeof pacotes>>();
+  for (const p of pacotes ?? []) {
+    const lista = pacotesPor.get(p.cliente_id);
+    if (lista) lista.push(p);
+    else pacotesPor.set(p.cliente_id, [p]);
+  }
+
   const porCliente = new Map<string, ResumoCustoCliente>();
-  const carteira: ClienteNaCarteira[] = [];
   for (const c of clientes ?? []) {
+    const ultimo = ultimos.get(c.id) ?? null;
+    const emTeste = Boolean(c.em_teste);
     porCliente.set(c.id, {
       cliente_id: c.id,
       cliente_nome: c.nome,
-      em_teste: Boolean(c.em_teste),
+      situacao: situacaoDoCliente(c, ultimo, hoje),
+      em_teste: emTeste,
+      dias_sem_pedido: diasDesde(ultimo, hoje),
+      pedidos: 0,
       artes_aprovadas: 0,
       aguardando_aprovacao: 0,
       geracoes: 0,
@@ -121,14 +134,7 @@ export async function relatorioDoMes(periodo: PeriodoRelatorio): Promise<Relator
       custo_brl: 0,
       receita_brl: 0,
       margem_brl: 0,
-      tempo_operacao_segundos: 0,
-    });
-    const ultimo = ultimos.get(c.id) ?? null;
-    carteira.push({
-      id: c.id,
-      nome: c.nome,
-      situacao: situacaoDoCliente(c, ultimo, hoje),
-      dias_sem_pedido: diasDesde(ultimo, hoje),
+      creditos: emTeste ? null : imagensDisponiveis(pacotesPor.get(c.id) ?? [], hoje),
     });
   }
 
@@ -145,27 +151,32 @@ export async function relatorioDoMes(periodo: PeriodoRelatorio): Promise<Relator
 
   for (const p of feitas ?? []) {
     const alvo = porCliente.get(p.cliente_id);
-    if (!alvo) continue;
-    if (p.status === "gerada") alvo.aguardando_aprovacao += 1;
-    alvo.tempo_operacao_segundos += p.tempo_operacao_segundos ?? 0;
+    if (alvo && p.status === "gerada") alvo.aguardando_aprovacao += 1;
   }
 
-  // O gráfico mostra a produção da agência: cliente em teste fica de fora dele também.
+  // O gráfico mostra tudo que a agência aprovou, inclusive para os clientes em teste.
   const aprovadasNoDia: string[] = [];
   for (const p of aprovadas ?? []) {
     const alvo = porCliente.get(p.cliente_id);
     if (!alvo || !p.aprovada_em) continue;
     alvo.artes_aprovadas += 1;
-    if (!alvo.em_teste) aprovadasNoDia.push(p.aprovada_em);
+    aprovadasNoDia.push(p.aprovada_em);
   }
 
   for (const pg of pagamentos ?? []) {
     const alvo = porCliente.get(pg.cliente_id);
-    if (!alvo) continue;
-    alvo.receita_brl += pg.valor_centavos / 100;
+    if (alvo) alvo.receita_brl += pg.valor_centavos / 100;
+  }
+
+  for (const p of pedidos ?? []) {
+    const alvo = porCliente.get(p.cliente_id);
+    if (alvo) alvo.pedidos += 1;
   }
 
   for (const resumo of porCliente.values()) {
+    // Cliente em teste não paga: o que ele pagou antes de entrar no teste sai da
+    // receita, como nas cobranças.
+    if (resumo.em_teste) resumo.receita_brl = 0;
     // O multiplicador que decide a margem: quantas IMAGENS foram precisas por
     // arte aprovada. 1 = acertou de primeira; 3+ = o briefing ou o brand kit
     // do cliente precisa de ajuste, porque cada tentativa extra sai da margem.
@@ -176,57 +187,65 @@ export async function relatorioDoMes(periodo: PeriodoRelatorio): Promise<Relator
   return {
     resumos: [...porCliente.values()].sort((a, b) => b.custo_brl - a.custo_brl),
     producao: artesPorDia(aprovadasNoDia, periodo),
-    carteira,
   };
 }
 
 export interface TotaisPeriodo {
+  // Só os clientes pagantes: quem está em teste não paga.
   receita_brl: number;
-  custo_brl: number;
+  custo_pagantes_brl: number;
   margem_brl: number;
+  // Todos os clientes. A parte dos clientes em teste vem separada.
+  custo_brl: number;
+  custo_em_teste_brl: number;
   artes_aprovadas: number;
+  artes_em_teste: number;
+  // Sem os arquivados: cliente que saiu não vai aprovar mais nada.
   aguardando_aprovacao: number;
   geracoes: number;
-  // Todo o gasto de API do mês dividido pelas artes aprovadas no mês.
+  pedidos: number;
+  // Todo o custo de geração do mês dividido pelas artes aprovadas no mês.
   custo_por_arte_aprovada: number;
-  tempo_por_arte_min: number;
-  // Clientes em teste ficam fora de tudo acima. O custo deles é da agência e
-  // aparece à parte, para não sumir.
-  custo_em_teste_brl: number;
 }
 
 export function totalizar(resumos: ResumoCustoCliente[]): TotaisPeriodo {
-  const t = { receita: 0, custo: 0, aprovadas: 0, aguardando: 0, geracoes: 0, tempo: 0, custoTeste: 0 };
+  const t = {
+    receita: 0,
+    custoPagantes: 0,
+    custo: 0,
+    custoTeste: 0,
+    aprovadas: 0,
+    aprovadasTeste: 0,
+    aguardando: 0,
+    geracoes: 0,
+    pedidos: 0,
+  };
   for (const r of resumos) {
-    if (r.em_teste) {
-      t.custoTeste += r.custo_brl;
-      continue;
-    }
-    t.receita += r.receita_brl;
     t.custo += r.custo_brl;
     t.aprovadas += r.artes_aprovadas;
-    t.aguardando += r.aguardando_aprovacao;
     t.geracoes += r.geracoes;
-    t.tempo += r.tempo_operacao_segundos;
+    t.pedidos += r.pedidos;
+    if (r.situacao !== "arquivado") t.aguardando += r.aguardando_aprovacao;
+    if (r.em_teste) {
+      t.custoTeste += r.custo_brl;
+      t.aprovadasTeste += r.artes_aprovadas;
+    } else {
+      t.receita += r.receita_brl;
+      t.custoPagantes += r.custo_brl;
+    }
   }
 
   return {
     receita_brl: t.receita,
+    custo_pagantes_brl: t.custoPagantes,
+    margem_brl: t.receita - t.custoPagantes,
     custo_brl: t.custo,
-    margem_brl: t.receita - t.custo,
+    custo_em_teste_brl: t.custoTeste,
     artes_aprovadas: t.aprovadas,
+    artes_em_teste: t.aprovadasTeste,
     aguardando_aprovacao: t.aguardando,
     geracoes: t.geracoes,
+    pedidos: t.pedidos,
     custo_por_arte_aprovada: t.aprovadas > 0 ? t.custo / t.aprovadas : 0,
-    // Tempo humano é o que realmente aperta a margem de um pacote de
-    // R$ 34,90 por 10 créditos — por isso entra no painel ao lado do custo.
-    tempo_por_arte_min: t.aprovadas > 0 ? t.tempo / t.aprovadas / 60 : 0,
-    custo_em_teste_brl: t.custoTeste,
   };
-}
-
-export function contarCarteira(carteira: ClienteNaCarteira[]): Record<SituacaoCliente, number> {
-  const contagem: Record<SituacaoCliente, number> = { ativo: 0, inativo: 0, em_teste: 0, arquivado: 0 };
-  for (const c of carteira) contagem[c.situacao] += 1;
-  return contagem;
 }

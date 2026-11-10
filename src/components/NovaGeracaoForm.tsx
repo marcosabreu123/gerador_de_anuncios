@@ -842,7 +842,7 @@ export default function NovaGeracaoForm({
             <p className="text-xs text-[var(--muted)]">
               {planoVencidoEm
                 ? `O plano deste cliente venceu em ${formatarDia(planoVencidoEm)}. Peça a um sócio para renovar.`
-                : "Este cliente está sem crédito. Peça a um sócio para lançar o pacote."}
+                : "Este cliente está sem crédito. Peça a um sócio para registrar o plano."}
             </p>
           )}
         </div>
