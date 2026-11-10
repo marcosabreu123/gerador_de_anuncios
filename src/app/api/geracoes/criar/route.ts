@@ -4,6 +4,7 @@ import { materiaisDisponiveis, tituloDoPedido } from "@/lib/ai/agente-pedido";
 import { enfileirar } from "@/lib/agencia/fila";
 import { saldoDoCliente } from "@/lib/agencia/pacotes";
 import { transcreverPedido } from "@/lib/agencia/transcricao";
+import { formatarDia } from "@/lib/datas";
 import type { EstiloComunicacao, Formato, IntensidadeVisual, TipoImagem } from "@/lib/types";
 import {
   PEDIDO_SEM_TEXTO,
@@ -149,9 +150,15 @@ export async function POST(request: NextRequest) {
   // decisão de produzir fiado é comercial, então fica com o sócio.
   const saldo = await saldoDoCliente(clienteId);
   if (saldo.disponivel < quantidade && !(forcarSemSaldo && perfil.papel === "socio")) {
+    // Plano vencido é o motivo mais comum do saldo zerado: dizer isso poupa o
+    // operador de procurar por que as imagens sumiram.
+    const motivo =
+      saldo.disponivel === 0 && saldo.planoVencidoEm
+        ? `O plano deste cliente venceu em ${formatarDia(saldo.planoVencidoEm)}. Renove para gerar.`
+        : `Saldo insuficiente: o cliente tem ${saldo.disponivel} imagem(ns) e você pediu ${quantidade}.`;
     return NextResponse.json(
       {
-        error: `Saldo insuficiente: o cliente tem ${saldo.disponivel} imagem(ns) e você pediu ${quantidade}.`,
+        error: motivo,
         saldoInsuficiente: true,
         disponivel: saldo.disponivel,
         necessario: quantidade,

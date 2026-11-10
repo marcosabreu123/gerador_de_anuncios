@@ -81,20 +81,40 @@ export interface Referencia {
 
 export type StatusPacote = "ativo" | "esgotado" | "expirado" | "cancelado";
 
+// imagens: pacote avulso, que não vence. tempo: plano de 1, 3, 6 ou 12 meses,
+// com as imagens para usar no período (ver schema-cobrancas.sql).
+export type TipoPacote = "imagens" | "tempo";
+
 export interface Pacote {
   id: string;
   cliente_id: string;
   nome: string;
+  tipo: TipoPacote;
+  meses: number | null;
   qtd_imagens: number;
   qtd_usadas: number;
   valor_centavos: number;
   status: StatusPacote;
+  // Último dia de uso. Sempre preenchida no plano; nula no pacote avulso.
   validade: string | null;
+  assinado_em: string;
   created_at: string;
 }
 
 export type MetodoPagamento = "pix" | "dinheiro" | "transferencia" | "cartao" | "gateway";
 export type StatusPagamento = "pendente" | "confirmado" | "estornado";
+
+// Os que a tela oferece. "gateway" fica para quando houver integração.
+export const METODOS_PAGAMENTO: Record<Exclude<MetodoPagamento, "gateway">, string> = {
+  pix: "Pix",
+  cartao: "Cartão",
+  dinheiro: "Dinheiro",
+  transferencia: "Transferência",
+};
+
+export function rotuloDoMetodo(metodo: string): string {
+  return (METODOS_PAGAMENTO as Record<string, string>)[metodo] ?? (metodo === "gateway" ? "Gateway" : metodo);
+}
 
 export interface Pagamento {
   id: string;
@@ -308,4 +328,22 @@ export function formatarBRL(valor: number): string {
 
 export function centavosParaBRL(centavos: number): string {
   return formatarBRL(centavos / 100);
+}
+
+// Valor digitado em reais ("1.200,00", "300", "34.90") para centavos. Nulo se
+// não for um valor positivo. Sem vírgula, ponto seguido de três dígitos é
+// milhar, como se escreve aqui: "1.200" é mil e duzentos.
+export function reaisParaCentavos(texto: string | null | undefined): number | null {
+  let limpo = (texto ?? "").replace(/R\$|\s/g, "");
+  if (!/^[\d.,]+$/.test(limpo)) return null;
+  if (limpo.includes(",")) limpo = limpo.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(limpo)) limpo = limpo.replace(/\./g, "");
+  const reais = Number(limpo);
+  if (!Number.isFinite(reais) || reais <= 0) return null;
+  return Math.round(reais * 100);
+}
+
+// Centavos no formato do campo de valor: 30000 vira "300,00".
+export function centavosParaCampo(centavos: number): string {
+  return (centavos / 100).toFixed(2).replace(".", ",");
 }

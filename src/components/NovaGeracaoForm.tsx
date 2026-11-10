@@ -8,6 +8,7 @@ import { lerRespostaJSON } from "@/lib/fetch-json";
 import GerandoMensagem from "@/components/GerandoMensagem";
 import { TituloCard } from "@/components/ui";
 import { enviarImagemParaStorage } from "@/lib/upload-storage";
+import { formatarDia } from "@/lib/datas";
 import type { DataProxima } from "@/lib/agencia/calendario";
 import type { PedidoParaRepetir } from "@/lib/agencia/repetir-pedido";
 import type { ModoImagemEnviada, Referencia } from "@/lib/agencia/types";
@@ -82,6 +83,7 @@ const INTENSIDADES: { valor: IntensidadeVisual; label: string }[] = [
 export default function NovaGeracaoForm({
   clienteId,
   saldoDisponivel,
+  planoVencidoEm,
   ehSocio,
   fotosProduto,
   materiais,
@@ -90,6 +92,8 @@ export default function NovaGeracaoForm({
 }: {
   clienteId: string;
   saldoDisponivel: number;
+  // Vencimento do plano quando é ele que zerou o saldo.
+  planoVencidoEm?: string | null;
   ehSocio: boolean;
   fotosProduto: Referencia[];
   materiais: { tipo: string; label: string; tem: boolean }[];
@@ -725,7 +729,9 @@ export default function NovaGeracaoForm({
 
           {bloqueadoSemSaldo && (
             <p className="text-xs text-[var(--muted)]">
-              Este cliente não tem saldo suficiente. Peça a um sócio para lançar o pacote.
+              {planoVencidoEm
+                ? `O plano deste cliente venceu em ${formatarDia(planoVencidoEm)}. Peça a um sócio para renovar.`
+                : "Este cliente não tem saldo suficiente. Peça a um sócio para lançar o pacote."}
             </p>
           )}
         </div>

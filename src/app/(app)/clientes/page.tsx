@@ -2,6 +2,7 @@ import { requireOperador } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import ListaClientes, { type ClienteCard } from "@/components/ListaClientes";
 import { mesAtual } from "@/lib/agencia/relatorio";
+import { hojeSP } from "@/lib/datas";
 import type { Cliente } from "@/lib/agencia/types";
 
 // Acessível a sócio E colaborador: é a tela de produção. O que muda por
@@ -31,7 +32,8 @@ export default async function ClientesPage() {
     supabase.from("referencias").select("cliente_id, url").eq("tipo", "logo"),
   ]);
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  // Mesmo dia da tela do cliente e da cobrança (ver lib/datas.ts).
+  const hoje = hojeSP();
 
   const saldoPorCliente = new Map<string, number>();
   for (const p of pacotes ?? []) {

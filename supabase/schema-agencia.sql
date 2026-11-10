@@ -250,15 +250,18 @@ as $fn$
 declare
   v_pacote uuid;
   v_restante integer;
+  v_hoje date := (now() at time zone 'America/Sao_Paulo')::date;
 begin
-  -- Consome do pacote ativo mais antigo (FIFO), ignorando os vencidos.
+  -- Consome primeiro o que vence antes, ignorando os vencidos; no empate, o
+  -- mais antigo. Igual a schema-cobrancas.sql, para rodar este arquivo de novo
+  -- não desfazer a ordem dos planos por tempo.
   select id into v_pacote
   from public.pacotes
   where cliente_id = p_cliente
     and status = 'ativo'
     and qtd_usadas < qtd_imagens
-    and (validade is null or validade >= current_date)
-  order by created_at asc
+    and (validade is null or validade >= v_hoje)
+  order by validade asc nulls last, created_at asc
   limit 1;
 
   if v_pacote is null then

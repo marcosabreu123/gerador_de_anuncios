@@ -33,12 +33,14 @@ export async function resumoPorCliente(periodo: PeriodoRelatorio): Promise<Resum
         .select("cliente_id, status, tempo_operacao_segundos, pacote_consumido")
         .gte("created_at", periodo.inicio)
         .lte("created_at", periodo.fim),
+      // Receita entra no mês em que foi paga, não no mês em que foi lançada: um
+      // plano lançado em aberto e pago no mês seguinte é receita do seguinte.
       supabase
         .from("pagamentos")
         .select("cliente_id, valor_centavos, status")
         .eq("status", "confirmado")
-        .gte("created_at", periodo.inicio)
-        .lte("created_at", periodo.fim),
+        .gte("pago_em", periodo.inicio)
+        .lte("pago_em", periodo.fim),
     ]);
 
   const porCliente = new Map<string, ResumoCustoCliente>();

@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOperador, requireSocio } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { PACOTE_ENTRADA } from "@/lib/agencia/pacotes";
-import type { BriefingPecaManual } from "@/lib/agencia/types";
+import { diaValido, hojeSP } from "@/lib/datas";
+import { duracaoValida, nomeDoPlano, vencimentoDoPlano } from "@/lib/agencia/cobrancas";
+import { METODOS_PAGAMENTO, reaisParaCentavos, type BriefingPecaManual } from "@/lib/agencia/types";
 
 // Server Actions do cadastro da agência. CRUD simples vai direto por action
 // (sem rota de API) — rota só onde há processamento pesado ou chamada de IA.
@@ -129,47 +130,97 @@ export async function removerReferencia(form: FormData) {
   if (clienteId) revalidatePath(`/clientes/${clienteId}`);
 }
 
-// Vende um pacote. Cria o pacote e já registra o pagamento correspondente —
-// no controle manual os dois acontecem juntos (cliente paga o Pix e o saldo
-// entra). Quando houver gateway, o pagamento passa a nascer "pendente".
-export async function venderPacote(form: FormData) {
+// Telas que mostram saldo, plano ou dinheiro do cliente.
+function revalidarCobranca(clienteId: string | null) {
+  if (clienteId) revalidatePath(`/clientes/${clienteId}`);
+  revalidatePath("/clientes");
+  revalidatePath("/cobrancas");
+  revalidatePath("/dashboard");
+}
+
+// Vende um plano por tempo ou um pacote avulso de imagens, e registra o
+// pagamento junto: um pagamento por venda, no valor total, mesmo no plano anual.
+// No controle manual os dois acontecem juntos (o cliente paga e o saldo entra).
+// Quando houver gateway, o pagamento passa a nascer "pendente".
+export async function venderPacote(form: FormData): Promise<{ erro?: string }> {
   const { authId } = await requireSocio();
   const supabase = await createClient();
   const clienteId = texto(form, "cliente_id");
-  if (!clienteId) return;
+  if (!clienteId) return { erro: "Cliente não informado." };
 
-  const qtd = Number(form.get("qtd_imagens")) || PACOTE_ENTRADA.qtdImagens;
-  const valorReais = Number(String(form.get("valor_reais") ?? "").replace(",", "."));
-  const valorCentavos = Number.isFinite(valorReais) && valorReais > 0
-    ? Math.round(valorReais * 100)
-    : PACOTE_ENTRADA.valorCentavos;
+  const tipo = form.get("tipo") === "tempo" ? "tempo" : "imagens";
+  const qtd = Number(form.get("qtd_imagens"));
+  if (!Number.isInteger(qtd) || qtd < 1 || qtd > 10_000) {
+    return { erro: "Informe quantas imagens entram, em número inteiro." };
+  }
+  const valorCentavos = reaisParaCentavos(texto(form, "valor_reais"));
+  if (valorCentavos === null) return { erro: "Informe o valor cobrado." };
 
+  const hoje = hojeSP();
+  const assinadoEm = diaValido(texto(form, "assinado_em")) ?? hoje;
+  if (assinadoEm > hoje) return { erro: "A data de assinatura não pode ser depois de hoje." };
+
+  const metodoPedido = texto(form, "metodo") ?? "pix";
+  const metodo = metodoPedido in METODOS_PAGAMENTO ? metodoPedido : "pix";
   const jaPago = form.get("ja_pago") === "on";
 
-  const { data: pacote } = await supabase
+  let plano: { meses: number; validade: string } | null = null;
+  if (tipo === "tempo") {
+    const meses = Number(form.get("meses"));
+    if (!duracaoValida(meses)) return { erro: "Escolha a duração do plano." };
+    // Com plano em vigor, o novo começa quando ele acaba (ver vencimentoDoPlano).
+    const { data: cobertura } = await supabase
+      .from("pacotes")
+      .select("validade")
+      .eq("cliente_id", clienteId)
+      .eq("tipo", "tempo")
+      .neq("status", "cancelado")
+      .not("validade", "is", null)
+      .order("validade", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    plano = { meses, validade: vencimentoDoPlano(assinadoEm, meses, cobertura?.validade ?? null) };
+  }
+
+  const { data: pacote, error } = await supabase
     .from("pacotes")
     .insert({
       cliente_id: clienteId,
-      nome: texto(form, "nome") ?? `Pacote ${qtd} imagens`,
+      nome: plano ? nomeDoPlano(plano.meses) : `Pacote ${qtd} imagens`,
+      tipo,
+      meses: plano?.meses ?? null,
       qtd_imagens: qtd,
       valor_centavos: valorCentavos,
-      validade: texto(form, "validade"),
+      validade: plano?.validade ?? null,
+      assinado_em: assinadoEm,
     })
     .select("id")
     .single();
+  if (error || !pacote) {
+    console.error("[cobranca] erro ao registrar pacote:", error);
+    return { erro: "Não consegui registrar. Tente de novo." };
+  }
 
-  await supabase.from("pagamentos").insert({
-    pacote_id: pacote?.id ?? null,
+  // Lançado depois do dia em que foi pago, o pagamento fica no dia da assinatura:
+  // é nesse mês que a receita entra no painel.
+  const pagoEm = assinadoEm < hoje ? `${assinadoEm}T15:00:00.000Z` : new Date().toISOString();
+
+  const { error: erroPagamento } = await supabase.from("pagamentos").insert({
+    pacote_id: pacote.id,
     cliente_id: clienteId,
     valor_centavos: valorCentavos,
-    metodo: texto(form, "metodo") ?? "pix",
+    metodo,
     status: jaPago ? "confirmado" : "pendente",
-    pago_em: jaPago ? new Date().toISOString() : null,
+    pago_em: jaPago ? pagoEm : null,
     registrado_por: authId,
   });
 
-  revalidatePath(`/clientes/${clienteId}`);
-  revalidatePath("/dashboard");
+  revalidarCobranca(clienteId);
+  if (erroPagamento) {
+    console.error("[cobranca] erro ao registrar pagamento:", erroPagamento);
+    return { erro: "O plano entrou, mas o pagamento não. Confira a lista e tente marcar de novo." };
+  }
+  return {};
 }
 
 export async function confirmarPagamento(form: FormData) {
@@ -182,10 +233,27 @@ export async function confirmarPagamento(form: FormData) {
   await supabase
     .from("pagamentos")
     .update({ status: "confirmado", pago_em: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("status", "pendente");
 
-  if (clienteId) revalidatePath(`/clientes/${clienteId}`);
-  revalidatePath("/dashboard");
+  revalidarCobranca(clienteId);
+}
+
+// Cancela um plano ou pacote lançado por engano ou desfeito com o cliente. As
+// imagens que sobraram deixam de valer e o pagamento ainda em aberto sai da conta
+// a receber. O que já foi pago continua registrado como pago: devolver dinheiro
+// é outra conversa.
+export async function cancelarPacote(form: FormData) {
+  await requireSocio();
+  const supabase = await createClient();
+  const id = texto(form, "id");
+  const clienteId = texto(form, "cliente_id");
+  if (!id) return;
+
+  await supabase.from("pacotes").update({ status: "cancelado" }).eq("id", id);
+  await supabase.from("pagamentos").update({ status: "estornado" }).eq("pacote_id", id).eq("status", "pendente");
+
+  revalidarCobranca(clienteId);
 }
 
 // Registra o tempo humano gasto na peça. É o número que decide se o pacote

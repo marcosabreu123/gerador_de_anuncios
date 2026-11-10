@@ -12,14 +12,18 @@ import { PAPEIS, type PapelUsuario } from "@/lib/types";
 export default function AppShell({
   nome,
   papel,
+  alertasCobranca = 0,
   children,
 }: {
   nome: string;
   papel: PapelUsuario;
+  // Clientes com plano vencendo, vencido ou pagamento em aberto (só sócio).
+  alertasCobranca?: number;
   children: React.ReactNode;
 }) {
   const ehSocio = papel === "socio";
   const inicio = ehSocio ? "/dashboard" : "/clientes";
+  const alertas = { "/cobrancas": alertasCobranca };
 
   const sair = (
     <form action={signout} className="shrink-0">
@@ -37,7 +41,7 @@ export default function AppShell({
           <Marca />
         </Link>
 
-        <NavLinks ehSocio={ehSocio} variante="lateral" />
+        <NavLinks ehSocio={ehSocio} variante="lateral" alertas={alertas} />
 
         <div className="mt-auto flex flex-col gap-3">
           <ThemeToggle variante="seletor" />
@@ -66,7 +70,7 @@ export default function AppShell({
 
       <div className="fundo-pagina flex-1 flex flex-col">{children}</div>
 
-      {ehSocio && <NavLinks ehSocio variante="barra" />}
+      {ehSocio && <NavLinks ehSocio variante="barra" alertas={alertas} />}
     </div>
   );
 }

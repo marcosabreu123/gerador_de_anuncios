@@ -5,22 +5,25 @@ import { ehSocio, requireOperador } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import Abas, { type Aba } from "@/components/Abas";
 import BotaoEnviar from "@/components/BotaoEnviar";
+import type { RenovacaoPlano } from "@/components/FormVenderPacote";
+import PacotesDoCliente from "@/components/PacotesDoCliente";
 import UploadMaterial from "@/components/UploadMaterial";
 import { Avatar, CabecalhoPagina, EstadoVazio, SeloStatus, TituloCard } from "@/components/ui";
-import { saldoDoCliente } from "@/lib/agencia/pacotes";
+import { diasEntre, formatarDia } from "@/lib/datas";
 import {
-  alternarArquivoCliente,
-  atualizarCliente,
-  confirmarPagamento,
-  removerReferencia,
-  salvarBrandKit,
-  venderPacote,
-} from "../actions";
+  JANELA_PADRAO,
+  SELO_SITUACAO,
+  prazoDoPlano,
+  precosSugeridos,
+  situacaoDoPlano,
+} from "@/lib/agencia/cobrancas";
+import { PACOTE_ENTRADA, saldoDoCliente } from "@/lib/agencia/pacotes";
+import { alternarArquivoCliente, atualizarCliente, removerReferencia, salvarBrandKit } from "../actions";
 import {
   TIPOS_REFERENCIA,
-  centavosParaBRL,
   type BrandKit,
   type Cliente,
+  type Pacote,
   type Pagamento,
   type Peca,
   type Pedido,
@@ -28,8 +31,15 @@ import {
   type TipoReferencia,
 } from "@/lib/agencia/types";
 
-export default async function ClientePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ClientePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ renovar?: string }>;
+}) {
   const { id } = await params;
+  const { renovar } = await searchParams;
   const { perfil } = await requireOperador();
   const supabase = await createClient();
 
@@ -45,13 +55,25 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
     { data: brandKitRaw },
     { data: referenciasRaw },
     { data: pagamentosRaw },
+    { data: precosRaw },
     { data: pedidosRaw },
     { data: artesRaw },
     saldo,
   ] = await Promise.all([
     supabase.from("brand_kits").select("*").eq("cliente_id", id).maybeSingle(),
     supabase.from("referencias").select("*").eq("cliente_id", id).order("created_at", { ascending: false }),
-    supabase.from("pagamentos").select("*").eq("cliente_id", id).order("created_at", { ascending: false }),
+    gestao
+      ? supabase.from("pagamentos").select("*").eq("cliente_id", id).order("created_at", { ascending: false })
+      : { data: [] },
+    // Últimas vendas da agência: dão o preço sugerido quando o cliente nunca
+    // comprou aquela modalidade.
+    gestao
+      ? supabase
+          .from("pacotes")
+          .select("tipo, meses, valor_centavos, status")
+          .order("created_at", { ascending: false })
+          .limit(200)
+      : { data: [] },
     supabase.from("pedidos").select("*").eq("cliente_id", id).order("created_at", { ascending: false }).limit(10),
     // Galeria do cliente: tudo que já foi entregue a ele. Antes isso só
     // existia dentro de cada pedido, então para ver o histórico de uma
@@ -73,6 +95,27 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
   const pedidos = (pedidosRaw ?? []) as Pedido[];
   const logo = referencias.find((r) => r.tipo === "logo")?.url;
   const leitura = brandKit?.direcao_arte ?? null;
+
+  const { plano, hoje } = saldo;
+  const diasDoPlano = plano?.validade ? diasEntre(hoje, plano.validade) : null;
+  const situacao = situacaoDoPlano(diasDoPlano, JANELA_PADRAO);
+  const semSaldoPorVencimento = saldo.disponivel === 0 && Boolean(saldo.planoVencidoEm);
+  // "Renovar" repete um plano deste cliente; id de outro cliente é ignorado.
+  const planoRenovado = renovar ? saldo.pacotes.find((p) => p.id === renovar && p.tipo === "tempo") : undefined;
+  const renovacao: RenovacaoPlano | null = planoRenovado
+    ? {
+        id: planoRenovado.id,
+        nome: planoRenovado.nome,
+        meses: planoRenovado.meses ?? 1,
+        qtdImagens: planoRenovado.qtd_imagens,
+        valorCentavos: planoRenovado.valor_centavos,
+      }
+    : null;
+  const precos = {
+    imagens: PACOTE_ENTRADA.valorCentavos,
+    ...precosSugeridos(saldo.pacotes, (precosRaw ?? []) as Pacote[]),
+  };
+  const linkRenovar = plano && `/clientes/${id}?renovar=${plano.id}#pacotes`;
 
   // Cliente arquivado não recebe pedido novo: reative antes, para não produzir
   // no lugar errado por engano.
@@ -303,63 +346,7 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
   );
 
   const financeiro = (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-      <section className="card p-5 flex flex-col gap-4">
-        <TituloCard titulo="Saldo do pacote" />
-        <div className="grid grid-cols-3 gap-3">
-          <Numero rotulo="Disponível" valor={saldo.disponivel} />
-          <Numero rotulo="Usado" valor={saldo.usado} />
-          <Numero rotulo="Comprado" valor={saldo.total} />
-        </div>
-
-        <form action={venderPacote} className="flex flex-wrap gap-3 items-end border-t border-[var(--border)] pt-4">
-          <input type="hidden" name="cliente_id" value={id} />
-          <label className="flex flex-col">
-            <span className="label">Imagens</span>
-            <input name="qtd_imagens" type="number" min={1} defaultValue={10} className="input w-24" />
-          </label>
-          <label className="flex flex-col">
-            <span className="label">Valor (R$)</span>
-            <input name="valor_reais" defaultValue="34,90" className="input w-28" />
-          </label>
-          <label className="flex items-center gap-2 min-h-10">
-            <input type="checkbox" name="ja_pago" defaultChecked />
-            <span className="text-sm">Já pago</span>
-          </label>
-          <BotaoEnviar>Vender pacote</BotaoEnviar>
-        </form>
-      </section>
-
-      <section className="card p-5 flex flex-col gap-3">
-        <TituloCard titulo="Pagamentos" />
-        {pagamentos.length === 0 ? (
-          <p className="text-sm text-[var(--muted)]">Nenhum pagamento registrado.</p>
-        ) : (
-          <ul className="flex flex-col">
-            {pagamentos.map((pg) => (
-              <li
-                key={pg.id}
-                className="flex items-center justify-between gap-3 py-2.5 border-t first:border-t-0 border-[var(--border)]"
-              >
-                <span className="text-sm tabular-nums">
-                  {centavosParaBRL(pg.valor_centavos)}
-                  <span className="text-[var(--muted)]"> · {pg.metodo}</span>
-                </span>
-                {pg.status === "confirmado" ? (
-                  <span className="badge badge-success">Pago</span>
-                ) : (
-                  <form action={confirmarPagamento}>
-                    <input type="hidden" name="id" value={pg.id} />
-                    <input type="hidden" name="cliente_id" value={id} />
-                    <BotaoEnviar className="btn btn-outline btn-sm">Marcar como pago</BotaoEnviar>
-                  </form>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
+    <PacotesDoCliente clienteId={id} saldo={saldo} pagamentos={pagamentos} precos={precos} renovacao={renovacao} />
   );
 
   const dados = (
@@ -429,7 +416,15 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
         acoes={
           <>
             {!cliente.ativo && <span className="badge badge-warning">Arquivado</span>}
-            <span className={`badge ${saldo.disponivel === 0 ? "badge-danger" : ""}`} title="Imagens disponíveis no pacote">
+            {/* Vencido sem saldo já tem o aviso logo abaixo. */}
+            {cliente.ativo &&
+              plano &&
+              (situacao === "vencendo" || (situacao === "vencido" && !semSaldoPorVencimento)) && (
+                <span className={`badge ${SELO_SITUACAO[situacao].tom}`} title={plano.nome}>
+                  Plano {prazoDoPlano(diasDoPlano!).toLowerCase()}
+                </span>
+              )}
+            <span className={`badge ${saldo.disponivel === 0 ? "badge-danger" : ""}`} title="Imagens disponíveis para gerar">
               {saldo.disponivel} {saldo.disponivel === 1 ? "imagem" : "imagens"}
             </span>
             {novoPedido}
@@ -438,16 +433,27 @@ export default async function ClientePage({ params }: { params: Promise<{ id: st
       />
 
       {saldo.disponivel === 0 && cliente.ativo && (
-        <div className="card p-4 flex items-start gap-3">
+        <div className="card p-4 flex flex-wrap items-start gap-3">
           <AlertTriangle size={18} className="text-[var(--danger)] shrink-0 mt-0.5" aria-hidden="true" />
-          <div>
-            <p className="font-medium text-sm">Cliente sem saldo</p>
+          <div className="flex-1 min-w-[220px]">
+            <p className="font-medium text-sm">
+              {semSaldoPorVencimento ? `Plano vencido em ${formatarDia(saldo.planoVencidoEm!)}` : "Cliente sem saldo"}
+            </p>
             <p className="text-[13px] text-[var(--muted)] mt-0.5">
-              {gestao
-                ? "Venda um pacote antes de produzir, ou gere mesmo assim se o pagamento já foi combinado."
-                : "Avise um sócio para lançar o pacote. Sem saldo, a geração fica bloqueada."}
+              {semSaldoPorVencimento
+                ? gestao
+                  ? "A geração fica bloqueada até renovar. Se a renovação já foi combinada, dá para gerar mesmo assim."
+                  : "A geração fica bloqueada até um sócio renovar o plano."
+                : gestao
+                  ? "Venda um pacote antes de produzir, ou gere mesmo assim se o pagamento já foi combinado."
+                  : "Avise um sócio para lançar o pacote. Sem saldo, a geração fica bloqueada."}
             </p>
           </div>
+          {gestao && semSaldoPorVencimento && linkRenovar && (
+            <Link href={linkRenovar} scroll={false} className="btn btn-outline btn-sm">
+              Renovar plano
+            </Link>
+          )}
         </div>
       )}
 
@@ -471,15 +477,6 @@ function Entendimento({ rotulo, texto }: { rotulo: string; texto: string }) {
     <div>
       <dt className="text-[13px] font-medium">{rotulo}</dt>
       <dd className="text-[13px] text-[var(--muted)] mt-0.5">{texto}</dd>
-    </div>
-  );
-}
-
-function Numero({ rotulo, valor }: { rotulo: string; valor: number }) {
-  return (
-    <div className="quadro p-3.5">
-      <p className="text-[13px] text-[var(--muted)]">{rotulo}</p>
-      <p className="text-2xl font-semibold tracking-tight mt-0.5">{valor}</p>
     </div>
   );
 }
