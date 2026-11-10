@@ -287,6 +287,12 @@ export interface ContextoPeca {
   // Estilo e impacto escolhidos nos botões da tela, já em texto. Ausente quando
   // o operador deixou "IA decide".
   direcaoVisual?: string;
+  // O que a peça é (promoção, cardápio, comunicado...), já em texto. Ausente no
+  // pedido livre (ver objetivos.ts).
+  objetivo?: string;
+  // Textos que o operador preencheu nos campos do objetivo, um por linha com o
+  // papel de cada um. Entram na arte exatamente como estão.
+  textosObrigatorios?: string;
   // WhatsApp, Instagram, endereço e horário cadastrados. Ficam à disposição: o
   // diretor não pode inventar contato, então sem isto o pedido "coloca o
   // WhatsApp" não tinha como ser atendido.
@@ -460,6 +466,10 @@ export async function montarPromptDiretorArte(ctx: ContextoPeca): Promise<Result
     ctx.identidade?.trim() ? `IDENTIDADE VISUAL DO CLIENTE (tem precedência sobre a paleta do segmento):\n${ctx.identidade.trim()}` : null,
     ctx.referencias?.trim() ? `O QUE AS ARTES DE REFERÊNCIA DO CLIENTE MOSTRAM (é norte da linguagem da marca, a ideia desta peça é nova):\n${ctx.referencias.trim()}` : null,
     ctx.direcaoVisual?.trim() ? `DIREÇÃO ESCOLHIDA PELO OPERADOR (siga, tem precedência sobre o padrão do segmento):\n${ctx.direcaoVisual.trim()}` : null,
+    ctx.objetivo?.trim() ? `OBJETIVO DA PEÇA, escolhido pelo operador: ${ctx.objetivo.trim()}` : null,
+    ctx.textosObrigatorios?.trim()
+      ? `TEXTOS OBRIGATÓRIOS. Cada valor entra na arte exatamente como está escrito, caractere por caractere, sem trocar, cortar ou acrescentar palavra, número, preço ou pontuação. O rótulo antes dos dois-pontos só diz o papel do texto e não aparece na arte. Estes textos valem mais que o limite de blocos: todos entram, e uma lista (como os itens de um cardápio) pode ir num bloco só, uma linha por item.\n${ctx.textosObrigatorios.trim()}`
+      : null,
     ctx.contatos?.trim() ? `CONTATOS CADASTRADOS (entram na peça só se o pedido ou uma regra da marca exigir, copiados exatamente):\n${ctx.contatos.trim()}` : null,
     `FORMATO: ${DESCRICAO_FORMATO[ctx.formato]}`,
     materiaisEmTexto(ctx),

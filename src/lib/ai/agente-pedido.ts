@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { rotaDeVariacao } from "./diretor-arte";
 import { ESTILOS_COMUNICACAO, INTENSIDADES_VISUAIS, TIPOS_IMAGEM, textoEnvolveComida } from "./prompt-builder";
 import type { BriefingCompleto, TipoPeca } from "@/lib/types";
+import { DEFINICAO_OBJETIVO, type ObjetivoArte } from "@/lib/agencia/objetivos";
 import type { BrandKit, BriefingPecaManual, Cliente, Referencia } from "@/lib/agencia/types";
 
 // Ponte entre o pedido do operador e o motor de direção de arte
@@ -73,6 +74,15 @@ function inferirTipoPeca(texto: string): TipoPeca {
   return "anuncio-produto";
 }
 
+// O objetivo escolhido na tela vale mais que o palpite pelo texto. "Produto ou
+// serviço" continua lendo o texto para saber qual dos dois é.
+function tipoDaPeca(objetivo: ObjetivoArte | undefined, prompt: string): TipoPeca {
+  const inferido = inferirTipoPeca(prompt);
+  if (!objetivo || objetivo === "livre") return inferido;
+  if (objetivo === "produto") return inferido === "anuncio-servico" ? inferido : "anuncio-produto";
+  return DEFINICAO_OBJETIVO[objetivo]?.tipoPeca ?? inferido;
+}
+
 // Monta o briefing de UMA peça a partir do pedido manual + perfil do cliente.
 export function pedidoManualParaBriefing(
   manual: BriefingPecaManual,
@@ -84,14 +94,19 @@ export function pedidoManualParaBriefing(
   const temCores = Boolean(brandKit?.cores_primarias?.trim());
 
   const tipoImagem = manual.tipoImagem && manual.tipoImagem !== "ia_decide" ? manual.tipoImagem : null;
+  // observacaoUsuario é uma linha só: a lista do cardápio vira itens separados por ";".
+  const obrigatorios = (manual.obrigatorios ?? [])
+    .map((t) => `${t.rotulo}: ${t.valor.replace(/\s*\n\s*/g, "; ")}`)
+    .join(" / ");
   const observacoes = [
     ...regrasDoCliente(brandKit),
     tipoImagem && `Tipo de imagem escolhido pelo operador: ${TIPOS_IMAGEM[tipoImagem]}`,
+    obrigatorios && `Textos obrigatórios, que entram na arte exatamente como estão escritos: ${obrigatorios}`,
     instrucaoDeVariacao(manual.variacao, manual.total),
   ].filter(Boolean) as string[];
 
   return {
-    tipoPeca: inferirTipoPeca(manual.prompt),
+    tipoPeca: tipoDaPeca(manual.objetivo, manual.prompt),
     // O produto anunciado vem do PEDIDO, nunca do nome da empresa.
     // Passar cliente.nome aqui fazia o prompt-builder montar
     // "Produto: Burger do Zé" e o modelo tratar a loja como se fosse o

@@ -10,6 +10,7 @@ import { TituloCard } from "@/components/ui";
 import { enviarImagemParaStorage } from "@/lib/upload-storage";
 import { formatarDia } from "@/lib/datas";
 import type { DataProxima } from "@/lib/agencia/calendario";
+import { DEFINICAO_OBJETIVO, MAX_CARACTERES_CAMPO, OBJETIVOS, type ObjetivoArte } from "@/lib/agencia/objetivos";
 import type { PedidoParaRepetir } from "@/lib/agencia/repetir-pedido";
 import type { ModoImagemEnviada, Referencia } from "@/lib/agencia/types";
 import type { EstiloComunicacao, Formato, IntensidadeVisual, TipoImagem } from "@/lib/types";
@@ -101,6 +102,10 @@ export default function NovaGeracaoForm({
   repetir?: PedidoParaRepetir | null;
 }) {
   const router = useRouter();
+  const [objetivo, setObjetivo] = useState<ObjetivoArte>(repetir?.objetivo ?? "livre");
+  // Valores por campo. Ficam guardados ao trocar de objetivo: "Preço" é o mesmo
+  // campo na promoção e no produto, e quem muda de ideia não perde o que digitou.
+  const [campos, setCampos] = useState<Record<string, string>>(repetir?.campos ?? {});
   const [prompt, setPrompt] = useState(repetir?.prompt ?? "");
   const [quantidade, setQuantidade] = useState<number>(repetir?.quantidade ?? 1);
   const [formato, setFormato] = useState<Formato>(repetir?.formato ?? "story-9-16");
@@ -184,6 +189,29 @@ export default function NovaGeracaoForm({
     else setMelhorando(true);
   }
 
+  // Só os campos do objetivo escolhido, e só os preenchidos.
+  const camposDoObjetivo = DEFINICAO_OBJETIVO[objetivo].campos;
+  const camposPreenchidos: Record<string, string> = Object.fromEntries(
+    camposDoObjetivo.filter((c) => campos[c.id]?.trim()).map((c) => [c.id, campos[c.id]]),
+  );
+  const temCampos = Object.keys(camposPreenchidos).length > 0;
+
+  // A sugestão foi feita sobre o pedido de antes: aprová-la agora apagaria a mudança.
+  function descartarSugestao() {
+    setSugestao(null);
+    setErroMelhoria(null);
+  }
+
+  function trocarObjetivo(novo: ObjetivoArte) {
+    setObjetivo(novo);
+    descartarSugestao();
+  }
+
+  function preencherCampo(id: string, valor: string) {
+    setCampos((atual) => ({ ...atual, [id]: valor }));
+    descartarSugestao();
+  }
+
   async function melhorar(audio?: Blob) {
     setMelhorando(true);
     setErroMelhoria(null);
@@ -194,6 +222,8 @@ export default function NovaGeracaoForm({
         form.append("clienteId", clienteId);
         form.append("ideia", prompt);
         form.append("audio", audio, "pedido.webm");
+        form.append("objetivo", objetivo);
+        form.append("campos", JSON.stringify(camposPreenchidos));
         if (arteBaseUrl) form.append("imagemUrl", arteBaseUrl);
         res = await fetch("/api/geracoes/melhorar-ideia", { method: "POST", body: form });
       } else {
@@ -203,6 +233,8 @@ export default function NovaGeracaoForm({
           body: JSON.stringify({
             clienteId,
             ideia: prompt,
+            objetivo,
+            campos: camposPreenchidos,
             anterior: sugestao?.briefing,
             ...(arteBaseUrl ? { imagemUrl: arteBaseUrl } : {}),
           }),
@@ -230,8 +262,13 @@ export default function NovaGeracaoForm({
   }
 
   // A data entra como pedido de data, que o redator e o diretor já sabem tratar. Com
-  // texto na caixa, ela vai junto em vez de apagar o que o operador escreveu.
+  // texto na caixa, ela vai junto em vez de apagar o que o operador escreveu. Com o
+  // objetivo de data comemorativa, ela vai para o campo da data.
   function usarData(data: DataProxima) {
+    if (objetivo === "data") {
+      preencherCampo("data", data.nome);
+      return;
+    }
     const atual = prompt.trim();
     if (atual.toLowerCase().includes(data.nome.toLowerCase())) return;
     setPrompt(atual ? `${atual}\n\nOcasião: ${data.nome}.` : `${data.pedido}.`);
@@ -267,6 +304,8 @@ export default function NovaGeracaoForm({
         form.append("estilo", estilo);
         form.append("intensidade", intensidade);
         form.append("tipoImagem", tipoImagem);
+        form.append("objetivo", objetivo);
+        form.append("campos", JSON.stringify(camposPreenchidos));
         if (forcarSemSaldo) form.append("forcarSemSaldo", "true");
         if (produtoRefId) form.append("produtoRefId", produtoRefId);
         if (arteBaseUrl) {
@@ -286,6 +325,8 @@ export default function NovaGeracaoForm({
             estilo,
             intensidade,
             tipoImagem,
+            objetivo,
+            campos: camposPreenchidos,
             forcarSemSaldo,
             ...(produtoRefId ? { produtoRefId } : {}),
             ...(arteBaseUrl ? { arteBaseUrl, modoTransformacao } : {}),
@@ -305,7 +346,7 @@ export default function NovaGeracaoForm({
         if (json.saldoInsuficiente) {
           if (json.transcricao) setPrompt(json.transcricao);
           setPodeForcar(Boolean(json.podeForcar));
-          setErro(json.error ?? "Saldo insuficiente.");
+          setErro(json.error ?? "O cliente está sem crédito.");
           return;
         }
         throw new Error(json.error ?? "Erro ao iniciar a geração.");
@@ -335,26 +376,34 @@ export default function NovaGeracaoForm({
     );
   }
 
-  const custoEmImagens = quantidade;
-  const faltaSaldo = custoEmImagens > saldoDisponivel;
-  const bloqueadoSemSaldo = faltaSaldo && !ehSocio;
+  // Gerar não gasta crédito: cada arte aprovada usa 1. Sem nenhum, a arte não
+  // teria como ser aprovada, então a geração espera um sócio.
+  const semCredito = saldoDisponivel < 1;
+  const bloqueadoSemSaldo = semCredito && !ehSocio;
   const semIdentidade = materiais.some((m) => m.tipo === "identidade" && !m.tem);
   const proporcao = FORMATOS.find((f) => f.valor === formato)?.proporcao;
   const aprovacaoPendente = Boolean(sugestao?.briefing);
   const palavras = prompt.trim() ? prompt.trim().split(/\s+/).length : 0;
   // Melhorar ou recriar parte da arte enviada. Como referência, ela só ajuda o pedido.
   const trabalhaSobreArte = Boolean(arteBaseUrl) && modoTransformacao !== "referencia";
-  // Sobre a arte a informação da campanha vem dela, que a melhoria não enxerga.
+  // Sobre a arte a informação da campanha vem dela, que a melhoria não enxerga. Com
+  // os campos preenchidos, o texto curto é só complemento.
   const ideiaCurta =
-    !trabalhaSobreArte && !sugestao && textoAntes === null && palavras > 0 && palavras < PALAVRAS_DE_IDEIA_CURTA;
+    !trabalhaSobreArte &&
+    !temCampos &&
+    !sugestao &&
+    textoAntes === null &&
+    palavras > 0 &&
+    palavras < PALAVRAS_DE_IDEIA_CURTA;
+  const temPedido = Boolean(prompt.trim()) || temCampos;
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
       <div className="flex flex-col gap-4 min-w-0">
         <section className="card p-5 flex flex-col gap-3">
           <TituloCard
-            titulo="O que você precisa?"
-            descricao="Escreva ou fale do seu jeito. O agente lê a identidade visual, o nicho e os materiais deste cliente antes de criar."
+            titulo="O que vamos criar?"
+            descricao="Escolha o objetivo e escreva ou fale do seu jeito. O agente lê a identidade visual, o nicho e os materiais deste cliente antes de criar."
           />
 
           {repetir && (
@@ -363,19 +412,71 @@ export default function NovaGeracaoForm({
             </p>
           )}
 
-          <textarea
-            value={prompt}
-            onChange={(e) => {
-              setPrompt(e.target.value);
-              // A sugestão foi feita sobre o texto anterior: aprová-la agora
-              // apagaria o que o operador acabou de escrever.
-              setSugestao(null);
-              setErroMelhoria(null);
-            }}
-            className="input min-h-[132px] max-h-[50vh] resize-y field-sizing-content"
-            placeholder="Ex: promoção de hambúrguer artesanal no combo com fritas e refri por R$39,90, hoje só até as 22h"
-            disabled={gravando || melhorando}
-          />
+          <div role="group" aria-label="Objetivo da arte" className="flex flex-wrap gap-2">
+            {OBJETIVOS.map((o) => (
+              <Opcao key={o} ativo={objetivo === o} onClick={() => trocarObjetivo(o)}>
+                {DEFINICAO_OBJETIVO[o].rotulo}
+              </Opcao>
+            ))}
+          </div>
+
+          {/* Opcionais: o que for preenchido entra na arte como está, e o que ficar em
+              branco é decisão da IA. */}
+          {camposDoObjetivo.length > 0 && (
+            <div className="quadro p-4 flex flex-col gap-3">
+              <p className="text-[13px] text-[var(--muted)]">
+                O que você preencher entra na arte exatamente assim. Deixe em branco o que a IA pode decidir.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {camposDoObjetivo.map((c) => (
+                  <label key={c.id} className={`flex flex-col min-w-0 ${c.multilinha ? "sm:col-span-2" : ""}`}>
+                    <span className="label">{c.rotulo}</span>
+                    {c.multilinha ? (
+                      <textarea
+                        value={campos[c.id] ?? ""}
+                        onChange={(e) => preencherCampo(c.id, e.target.value)}
+                        maxLength={MAX_CARACTERES_CAMPO}
+                        rows={3}
+                        className="input resize-y min-h-[84px]"
+                        placeholder={c.exemplo}
+                        disabled={gravando || melhorando}
+                      />
+                    ) : (
+                      <input
+                        value={campos[c.id] ?? ""}
+                        onChange={(e) => preencherCampo(c.id, e.target.value)}
+                        maxLength={MAX_CARACTERES_CAMPO}
+                        className="input"
+                        placeholder={c.exemplo}
+                        disabled={gravando || melhorando}
+                      />
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <label className="flex flex-col">
+            {camposDoObjetivo.length > 0 && <span className="label">Mais detalhes (opcional)</span>}
+            <textarea
+              value={prompt}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                descartarSugestao();
+              }}
+              aria-label={camposDoObjetivo.length > 0 ? undefined : "Pedido"}
+              className={`input max-h-[50vh] resize-y field-sizing-content ${
+                camposDoObjetivo.length > 0 ? "min-h-[88px]" : "min-h-[132px]"
+              }`}
+              placeholder={
+                camposDoObjetivo.length > 0
+                  ? "Ex: clima da arte, público, o que destacar. A IA cria o resto."
+                  : "Ex: promoção de hambúrguer artesanal no combo com fritas e refri por R$39,90, hoje só até as 22h"
+              }
+              disabled={gravando || melhorando}
+            />
+          </label>
 
           <div className="flex flex-wrap items-center gap-2">
             {gravando ? (
@@ -407,7 +508,7 @@ export default function NovaGeracaoForm({
                   <button
                     type="button"
                     onClick={() => melhorar()}
-                    disabled={!prompt.trim() || melhorando || bloqueadoSemSaldo}
+                    disabled={!temPedido || melhorando || bloqueadoSemSaldo}
                     className={`btn btn-outline ${ideiaCurta ? "border-[var(--accent)] text-[var(--accent)]" : ""}`}
                   >
                     {melhorando ? (
@@ -694,20 +795,20 @@ export default function NovaGeracaoForm({
         </div>
 
         <div className="flex flex-col gap-2.5 border-t border-[var(--border)] pt-4">
-          <p className="flex items-center justify-between gap-2 text-[13px] text-[var(--muted)]">
-            <span>Consome {custoEmImagens} do pacote</span>
-            <span className={faltaSaldo ? "text-[var(--danger)] font-medium" : ""}>Saldo: {saldoDisponivel}</span>
+          <p className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[13px] text-[var(--muted)]">
+            <span>1 crédito por arte aprovada</span>
+            <span className={semCredito ? "text-[var(--danger)] font-medium" : ""}>Créditos: {saldoDisponivel}</span>
           </p>
 
           {erro && <p className="text-sm text-[var(--danger)]">{erro}</p>}
 
           {/* Com sugestão aberta o botão espera: gerar agora usaria o texto antigo
-              e gastaria o pacote em algo que o operador talvez nem queira mais. */}
+              e gastaria API em algo que o operador talvez nem queira mais. */}
           <button
             type="button"
             onClick={() => enviar()}
             disabled={
-              (!prompt.trim() && !trabalhaSobreArte) || enviando || gravando || melhorando || aprovacaoPendente || bloqueadoSemSaldo
+              (!temPedido && !trabalhaSobreArte) || enviando || gravando || melhorando || aprovacaoPendente || bloqueadoSemSaldo
             }
             className="btn btn-ia btn-block"
           >
@@ -723,7 +824,7 @@ export default function NovaGeracaoForm({
               disabled={enviando || melhorando || aprovacaoPendente}
               className="btn btn-outline btn-block"
             >
-              Gerar mesmo sem saldo
+              Gerar mesmo sem crédito
             </button>
           )}
 
@@ -731,7 +832,7 @@ export default function NovaGeracaoForm({
             <p className="text-xs text-[var(--muted)]">
               {planoVencidoEm
                 ? `O plano deste cliente venceu em ${formatarDia(planoVencidoEm)}. Peça a um sócio para renovar.`
-                : "Este cliente não tem saldo suficiente. Peça a um sócio para lançar o pacote."}
+                : "Este cliente está sem crédito. Peça a um sócio para lançar o pacote."}
             </p>
           )}
         </div>

@@ -1,5 +1,6 @@
 import type { LeituraDasReferencias } from "@/lib/ai/ler-referencias";
 import type { EstiloComunicacao, Formato, IntensidadeVisual, TipoImagem } from "@/lib/types";
+import type { ObjetivoArte, TextoObrigatorio } from "./objetivos";
 
 // Tipos do modelo de agência — espelham supabase/schema-agencia.sql.
 //
@@ -16,6 +17,9 @@ export interface Cliente {
   contato_telefone: string | null;
   observacoes: string | null;
   ativo: boolean;
+  // Produz normalmente, mas fica fora da receita, das cobranças e dos totais do
+  // painel (ver schema-gestao-clientes.sql).
+  em_teste: boolean;
   criado_por: string | null;
   created_at: string;
   updated_at: string;
@@ -209,6 +213,13 @@ export interface BriefingPecaManual {
   // Trazido para cá, vira peça normal: cobra do pacote e registra custo.
   arteBaseUrl?: string;
   modoTransformacao?: ModoImagemEnviada;
+  // O que a arte vai ser e os textos que entram nela exatamente como o operador
+  // escreveu (ver objetivos.ts). Sem objetivo, o pedido é livre.
+  objetivo?: ObjetivoArte;
+  obrigatorios?: TextoObrigatorio[];
+  // Peça criada pelo botão "Outro formato": o id da peça cuja arte ela adapta.
+  // Enquanto a adaptação não sai, "Tentar de novo" continua adaptando aquela arte.
+  adaptadaDe?: string;
   // Ajuste cirúrgico pedido no botão "Ajustar" da peça já entregue. Guarda a
   // arte que o operador está olhando e só o que ele pediu para mudar, porque
   // aqui a geração NÃO recria a peça: edita aquela imagem e preserva o resto.
@@ -261,6 +272,8 @@ export interface Peca {
   prompt_usado: string | null;
   erro: string | null;
   tempo_operacao_segundos: number | null;
+  // Já gastou o crédito dela. Uma vez por peça: aprovar de novo não cobra outra vez.
+  pacote_consumido: boolean;
   aprovada_em: string | null;
   created_at: string;
 }
@@ -311,11 +324,15 @@ export interface FilaJob {
 export interface ResumoCustoCliente {
   cliente_id: string;
   cliente_nome: string;
-  pecas_entregues: number;
+  em_teste: boolean;
+  // Aprovadas no período. É a arte aprovada que gasta crédito do cliente.
+  artes_aprovadas: number;
+  // Feitas no período e ainda sem aprovação: trabalho que não virou crédito.
+  aguardando_aprovacao: number;
   geracoes: number;
-  // O multiplicador que realmente define a margem: quantas chamadas de API
-  // foram necessárias por peça entregue.
-  geracoes_por_peca: number;
+  // O multiplicador que realmente define a margem: quantas imagens foram
+  // precisas por arte aprovada, contando as variações que ninguém aprovou.
+  geracoes_por_arte: number;
   custo_brl: number;
   receita_brl: number;
   margem_brl: number;

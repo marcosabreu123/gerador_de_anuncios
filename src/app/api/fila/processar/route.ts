@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { concluirJob, destravarJobsAbandonados, falharJob, reservarProximoJob } from "@/lib/agencia/fila";
 import { encerrarPedidoSePronto, gerarPeca } from "@/lib/agencia/gerar-peca";
-import { devolverImagem } from "@/lib/agencia/pacotes";
 
 export const runtime = "nodejs";
 // 120s é o teto que este projeto aceita: medido em produção, 300 fazia a
@@ -76,19 +75,21 @@ export async function POST(request: NextRequest) {
 // Deixa a peça em erro só quando as tentativas acabaram — enquanto houver
 // retry pendente ela volta para "pendente", senão o operador veria um erro
 // que o próprio sistema ainda vai resolver sozinho.
+//
+// Não há crédito a devolver: ele só sai na aprovação, e peça sem arte não é aprovada.
 async function marcarPecaComErro(pecaId: string, definitivo: boolean, erro: string) {
   try {
     const supabase = createAdminClient();
     const { data: peca } = await supabase
       .from("pecas")
-      .select("cliente_id, pedido_id, pacote_consumido, imagem_url")
+      .select("pedido_id, imagem_url")
       .eq("id", pecaId)
       .maybeSingle();
     if (!peca) return;
 
     // Peça que já tem imagem só pode ter falhado num ajuste, e a entrega de antes
-    // continua valendo: não vira erro, não estorna o pacote e o botão "Tentar de
-    // novo" não aparece para recriar do zero uma arte que estava boa.
+    // continua valendo: não vira erro e o botão "Tentar de novo" não aparece para
+    // recriar do zero uma arte que estava boa.
     if (definitivo && peca.imagem_url) {
       await supabase
         .from("pecas")
@@ -99,12 +100,6 @@ async function marcarPecaComErro(pecaId: string, definitivo: boolean, erro: stri
         .from("pecas")
         .update({ status: definitivo ? "erro" : "pendente", erro })
         .eq("id", pecaId);
-
-      // Peça que falhou de vez não pode ficar cobrada do pacote do cliente.
-      if (definitivo && peca.pacote_consumido) {
-        await devolverImagem(peca.cliente_id);
-        await supabase.from("pecas").update({ pacote_consumido: false }).eq("id", pecaId);
-      }
     }
 
     if (definitivo) await encerrarPedidoSePronto(peca.pedido_id);

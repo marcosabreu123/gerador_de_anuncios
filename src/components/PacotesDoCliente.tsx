@@ -37,7 +37,7 @@ export default function PacotesDoCliente({
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_400px] xl:grid-rows-[auto_1fr] gap-4 items-start">
       <section className="card p-5 flex flex-col gap-4">
-        <TituloCard titulo="Saldo e plano" />
+        <TituloCard titulo="Créditos e plano" />
         <div className="grid grid-cols-3 gap-3">
           <Numero rotulo="Disponível" valor={saldo.disponivel} />
           <Numero rotulo="Usado" valor={saldo.usado} />
@@ -58,7 +58,7 @@ export default function PacotesDoCliente({
           </div>
         ) : (
           <p className="text-[13px] text-[var(--muted)] border-t border-[var(--border)] pt-4">
-            Sem plano por tempo. Os pacotes de imagens não vencem.
+            Sem plano por tempo. Os pacotes de créditos não vencem.
           </p>
         )}
       </section>

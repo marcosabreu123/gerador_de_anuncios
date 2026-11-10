@@ -19,7 +19,7 @@ import {
   type TipoPacote,
 } from "@/lib/agencia/types";
 
-// Plano que o botão "Renovar" manda repetir: duração, imagens e valor vêm dele.
+// Plano que o botão "Renovar" manda repetir: duração, créditos e valor vêm dele.
 export interface RenovacaoPlano {
   id: string;
   nome: string;
@@ -154,7 +154,7 @@ export default function FormVenderPacote({
           Plano por tempo
         </Segmento>
         <Segmento ativo={tipo === "imagens"} onClick={() => escolherTipo("imagens")}>
-          Pacote de imagens
+          Pacote de créditos
         </Segmento>
       </div>
 
@@ -170,7 +170,7 @@ export default function FormVenderPacote({
 
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col">
-          <span className="label">{tipo === "tempo" ? "Imagens no plano" : "Imagens"}</span>
+          <span className="label">{tipo === "tempo" ? "Créditos no plano" : "Créditos"}</span>
           <input
             name="qtd_imagens"
             type="number"
@@ -221,7 +221,7 @@ export default function FormVenderPacote({
 
       <p className="text-[13px] text-[var(--muted)]">
         {tipo === "imagens" ? (
-          "As imagens do pacote não vencem."
+          "Os créditos do pacote não vencem."
         ) : vence ? (
           <>
             Vence em <span className="font-medium text-[var(--foreground)]">{formatarDia(vence)}</span>

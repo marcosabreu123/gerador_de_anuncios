@@ -6,6 +6,13 @@ import { melhorarIdeia } from "@/lib/ai/melhorar-ideia";
 import { TEXT_PROMPT_BUILDER_MODEL } from "@/lib/ai/models";
 import { custoTextoUSD, registrarGeracao } from "@/lib/agencia/custo";
 import { leituraEmDia } from "@/lib/agencia/leitura-referencias";
+import {
+  DEFINICAO_OBJETIVO,
+  lerTextosObrigatorios,
+  objetivoValido,
+  textosObrigatoriosEmTexto,
+  type ObjetivoArte,
+} from "@/lib/agencia/objetivos";
 import { transcreverPedido } from "@/lib/agencia/transcricao";
 import type { BrandKit, Cliente, Referencia } from "@/lib/agencia/types";
 
@@ -39,6 +46,8 @@ export async function POST(request: NextRequest) {
   let anterior: string | undefined;
   let imagemUrl: string | undefined;
   let audio: File | null = null;
+  let objetivo: ObjetivoArte = "livre";
+  let camposBrutos: unknown = {};
 
   try {
     if ((request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
@@ -46,6 +55,8 @@ export async function POST(request: NextRequest) {
       clienteId = String(form.get("clienteId") ?? "");
       ideia = String(form.get("ideia") ?? "");
       imagemUrl = (form.get("imagemUrl") as string) || undefined;
+      objetivo = objetivoValido(form.get("objetivo"));
+      camposBrutos = JSON.parse(String(form.get("campos") ?? "{}"));
       const arquivo = form.get("audio");
       if (arquivo instanceof File && arquivo.size > 0) audio = arquivo;
     } else {
@@ -54,13 +65,19 @@ export async function POST(request: NextRequest) {
       ideia = String(body.ideia ?? "");
       anterior = (body.anterior as string) || undefined;
       imagemUrl = (body.imagemUrl as string) || undefined;
+      objetivo = objetivoValido(body.objetivo);
+      camposBrutos = body.campos ?? {};
     }
   } catch {
     return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
   }
 
   if (!clienteId) return NextResponse.json({ error: "Informe o cliente." }, { status: 400 });
-  if (!ideia.trim() && !audio) {
+  const obrigatorios = lerTextosObrigatorios(objetivo, camposBrutos);
+  if (!obrigatorios) {
+    return NextResponse.json({ error: "Um dos campos ficou longo demais para caber na arte." }, { status: 400 });
+  }
+  if (!ideia.trim() && !audio && obrigatorios.length === 0) {
     return NextResponse.json({ error: "Escreva ou grave a ideia primeiro." }, { status: 400 });
   }
 
@@ -99,10 +116,22 @@ export async function POST(request: NextRequest) {
     imagemUrl ? imagemParaLeitura(imagemUrl) : null,
   ]);
 
+  // O objetivo e os campos vão junto da ideia: a sugestão parte deles e a conferência
+  // de fidelidade conhece os preços e as datas que vieram por ali. Para a tela volta
+  // só o que o operador escreveu ou falou.
+  const textos = textosObrigatoriosEmTexto(obrigatorios);
+  const ideiaCompleta = [
+    ideia.trim(),
+    objetivo !== "livre" ? `Objetivo da peça: ${DEFINICAO_OBJETIVO[objetivo].rotulo}.` : "",
+    textos ? `Textos que o operador preencheu e que entram na arte exatamente assim:\n${textos}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
   const inicio = Date.now();
   try {
     const { briefing, faltou, avisos, uso } = await melhorarIdeia({
-      ideia,
+      ideia: ideiaCompleta,
       identidade: identidadeParaInstrucao(cliente, brandKit),
       contatos: contatosParaInstrucao(brandKit),
       referencias,

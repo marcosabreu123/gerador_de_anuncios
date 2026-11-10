@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Download, ImagePlus, Maximize2, PencilLine, X } from "lucide-react";
+import { Check, Download, ImagePlus, Maximize2, PencilLine, Proportions, X } from "lucide-react";
 import { lerRespostaJSON } from "@/lib/fetch-json";
 import { baixarArte } from "@/lib/download";
 import { enviarImagemParaStorage } from "@/lib/upload-storage";
@@ -10,7 +10,14 @@ import { aprovarPeca, registrarTempoPeca, usarVersaoPeca } from "@/app/(app)/cli
 import BotaoEnviar from "@/components/BotaoEnviar";
 import Modal from "@/components/Modal";
 import { SeloStatus } from "@/components/ui";
-import { MAX_IMAGENS_AJUSTE, type BriefingPecaManual, type Peca, type VersaoPeca } from "@/lib/agencia/types";
+import {
+  MAX_IMAGENS_AJUSTE,
+  formatarBRL,
+  type BriefingPecaManual,
+  type Peca,
+  type VersaoPeca,
+} from "@/lib/agencia/types";
+import { FORMATOS, type Formato } from "@/lib/types";
 
 // Acompanhamento do lote. As peças são produzidas pelo worker da fila, então
 // a tela precisa se atualizar sozinha — o operador aprova e vai fazer outra
@@ -26,8 +33,38 @@ function versoesDa(peca: Peca): VersaoPeca[] {
   return (peca.briefing as BriefingPecaManual | null)?.versoes ?? [];
 }
 
-export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedidoId: string }) {
+function formatoDa(peca: Peca): Formato {
+  return (peca.briefing as BriefingPecaManual | null)?.formato ?? "feed-4-5";
+}
+
+const TODOS_FORMATOS = Object.keys(FORMATOS) as Formato[];
+
+export default function PecasDoPedido({
+  pecas,
+  pedidoId,
+  ehSocio,
+  creditos,
+  custoPorPeca,
+}: {
+  pecas: Peca[];
+  pedidoId: string;
+  ehSocio: boolean;
+  // Créditos do cliente agora: cada arte aprovada usa 1.
+  creditos: number;
+  // Só para o sócio: o que a API já gastou em cada peça, com ajustes e falhas.
+  custoPorPeca?: Record<string, number>;
+}) {
   const router = useRouter();
+  // Aprovação recusada por falta de crédito, na peça em que aconteceu.
+  const [avisoAprovacao, setAvisoAprovacao] = useState<{ pecaId: string; texto: string; podeForcar: boolean } | null>(
+    null,
+  );
+  // "Outro formato": a peça com a escolha aberta, e o erro da última tentativa.
+  const [formatoAberto, setFormatoAberto] = useState<string | null>(null);
+  const [criandoFormato, setCriandoFormato] = useState(false);
+  const [erroFormato, setErroFormato] = useState<{ texto: string; formato: Formato; podeForcar: boolean } | null>(
+    null,
+  );
   const [ajustando, setAjustando] = useState<string | null>(null);
   const [instrucao, setInstrucao] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -126,6 +163,53 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
     }
   }
 
+  async function aprovar(form: FormData, pecaId: string) {
+    setAvisoAprovacao(null);
+    const resultado = await aprovarPeca(form);
+    if (resultado.erro) {
+      setAvisoAprovacao({ pecaId, texto: resultado.erro, podeForcar: Boolean(resultado.semCredito) && ehSocio });
+    }
+  }
+
+  function abrirFormatos(pecaId: string) {
+    setFormatoAberto(formatoAberto === pecaId ? null : pecaId);
+    setErroFormato(null);
+  }
+
+  async function outroFormato(pecaId: string, formato: Formato, forcarSemSaldo = false) {
+    setCriandoFormato(true);
+    setErroFormato(null);
+    try {
+      const res = await fetch("/api/pecas/outro-formato", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pecaId, formato, forcarSemSaldo }),
+      });
+      const json = await lerRespostaJSON<{ error?: string; podeForcar?: boolean }>(res);
+      if (!res.ok) {
+        setErroFormato({
+          texto: json.error ?? "Não consegui criar o outro formato.",
+          formato,
+          podeForcar: Boolean(json.podeForcar) && ehSocio,
+        });
+        return;
+      }
+      setFormatoAberto(null);
+      router.refresh();
+    } catch (e) {
+      setErroFormato({
+        texto: e instanceof Error ? e.message : "Não consegui criar o outro formato.",
+        formato,
+        podeForcar: false,
+      });
+    } finally {
+      setCriandoFormato(false);
+    }
+  }
+
+  // Arte pronta e ainda sem aprovação: é aqui que o crédito vai sair.
+  const esperandoAprovacao = pecas.some((p) => p.imagem_url && p.status === "gerada");
+
   // Com uma peça só o card deita: imagem de um lado, ações do outro. Em pé, ela
   // ficaria perdida num canto da tela do PC. A altura da arte acompanha a janela
   // para ela caber inteira no notebook, sem precisar rolar.
@@ -148,6 +232,16 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
       )}
 
       {erro && <p className="text-sm text-[var(--danger)]">{erro}</p>}
+
+      {esperandoAprovacao && (
+        <p className="text-[13px] text-[var(--muted)]">
+          Cada arte aprovada usa 1 crédito, uma vez só. O cliente tem{" "}
+          <span className={creditos < 1 ? "text-[var(--danger)] font-medium" : "text-[var(--foreground)]"}>
+            {creditos === 1 ? "1 crédito" : `${creditos} créditos`}
+          </span>
+          .
+        </p>
+      )}
 
       {/* Um só para todas as peças: quem abre é o botão "Anexar imagem" do ajuste. */}
       <input
@@ -201,11 +295,19 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
             )}
 
             <div className={`flex flex-col gap-3 min-w-0 ${unica ? "lg:py-2 lg:pr-2" : "px-1 pb-1 flex-1"}`}>
-              <div className="flex items-start justify-between gap-2">
-                <p className="font-medium text-sm truncate" title={peca.titulo ?? undefined}>
-                  {peca.ordem + 1}. {peca.titulo}
-                </p>
-                <SeloStatus status={peca.status} />
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-medium text-sm truncate" title={peca.titulo ?? undefined}>
+                    {peca.ordem + 1}. {peca.titulo}
+                  </p>
+                  <SeloStatus status={peca.status} />
+                </div>
+                {/* Todo o gasto até a aprovação: variações, ajustes e falhas desta peça. */}
+                {custoPorPeca && (custoPorPeca[peca.id] ?? 0) > 0 && (
+                  <p className="text-xs text-[var(--muted)] tabular-nums">
+                    {formatarBRL(custoPorPeca[peca.id])} de API até aqui
+                  </p>
+                )}
               </div>
 
               {peca.erro && <p className="text-[13px] text-[var(--danger)]">{peca.erro}</p>}
@@ -213,11 +315,12 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
               {peca.imagem_url && (
                 <div className="flex flex-wrap gap-2">
                   {peca.status !== "aprovada" && (
-                    <form action={aprovarPeca}>
+                    <form action={(form) => aprovar(form, peca.id)}>
                       <input type="hidden" name="id" value={peca.id} />
-                      <input type="hidden" name="pedido_id" value={pedidoId} />
-                      <input type="hidden" name="cliente_id" value={peca.cliente_id} />
-                      <BotaoEnviar className="btn btn-primary btn-sm">
+                      <BotaoEnviar
+                        className="btn btn-primary btn-sm"
+                        title={peca.pacote_consumido ? "O crédito desta arte já foi usado" : "Usa 1 crédito do cliente"}
+                      >
                         <Check size={14} aria-hidden="true" />
                         Aprovar
                       </BotaoEnviar>
@@ -234,6 +337,18 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
                       Ajustar
                     </button>
                   )}
+                  {peca.status !== "pendente" && peca.status !== "gerando" && (
+                    <button
+                      type="button"
+                      onClick={() => abrirFormatos(peca.id)}
+                      aria-expanded={formatoAberto === peca.id}
+                      title="A mesma arte em outra proporção, como peça nova"
+                      className="btn btn-outline btn-sm"
+                    >
+                      <Proportions size={14} aria-hidden="true" />
+                      Outro formato
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => baixarArte(peca.imagem_url!, `${peca.titulo ?? "arte"}.png`)}
@@ -242,6 +357,70 @@ export default function PecasDoPedido({ pecas, pedidoId }: { pecas: Peca[]; pedi
                     <Download size={14} aria-hidden="true" />
                     Baixar
                   </button>
+                </div>
+              )}
+
+              {avisoAprovacao?.pecaId === peca.id && (
+                <div className="flex flex-col items-start gap-2">
+                  <p className="text-[13px] text-[var(--danger)]">{avisoAprovacao.texto}</p>
+                  {avisoAprovacao.podeForcar && (
+                    <form action={(form) => aprovar(form, peca.id)}>
+                      <input type="hidden" name="id" value={peca.id} />
+                      <input type="hidden" name="sem_credito" value="sim" />
+                      <BotaoEnviar className="btn btn-outline btn-sm">Aprovar sem debitar</BotaoEnviar>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {/* A arte vira uma peça nova no formato escolhido; esta fica como está. */}
+              {formatoAberto === peca.id && peca.imagem_url && (
+                <div className="quadro p-3 flex flex-col gap-2.5">
+                  <p className="text-[13px] text-[var(--muted)]">
+                    Cria outra peça com os mesmos textos, produto e identidade. Esta continua como está.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {TODOS_FORMATOS.filter((f) => f !== formatoDa(peca)).map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => outroFormato(peca.id, f)}
+                        disabled={criandoFormato}
+                        className="btn btn-outline btn-sm"
+                      >
+                        {FORMATOS[f].label} <span className="opacity-60">{FORMATOS[f].aspecto}</span>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setFormatoAberto(null)}
+                      disabled={criandoFormato}
+                      className="btn btn-ghost btn-sm"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                  {criandoFormato && (
+                    <p className="flex items-center gap-2 text-[13px] text-[var(--muted)]">
+                      <span className="spinner" aria-hidden="true" />
+                      Criando a peça…
+                    </p>
+                  )}
+                  {erroFormato && (
+                    <div className="flex flex-col items-start gap-2">
+                      <p className="text-[13px] text-[var(--danger)]">{erroFormato.texto}</p>
+                      {erroFormato.podeForcar && (
+                        <button
+                          type="button"
+                          onClick={() => outroFormato(peca.id, erroFormato.formato, true)}
+                          disabled={criandoFormato}
+                          className="btn btn-outline btn-sm"
+                        >
+                          Gerar mesmo sem crédito
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

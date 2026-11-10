@@ -15,7 +15,7 @@ import { gerarVariacoes, type EntradaImagem } from "@/lib/ai/openai-image";
 import { IMAGE_MODEL, TAMANHO_POR_FORMATO, qualidadeParaEtapa } from "@/lib/ai/models";
 import { custoImagemPorUso, custoImagemUSD, custoTextoUSD, registrarGeracao } from "./custo";
 import { logosParceirosCitados, mesmoNome } from "./logo-parceiro";
-import { consumirImagemComoWorker } from "./pacotes";
+import { orientacaoDoObjetivo, textosObrigatoriosEmTexto } from "./objetivos";
 import { operadorEscreveu, type BrandKit, type BriefingPecaManual, type Cliente, type Referencia, type VersaoPeca } from "./types";
 import type { Formato } from "@/lib/types";
 
@@ -97,10 +97,14 @@ async function materiaisDaPeca(
   const logo = referencias.find((r) => r.tipo === "logo");
 
   // Logo de programa ou parceiro, como a do CNH do Brasil: só quando o pedido cita o nome.
-  const parceiros = await baixarParceiros(
-    logosParceirosCitados(referencias, caminho.ajustando ? manual.instrucaoAjuste : manual.prompt),
-    caminho.ajustando,
-  );
+  // Na troca de formato o gerador redesenha a peça inteira, então vale também o
+  // pedido que deu origem a ela: a logo que já estava na arte volta com o desenho certo.
+  const citado = caminho.mudandoFormato
+    ? `${manual.prompt}\n${manual.instrucaoAjuste ?? ""}`
+    : caminho.ajustando
+      ? manual.instrucaoAjuste
+      : manual.prompt;
+  const parceiros = await baixarParceiros(logosParceirosCitados(referencias, citado), caminho.ajustando);
   const nomesParceiros = parceiros.map((p) => p.nome);
   const entradasParceiros = parceiros.map((p) => p.entrada);
 
@@ -186,7 +190,6 @@ async function subirImagem(clienteId: string, base64: string): Promise<string> {
 export interface ResultadoGeracaoPeca {
   imagemUrl: string;
   promptUsado: string;
-  saldoRestante: number | null;
 }
 
 export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
@@ -318,6 +321,9 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
             instrucaoUsuario: [
               identidadeParaInstrucao(cliente as Cliente, (brandKit as BrandKit) ?? null),
               direcaoDosControles(manual),
+              orientacaoDoObjetivo(manual.objetivo) && `Objetivo da peça: ${orientacaoDoObjetivo(manual.objetivo)}`,
+              textosObrigatoriosEmTexto(manual.obrigatorios) &&
+                `Textos obrigatórios, que entram na arte exatamente como estão escritos:\n${textosObrigatoriosEmTexto(manual.obrigatorios)}`,
               instrucaoDeVariacao(manual.variacao, manual.total),
             ]
               .filter(Boolean)
@@ -395,19 +401,8 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
     clienteId: peca.cliente_id,
   });
 
+  // Gerar não gasta crédito: ele sai quando a arte é aprovada (ver aprovarPeca).
   const imagemUrl = await subirImagem(peca.cliente_id, imagens[0].base64);
-
-  // 3) Débito do pacote — uma vez por peça, nunca por regeração.
-  let saldoRestante: number | null = null;
-  if (!peca.pacote_consumido) {
-    saldoRestante = await consumirImagemComoWorker(peca.cliente_id);
-    // Saldo esgotado não descarta a peça já produzida (seria jogar fora
-    // dinheiro de API já gasto): entrega e deixa o negativo visível no
-    // dashboard para o operador cobrar o próximo pacote.
-    if (saldoRestante >= 0) {
-      await supabase.from("pecas").update({ pacote_consumido: true }).eq("id", pecaId);
-    }
-  }
 
   // Relê o briefing: o operador pode ter pedido outro ajuste enquanto esta arte saía.
   const { data: atual } = await supabase.from("pecas").select("briefing").eq("id", pecaId).maybeSingle();
@@ -438,7 +433,7 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
 
   await encerrarPedidoSePronto(peca.pedido_id);
 
-  return { imagemUrl, promptUsado: imagens[0].promptUsado, saldoRestante };
+  return { imagemUrl, promptUsado: imagens[0].promptUsado };
 }
 
 // Peça criada antes de existir a lista começa pela imagem que já tinha.
@@ -504,6 +499,8 @@ async function criarComDiretorArte(
       // Só a guardada: reler aqui gastaria o tempo que a peça precisa para sair.
       referencias: brandKit?.direcao_arte ? leituraParaDiretor(brandKit.direcao_arte) : undefined,
       direcaoVisual: direcaoDosControles(manual),
+      objetivo: orientacaoDoObjetivo(manual.objetivo),
+      textosObrigatorios: textosObrigatoriosEmTexto(manual.obrigatorios),
       contatos: contatosParaInstrucao(brandKit),
       formato: manual.formato ?? "feed-4-5",
       temFotoProduto: ctx.temFotoProduto,

@@ -3,20 +3,20 @@ import type { ProducaoDoDia } from "@/lib/agencia/relatorio";
 const ALTURA_PX = 208;
 
 // Teto par para o eixo: a linha do meio é teto / 2 e precisa ser um número
-// inteiro, senão aparece "7,5 peças" numa grade de peças inteiras.
+// inteiro, senão aparece "7,5 artes" numa grade de artes inteiras.
 function tetoDoEixo(maior: number): number {
   const passo = maior <= 20 ? 2 : maior <= 100 ? 10 : 50;
   return Math.max(4, Math.ceil(maior / passo) * passo);
 }
 
-function plural(pecas: number): string {
-  return pecas === 1 ? "1 peça" : `${pecas} peças`;
+function plural(artes: number): string {
+  return artes === 1 ? "1 arte" : `${artes} artes`;
 }
 
-// Colunas finas numa série só: quantas peças saíram em cada dia do mês. A dica
+// Colunas finas numa série só: quantas artes foram aprovadas em cada dia do mês. A dica
 // abre no hover e no foco; a tabela logo abaixo dá o mesmo dado sem mouse.
 export default function GraficoProducao({ dias, hoje }: { dias: ProducaoDoDia[]; hoje: number }) {
-  const maior = Math.max(...dias.map((d) => d.pecas));
+  const maior = Math.max(...dias.map((d) => d.artes));
   const teto = tetoDoEixo(maior);
   const marcas = [teto, teto / 2, 0];
 
@@ -50,7 +50,7 @@ export default function GraficoProducao({ dias, hoje }: { dias: ProducaoDoDia[];
             style={{ gridTemplateColumns: `repeat(${dias.length}, minmax(0, 1fr))` }}
           >
             {dias.map((d, i) => {
-              const altura = (d.pecas / teto) * 100;
+              const altura = (d.artes / teto) * 100;
               // Nas pontas a dica abre para dentro, senão sai do card.
               const lado =
                 i < 3 ? "left-0" : i > dias.length - 4 ? "right-0" : "left-1/2 -translate-x-1/2";
@@ -59,7 +59,7 @@ export default function GraficoProducao({ dias, hoje }: { dias: ProducaoDoDia[];
                 <div
                   key={d.dia}
                   tabIndex={0}
-                  aria-label={`Dia ${d.dia}: ${plural(d.pecas)}`}
+                  aria-label={`Dia ${d.dia}: ${plural(d.artes)}`}
                   className="group relative flex items-end justify-center px-px outline-none"
                 >
                   <span
@@ -70,7 +70,7 @@ export default function GraficoProducao({ dias, hoje }: { dias: ProducaoDoDia[];
                     className={`pointer-events-none absolute z-10 ${lado} opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity whitespace-nowrap rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 shadow-[var(--shadow-pop)]`}
                     style={{ bottom: `calc(${altura}% + 6px)` }}
                   >
-                    <span className="block text-[13px] font-semibold">{plural(d.pecas)}</span>
+                    <span className="block text-[13px] font-semibold">{plural(d.artes)}</span>
                     <span className="block text-[11px] text-[var(--muted)]">Dia {d.dia}</span>
                   </span>
                 </div>
@@ -106,11 +106,11 @@ export default function GraficoProducao({ dias, hoje }: { dias: ProducaoDoDia[];
           </summary>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-x-4 gap-y-1 mt-2 text-xs">
             {dias
-              .filter((d) => d.pecas > 0)
+              .filter((d) => d.artes > 0)
               .map((d) => (
                 <span key={d.dia} className="flex justify-between gap-2 tabular-nums">
                   <span className="text-[var(--muted)]">Dia {d.dia}</span>
-                  <span className="font-medium">{d.pecas}</span>
+                  <span className="font-medium">{d.artes}</span>
                 </span>
               ))}
           </div>

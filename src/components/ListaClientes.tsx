@@ -7,48 +7,105 @@ import { criarCliente } from "@/app/(app)/clientes/actions";
 import BotaoEnviar from "@/components/BotaoEnviar";
 import Modal from "@/components/Modal";
 import { Avatar, CabecalhoPagina, EstadoVazio } from "@/components/ui";
+import { textoDoUltimoPedido, type FiltroClientes, type SituacaoCliente } from "@/lib/agencia/situacao-cliente";
+
+export interface SeloCard {
+  rotulo: string;
+  tom: string;
+}
 
 export interface ClienteCard {
   id: string;
   nome: string;
   nicho: string | null;
-  ativo: boolean;
   logo: string | null;
+  situacao: SituacaoCliente;
+  // Dias desde o último pedido. Nulo para quem nunca pediu.
+  diasSemPedido: number | null;
   saldo: number;
-  pecasNoMes: number;
+  aprovadasNoMes: number;
   temPedidoEmAndamento: boolean;
+  // Plano vencendo ou vencido e pagamento em aberto. Vazio para o colaborador.
+  cobranca: SeloCard[];
+}
+
+const SELO_SITUACAO: Partial<Record<SituacaoCliente, SeloCard>> = {
+  inativo: { rotulo: "Inativo", tom: "badge-warning" },
+  em_teste: { rotulo: "Em teste", tom: "badge-accent" },
+  arquivado: { rotulo: "Arquivado", tom: "" },
+};
+
+const ROTULO_FILTRO: Record<FiltroClientes, string> = {
+  todos: "Todos",
+  ativos: "Ativos",
+  inativos: "Inativos",
+  em_teste: "Em teste",
+  em_producao: "Em produção",
+  sem_credito: "Sem crédito",
+  arquivados: "Arquivados",
+};
+
+// Some da fila de chips quando não tem ninguém, a não ser que esteja escolhido.
+const SO_COM_CLIENTES: FiltroClientes[] = ["em_teste", "arquivados"];
+
+function passaNoFiltro(c: ClienteCard, filtro: FiltroClientes): boolean {
+  // Arquivado só aparece em "Arquivados": cliente que saiu não ocupa a grade de
+  // quem está sendo atendido hoje.
+  if (filtro === "arquivados") return c.situacao === "arquivado";
+  if (c.situacao === "arquivado") return false;
+  switch (filtro) {
+    case "ativos":
+      return c.situacao === "ativo";
+    case "inativos":
+      return c.situacao === "inativo";
+    case "em_teste":
+      return c.situacao === "em_teste";
+    case "em_producao":
+      return c.temPedidoEmAndamento;
+    case "sem_credito":
+      return c.saldo === 0;
+    default:
+      return true;
+  }
 }
 
 // Lista de clientes pensada para escala: com 20, 50 ou 100 empresas, o que
 // importa é achar rápido e enxergar quem precisa de atenção. Por isso cards
 // compactos, busca no topo e o cadastro escondido atrás de um botão — criar
 // cliente é eventual, achar cliente é o tempo todo.
-export default function ListaClientes({ clientes }: { clientes: ClienteCard[] }) {
+export default function ListaClientes({
+  clientes,
+  filtroInicial = "todos",
+}: {
+  clientes: ClienteCard[];
+  filtroInicial?: FiltroClientes;
+}) {
   const [busca, setBusca] = useState("");
-  const [filtro, setFiltro] = useState<"todos" | "sem_saldo" | "em_producao" | "arquivados">(
-    "todos",
-  );
+  const [filtro, setFiltro] = useState<FiltroClientes>(filtroInicial);
   const [formAberto, setFormAberto] = useState(false);
 
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return clientes.filter((c) => {
-      // Arquivado só aparece em "Arquivados": cliente que saiu não ocupa a
-      // grade de quem está sendo atendido hoje.
-      if (filtro === "arquivados" ? c.ativo : !c.ativo) return false;
-      if (filtro === "sem_saldo" && c.saldo > 0) return false;
-      if (filtro === "em_producao" && !c.temPedidoEmAndamento) return false;
+      if (!passaNoFiltro(c, filtro)) return false;
       if (!termo) return true;
-      return (
-        c.nome.toLowerCase().includes(termo) || (c.nicho ?? "").toLowerCase().includes(termo)
-      );
+      return c.nome.toLowerCase().includes(termo) || (c.nicho ?? "").toLowerCase().includes(termo);
     });
   }, [clientes, busca, filtro]);
 
-  const ativos = clientes.filter((c) => c.ativo);
-  const semSaldo = ativos.filter((c) => c.saldo === 0).length;
-  const emProducao = ativos.filter((c) => c.temPedidoEmAndamento).length;
-  const arquivados = clientes.length - ativos.length;
+  const contagem = useMemo(() => {
+    const n = {} as Record<FiltroClientes, number>;
+    for (const f of Object.keys(ROTULO_FILTRO) as FiltroClientes[]) {
+      n[f] = clientes.filter((c) => passaNoFiltro(c, f)).length;
+    }
+    return n;
+  }, [clientes]);
+
+  // O endereço guarda o filtro: recarregar ou voltar não perde a lista que estava aberta.
+  function escolherFiltro(novo: FiltroClientes) {
+    setFiltro(novo);
+    window.history.replaceState(null, "", novo === "todos" ? "/clientes" : `/clientes?filtro=${novo}`);
+  }
 
   const botaoNovo = (
     <button type="button" onClick={() => setFormAberto(true)} className="btn btn-primary">
@@ -61,12 +118,12 @@ export default function ListaClientes({ clientes }: { clientes: ClienteCard[] })
     <>
       <CabecalhoPagina
         titulo="Clientes"
-        descricao="Cada cliente guarda a própria identidade visual, os materiais e o saldo do pacote."
+        descricao="Cada cliente guarda a própria identidade visual, os materiais e os créditos."
         acoes={botaoNovo}
       />
 
       <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-        <div className="relative flex-1 lg:max-w-md">
+        <div className="relative flex-1 lg:max-w-sm">
           <Search
             size={16}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)] pointer-events-none"
@@ -83,21 +140,14 @@ export default function ListaClientes({ clientes }: { clientes: ClienteCard[] })
 
         {/* Atalhos que respondem "quem precisa de mim agora?" — a pergunta real
             de quem gerencia dezenas de contas. */}
-        <div className="flex gap-2 overflow-x-auto [scrollbar-width:none]">
-          <Chip ativo={filtro === "todos"} onClick={() => setFiltro("todos")}>
-            Todos <Contagem>{ativos.length}</Contagem>
-          </Chip>
-          <Chip ativo={filtro === "em_producao"} onClick={() => setFiltro("em_producao")}>
-            Em produção <Contagem>{emProducao}</Contagem>
-          </Chip>
-          <Chip ativo={filtro === "sem_saldo"} onClick={() => setFiltro("sem_saldo")}>
-            Sem saldo <Contagem>{semSaldo}</Contagem>
-          </Chip>
-          {arquivados > 0 && (
-            <Chip ativo={filtro === "arquivados"} onClick={() => setFiltro("arquivados")}>
-              Arquivados <Contagem>{arquivados}</Contagem>
-            </Chip>
-          )}
+        <div className="flex gap-2 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="Filtrar clientes">
+          {(Object.keys(ROTULO_FILTRO) as FiltroClientes[])
+            .filter((f) => !SO_COM_CLIENTES.includes(f) || contagem[f] > 0 || f === filtro)
+            .map((f) => (
+              <Chip key={f} ativo={filtro === f} onClick={() => escolherFiltro(f)}>
+                {ROTULO_FILTRO[f]} <Contagem>{contagem[f]}</Contagem>
+              </Chip>
+            ))}
         </div>
       </div>
 
@@ -137,7 +187,7 @@ export default function ListaClientes({ clientes }: { clientes: ClienteCard[] })
 
       {visiveis.length === 0 ? (
         <div className="card">
-          {ativos.length === 0 && filtro === "todos" && !busca ? (
+          {contagem.todos === 0 && filtro === "todos" && !busca ? (
             <EstadoVazio
               icone={Store}
               titulo="Nenhum cliente ativo"
@@ -145,45 +195,56 @@ export default function ListaClientes({ clientes }: { clientes: ClienteCard[] })
               acao={botaoNovo}
             />
           ) : (
-            <EstadoVazio
-              icone={SearchX}
-              titulo="Nada encontrado"
-              descricao="Tente outro termo ou troque o filtro."
-            />
+            <EstadoVazio icone={SearchX} titulo="Nada encontrado" descricao="Tente outro termo ou troque o filtro." />
           )}
         </div>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,250px),1fr))] gap-3">
           {visiveis.map((c) => (
-            <Link key={c.id} href={`/clientes/${c.id}`} className="card card-interactive p-3.5 flex flex-col gap-3 min-w-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <Avatar nome={c.nome} src={c.logo} tamanho={40} />
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-sm leading-snug truncate" title={c.nome}>
-                    {c.nome}
-                  </p>
-                  <p className="text-xs text-[var(--muted)] truncate">{c.nicho ?? "sem nicho"}</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className={`badge ${c.saldo === 0 ? "badge-danger" : ""}`}>
-                  {c.saldo === 0 ? "Sem saldo" : `${c.saldo} ${c.saldo === 1 ? "imagem" : "imagens"}`}
-                </span>
-                {c.temPedidoEmAndamento ? (
-                  <span className="badge badge-accent">Em produção</span>
-                ) : (
-                  c.pecasNoMes > 0 && (
-                    <span className="text-xs text-[var(--muted)]" title="Peças entregues no mês">
-                      {c.pecasNoMes} no mês
-                    </span>
-                  )
-                )}
-              </div>
-            </Link>
+            <CardCliente key={c.id} cliente={c} />
           ))}
         </div>
       )}
     </>
+  );
+}
+
+function CardCliente({ cliente: c }: { cliente: ClienteCard }) {
+  const selo = SELO_SITUACAO[c.situacao];
+  const linha = [
+    textoDoUltimoPedido(c.diasSemPedido),
+    c.aprovadasNoMes > 0 ? `${c.aprovadasNoMes} ${c.aprovadasNoMes === 1 ? "aprovada" : "aprovadas"} no mês` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <Link href={`/clientes/${c.id}`} className="card card-interactive p-3.5 flex flex-col gap-3 min-w-0">
+      <div className="flex items-center gap-3 min-w-0">
+        <Avatar nome={c.nome} src={c.logo} tamanho={40} />
+        <div className="min-w-0 flex-1">
+          <p className="font-medium text-sm leading-snug truncate" title={c.nome}>
+            {c.nome}
+          </p>
+          <p className="text-xs text-[var(--muted)] truncate">{c.nicho ?? "sem nicho"}</p>
+        </div>
+        {selo && <span className={`badge ${selo.tom} shrink-0`}>{selo.rotulo}</span>}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className={`badge ${c.saldo === 0 ? "badge-danger" : ""}`}>
+          {c.saldo === 0 ? "Sem crédito" : `${c.saldo} ${c.saldo === 1 ? "crédito" : "créditos"}`}
+        </span>
+        {c.temPedidoEmAndamento && <span className="badge badge-accent">Em produção</span>}
+        {c.cobranca.map((s) => (
+          <span key={s.rotulo} className={`badge ${s.tom}`}>
+            {s.rotulo}
+          </span>
+        ))}
+      </div>
+      <p className="text-xs text-[var(--muted)] truncate -mt-1" title={linha}>
+        {linha}
+      </p>
+    </Link>
   );
 }
 
@@ -197,7 +258,12 @@ function Chip({
   children: React.ReactNode;
 }) {
   return (
-    <button type="button" onClick={onClick} aria-pressed={ativo} className={ativo ? "chip chip-selected" : "chip"}>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={ativo}
+      className={`${ativo ? "chip chip-selected" : "chip"} shrink-0`}
+    >
       {children}
     </button>
   );

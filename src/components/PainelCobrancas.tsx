@@ -176,8 +176,8 @@ export default function PainelCobrancas({
                   <th className="py-2.5 px-3 font-medium">Vencimento</th>
                   <th className="py-2.5 px-3 font-medium">Situação</th>
                   <th className="py-2.5 px-3 font-medium">Pagamento</th>
-                  <th className="py-2.5 px-3 font-medium text-right" title="Imagens disponíveis para gerar">
-                    Imagens
+                  <th className="py-2.5 px-3 font-medium text-right" title="Créditos disponíveis. Cada arte aprovada usa 1.">
+                    Créditos
                   </th>
                   <th className="py-2.5 pr-5 pl-3">
                     <span className="sr-only">Ação</span>

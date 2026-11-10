@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireOperador, requireSocio } from "@/lib/auth";
+import { ehSocio, requireOperador, requireSocio } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { diaValido, hojeSP } from "@/lib/datas";
 import { duracaoValida, nomeDoPlano, vencimentoDoPlano } from "@/lib/agencia/cobrancas";
+import { debitarCredito } from "@/lib/agencia/pacotes";
 import { METODOS_PAGAMENTO, reaisParaCentavos, type BriefingPecaManual } from "@/lib/agencia/types";
 
 // Server Actions do cadastro da agência. CRUD simples vai direto por action
@@ -138,7 +139,7 @@ function revalidarCobranca(clienteId: string | null) {
   revalidatePath("/dashboard");
 }
 
-// Vende um plano por tempo ou um pacote avulso de imagens, e registra o
+// Vende um plano por tempo ou um pacote avulso de créditos, e registra o
 // pagamento junto: um pagamento por venda, no valor total, mesmo no plano anual.
 // No controle manual os dois acontecem juntos (o cliente paga e o saldo entra).
 // Quando houver gateway, o pagamento passa a nascer "pendente".
@@ -151,7 +152,7 @@ export async function venderPacote(form: FormData): Promise<{ erro?: string }> {
   const tipo = form.get("tipo") === "tempo" ? "tempo" : "imagens";
   const qtd = Number(form.get("qtd_imagens"));
   if (!Number.isInteger(qtd) || qtd < 1 || qtd > 10_000) {
-    return { erro: "Informe quantas imagens entram, em número inteiro." };
+    return { erro: "Informe quantos créditos entram, em número inteiro." };
   }
   const valorCentavos = reaisParaCentavos(texto(form, "valor_reais"));
   if (valorCentavos === null) return { erro: "Informe o valor cobrado." };
@@ -186,7 +187,7 @@ export async function venderPacote(form: FormData): Promise<{ erro?: string }> {
     .from("pacotes")
     .insert({
       cliente_id: clienteId,
-      nome: plano ? nomeDoPlano(plano.meses) : `Pacote ${qtd} imagens`,
+      nome: plano ? nomeDoPlano(plano.meses) : `Pacote ${qtd} ${qtd === 1 ? "crédito" : "créditos"}`,
       tipo,
       meses: plano?.meses ?? null,
       qtd_imagens: qtd,
@@ -239,8 +240,8 @@ export async function confirmarPagamento(form: FormData) {
   revalidarCobranca(clienteId);
 }
 
-// Cancela um plano ou pacote lançado por engano ou desfeito com o cliente. As
-// imagens que sobraram deixam de valer e o pagamento ainda em aberto sai da conta
+// Cancela um plano ou pacote lançado por engano ou desfeito com o cliente. Os
+// créditos que sobraram deixam de valer e o pagamento ainda em aberto sai da conta
 // a receber. O que já foi pago continua registrado como pago: devolver dinheiro
 // é outra conversa.
 export async function cancelarPacote(form: FormData) {
@@ -257,7 +258,7 @@ export async function cancelarPacote(form: FormData) {
 }
 
 // Registra o tempo humano gasto na peça. É o número que decide se o pacote
-// de R$ 34,90 por 10 imagens fecha a conta — custo de API quase nunca é o
+// de R$ 34,90 por 10 créditos fecha a conta — custo de API quase nunca é o
 // gargalo, tempo de gente é.
 export async function registrarTempoPeca(form: FormData) {
   await requireOperador();
@@ -275,34 +276,94 @@ export async function registrarTempoPeca(form: FormData) {
   if (pedidoId) revalidatePath(`/pedidos/${pedidoId}`);
 }
 
-export async function aprovarPeca(form: FormData) {
-  await requireOperador();
+export interface ResultadoAprovacao {
+  erro?: string;
+  // O cliente não tem crédito. O sócio pode aprovar mesmo assim.
+  semCredito?: boolean;
+}
+
+// Aprovar é o que gasta crédito: 1 por arte, uma vez só. Ajustar ou trocar a
+// versão de uma arte já debitada e aprovar de novo não cobra outra vez.
+//
+// Sem crédito, só o sócio aprova, e a arte fica sem débito: produzir fiado é
+// decisão comercial, como o "gerar mesmo assim" da tela de pedido.
+export async function aprovarPeca(form: FormData): Promise<ResultadoAprovacao> {
+  const { perfil } = await requireOperador();
   const supabase = await createClient();
   const id = texto(form, "id");
-  const pedidoId = texto(form, "pedido_id");
-  const clienteId = texto(form, "cliente_id");
-  if (!id) return;
+  if (!id) return { erro: "Peça não informada." };
 
-  await supabase
+  const { data: peca } = await supabase
+    .from("pecas")
+    .select("cliente_id, pedido_id, status, imagem_url, titulo, pacote_consumido")
+    .eq("id", id)
+    .maybeSingle();
+  if (!peca?.imagem_url) return { erro: "Esta peça ainda não tem arte para aprovar." };
+  if (peca.status === "aprovada") return {};
+  if (peca.status === "pendente" || peca.status === "gerando") {
+    return { erro: "Espere a arte terminar de sair para aprovar." };
+  }
+
+  const socio = ehSocio(perfil);
+  if (!peca.pacote_consumido) {
+    // Marca antes de debitar: dois cliques em "Aprovar" não podem gastar dois créditos.
+    const { data: reservada, error: erroReserva } = await supabase
+      .from("pecas")
+      .update({ pacote_consumido: true })
+      .eq("id", id)
+      .eq("pacote_consumido", false)
+      .select("id");
+    if (erroReserva) return { erro: "Não consegui aprovar. Tente de novo." };
+    // Outro clique chegou antes e está debitando. A aprovação fica com ele: se o
+    // débito dele falhar, esta não pode aprovar uma arte sem crédito.
+    if (!reservada?.length) return {};
+
+    let restante = -1;
+    try {
+      restante = await debitarCredito(peca.cliente_id);
+    } catch {
+      await supabase.from("pecas").update({ pacote_consumido: false }).eq("id", id);
+      return { erro: "Não consegui debitar o crédito. Tente de novo." };
+    }
+    if (restante < 0) {
+      await supabase.from("pecas").update({ pacote_consumido: false }).eq("id", id);
+      if (!(socio && form.get("sem_credito") === "sim")) {
+        return {
+          semCredito: true,
+          erro: socio
+            ? "O cliente está sem crédito. Venda um pacote ou plano, ou aprove sem debitar."
+            : "O cliente está sem crédito para aprovar. Peça a um sócio para lançar o pacote.",
+        };
+      }
+    }
+  }
+
+  // Só aprova o que ainda não está aprovado nem voltou para a fila no meio do
+  // caminho. O crédito já debitado fica com a peça: a próxima aprovação não cobra.
+  const { data: aprovada } = await supabase
     .from("pecas")
     .update({ status: "aprovada", aprovada_em: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .neq("status", "aprovada")
+    .neq("status", "pendente")
+    .neq("status", "gerando")
+    .select("id");
 
   // Arte aprovada vira referência do cliente: é o material que faz os
   // próximos pedidos saírem mais perto do esperado já na primeira tentativa,
-  // reduzindo retrabalho (= custo).
-  const { data: peca } = await supabase.from("pecas").select("imagem_url, titulo").eq("id", id).maybeSingle();
-  if (peca?.imagem_url && clienteId) {
+  // reduzindo retrabalho (= custo). Uma vez por aprovação, nunca em dobro.
+  if (aprovada?.length) {
     await supabase.from("referencias").insert({
-      cliente_id: clienteId,
+      cliente_id: peca.cliente_id,
       tipo: "arte_aprovada",
       url: peca.imagem_url,
       descricao: peca.titulo,
     });
   }
 
-  if (pedidoId) revalidatePath(`/pedidos/${pedidoId}`);
-  if (clienteId) revalidatePath(`/clientes/${clienteId}`);
+  revalidatePath(`/pedidos/${peca.pedido_id}`);
+  revalidarCobranca(peca.cliente_id);
+  return {};
 }
 
 // Volta a peça para uma imagem que ela já teve. Nada é apagado: a que estava em uso
@@ -368,6 +429,25 @@ export async function alternarArquivoCliente(form: FormData) {
     .update({ ativo: !cliente.ativo, updated_at: new Date().toISOString() })
     .eq("id", id);
 
-  revalidatePath("/clientes");
-  revalidatePath(`/clientes/${id}`);
+  revalidarCobranca(id);
+}
+
+// Marca ou desmarca o cliente em teste: alguém que a agência atende para
+// experimentar, sem cobrar. Ele produz normalmente, mas sai da receita, das
+// cobranças e dos totais do painel, onde o custo dele aparece à parte.
+export async function alternarTesteCliente(form: FormData) {
+  await requireSocio();
+  const supabase = await createClient();
+  const id = texto(form, "id");
+  if (!id) return;
+
+  const { data: cliente } = await supabase.from("clientes").select("em_teste").eq("id", id).maybeSingle();
+  if (!cliente) return;
+
+  await supabase
+    .from("clientes")
+    .update({ em_teste: !cliente.em_teste, updated_at: new Date().toISOString() })
+    .eq("id", id);
+
+  revalidarCobranca(id);
 }

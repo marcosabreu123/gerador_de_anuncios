@@ -1,45 +1,37 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { hojeSP } from "@/lib/datas";
+import { formatarDia, hojeSP } from "@/lib/datas";
 import { imagensDisponiveis, montarLinhas, precisaAtencao, ultimoPlano } from "./cobrancas";
 import type { Pacote, Pagamento } from "./types";
 
-// Saldo de imagens do cliente. Substitui o sistema de créditos do modelo
-// antigo: lá o crédito era do usuário logado (o próprio lojista); aqui o
-// saldo é do CLIENTE atendido, e quem opera é o sócio/designer.
+// Créditos do cliente. 1 crédito = 1 arte aprovada: gerar, variar, ajustar e
+// mudar de formato não gastam crédito. Todo o gasto de API até a aprovação sai da
+// margem da agência e aparece no painel como custo por arte aprovada.
+//
+// No banco o crédito ainda se chama imagem (qtd_imagens, qtd_usadas): mudar o nome
+// das colunas não mudaria nada para quem usa.
 
 export const PACOTE_ENTRADA = {
-  nome: "Pacote 10 imagens",
+  nome: "Pacote 10 créditos",
   qtdImagens: 10,
   valorCentavos: 3490,
 } as const;
 
-// Consome 1 imagem do pacote ativo que vence antes (o plano antes do avulso;
-// no empate, o mais antigo). Retorna o saldo restante daquele pacote, ou -1 se
-// não há pacote com saldo. Atômico via função SQL — duas entregas simultâneas
-// não podem consumir o mesmo último crédito.
+// Debita 1 crédito do pacote ativo que vence antes (o plano antes do avulso; no
+// empate, o mais antigo). Retorna o que sobrou naquele pacote, ou -1 se o cliente
+// não tem crédito. Atômico via função SQL: duas aprovações simultâneas não podem
+// gastar o mesmo último crédito.
 //
-// Client admin porque quem debita é sempre o worker da fila, que roda sem
-// sessão de usuário.
-export async function consumirImagemComoWorker(clienteId: string): Promise<number> {
+// Client admin porque a função só aceita o service role (schema-cobrancas.sql):
+// quem debita é sempre o servidor, nunca o navegador.
+export async function debitarCredito(clienteId: string): Promise<number> {
   const supabase = createAdminClient();
   const { data, error } = await supabase.rpc("consumir_imagem_pacote", { p_cliente: clienteId });
   if (error) {
-    console.error("[pacotes] erro ao consumir imagem (worker):", error);
-    throw new Error("Falha ao consumir imagem do pacote.");
+    console.error("[pacotes] erro ao debitar crédito:", error);
+    throw new Error("Falha ao debitar o crédito do cliente.");
   }
   return typeof data === "number" ? data : -1;
-}
-
-// Estorno: a peça não foi entregue, então não pode ser cobrada do pacote.
-// Best-effort — loga e segue, como o estorno de crédito do modelo antigo.
-export async function devolverImagem(clienteId: string): Promise<void> {
-  try {
-    const supabase = createAdminClient();
-    await supabase.rpc("devolver_imagem_pacote", { p_cliente: clienteId });
-  } catch (e) {
-    console.error("[pacotes] erro ao devolver imagem:", e);
-  }
 }
 
 export interface SaldoCliente {
@@ -81,14 +73,26 @@ export async function saldoDoCliente(clienteId: string): Promise<SaldoCliente> {
   };
 }
 
+// Por que a produção não pode começar, ou nulo quando pode. Gerar não gasta
+// crédito, mas sem nenhum a arte não teria como ser aprovada: a API seria gasta
+// num trabalho que o cliente não pagou.
+export function bloqueioDeGeracao(saldo: Pick<SaldoCliente, "disponivel" | "planoVencidoEm">): string | null {
+  if (saldo.disponivel > 0) return null;
+  // Plano vencido é o motivo mais comum: dizer isso poupa o operador de procurar
+  // por que os créditos sumiram.
+  return saldo.planoVencidoEm
+    ? `O plano deste cliente venceu em ${formatarDia(saldo.planoVencidoEm)}. Renove para gerar.`
+    : "O cliente está sem crédito. Venda um pacote ou plano para gerar.";
+}
+
 // Quantos clientes pedem ação na cobrança: o número ao lado de "Cobranças" no
 // menu do sócio. Roda em toda tela, então lê só o necessário e nunca derruba a
-// página: sem o número, o menu continua de pé.
+// página: sem o número, o menu continua de pé. Cliente em teste não é cobrado.
 export async function contarAlertasCobranca(): Promise<number> {
   try {
     const supabase = await createClient();
     const [{ data: clientes }, { data: planos }, { data: abertos }] = await Promise.all([
-      supabase.from("clientes").select("id, nome, nicho").eq("ativo", true),
+      supabase.from("clientes").select("id, nome, nicho").eq("ativo", true).eq("em_teste", false),
       supabase.from("pacotes").select("*").eq("tipo", "tempo").neq("status", "cancelado"),
       supabase.from("pagamentos").select("*").eq("status", "pendente"),
     ]);

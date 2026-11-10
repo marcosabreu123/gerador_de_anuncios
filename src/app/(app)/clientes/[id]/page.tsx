@@ -18,7 +18,14 @@ import {
   situacaoDoPlano,
 } from "@/lib/agencia/cobrancas";
 import { PACOTE_ENTRADA, saldoDoCliente } from "@/lib/agencia/pacotes";
-import { alternarArquivoCliente, atualizarCliente, removerReferencia, salvarBrandKit } from "../actions";
+import { situacaoDoCliente, textoDoUltimoPedido, diasDesde } from "@/lib/agencia/situacao-cliente";
+import {
+  alternarArquivoCliente,
+  alternarTesteCliente,
+  atualizarCliente,
+  removerReferencia,
+  salvarBrandKit,
+} from "../actions";
 import {
   TIPOS_REFERENCIA,
   type BrandKit,
@@ -47,8 +54,8 @@ export default async function ClientePage({
   if (!clienteRaw) notFound();
   const cliente = clienteRaw as Cliente;
   // Colaborador produz, mas não vê nem mexe em dinheiro: pacote vendido,
-  // valor e pagamento são gestão. O saldo em imagens ele vê, porque é
-  // informação operacional — precisa saber se pode gerar.
+  // valor e pagamento são gestão. Os créditos ele vê, porque é informação
+  // operacional — precisa saber se pode gerar.
   const gestao = ehSocio(perfil);
 
   const [
@@ -116,6 +123,10 @@ export default async function ClientePage({
     ...precosSugeridos(saldo.pacotes, (precosRaw ?? []) as Pacote[]),
   };
   const linkRenovar = plano && `/clientes/${id}?renovar=${plano.id}#pacotes`;
+
+  // Os pedidos vêm do mais novo: o primeiro é o último pedido do cliente.
+  const ultimoPedido = pedidos[0]?.created_at ?? null;
+  const situacaoCliente = situacaoDoCliente(cliente, ultimoPedido, hoje);
 
   // Cliente arquivado não recebe pedido novo: reative antes, para não produzir
   // no lugar errado por engano.
@@ -379,21 +390,38 @@ export default async function ClientePage({
         <BotaoEnviar className="btn btn-outline self-start">Salvar dados</BotaoEnviar>
       </form>
 
-      {/* Arquivar é decisão comercial (o cliente saiu), então fica com o
-          sócio. Não apaga nada: o histórico continua valendo no relatório. */}
       {gestao && (
-        <form action={alternarArquivoCliente} className="card p-5 flex flex-col items-start gap-3">
-          <input type="hidden" name="id" value={id} />
-          <TituloCard
-            titulo={cliente.ativo ? "Arquivar cliente" : "Reativar cliente"}
-            descricao={
-              cliente.ativo
-                ? "Some da lista de clientes ativos. Pedidos, peças e pacotes continuam guardados."
-                : "Este cliente está arquivado. Reativar devolve ele à lista de ativos."
-            }
-          />
-          <BotaoEnviar className="btn btn-outline">{cliente.ativo ? "Arquivar" : "Reativar"}</BotaoEnviar>
-        </form>
+        <div className="flex flex-col gap-4">
+          {/* Teste é decisão comercial: quem a agência atende sem cobrar, para
+              experimentar. Produz normalmente, mas fica fora do dinheiro. */}
+          <form action={alternarTesteCliente} className="card p-5 flex flex-col items-start gap-3">
+            <input type="hidden" name="id" value={id} />
+            <TituloCard
+              titulo={cliente.em_teste ? "Cliente em teste" : "Atender em teste"}
+              descricao={
+                cliente.em_teste
+                  ? "Fora da receita, das cobranças e dos totais do painel, onde o custo dele aparece à parte. Quando ele começar a pagar, tire do teste."
+                  : "Para quem a agência atende sem cobrar. Ele produz normalmente, mas sai da receita, das cobranças e dos totais do painel."
+              }
+            />
+            <BotaoEnviar className="btn btn-outline">{cliente.em_teste ? "Tirar do teste" : "Marcar como teste"}</BotaoEnviar>
+          </form>
+
+          {/* Arquivar é decisão comercial (o cliente saiu), então fica com o
+              sócio. Não apaga nada: o histórico continua valendo no relatório. */}
+          <form action={alternarArquivoCliente} className="card p-5 flex flex-col items-start gap-3">
+            <input type="hidden" name="id" value={id} />
+            <TituloCard
+              titulo={cliente.ativo ? "Arquivar cliente" : "Reativar cliente"}
+              descricao={
+                cliente.ativo
+                  ? "Some da lista de clientes ativos. Pedidos, peças e pacotes continuam guardados."
+                  : "Este cliente está arquivado. Reativar devolve ele à lista de ativos."
+              }
+            />
+            <BotaoEnviar className="btn btn-outline">{cliente.ativo ? "Arquivar" : "Reativar"}</BotaoEnviar>
+          </form>
+        </div>
       )}
     </div>
   );
@@ -415,17 +443,33 @@ export default async function ClientePage({
         descricao={cliente.nicho ?? "Nicho não informado"}
         acoes={
           <>
-            {!cliente.ativo && <span className="badge badge-warning">Arquivado</span>}
-            {/* Vencido sem saldo já tem o aviso logo abaixo. */}
+            {situacaoCliente === "arquivado" && <span className="badge badge-warning">Arquivado</span>}
+            {situacaoCliente === "em_teste" && (
+              <span className="badge badge-accent" title="Fora da receita, das cobranças e dos totais do painel">
+                Em teste
+              </span>
+            )}
+            {situacaoCliente === "inativo" && (
+              <span className="badge badge-warning" title={textoDoUltimoPedido(diasDesde(ultimoPedido, hoje))}>
+                Inativo
+              </span>
+            )}
+            {/* Vencido sem saldo já tem o aviso logo abaixo. Cliente em teste não é cobrado. */}
             {cliente.ativo &&
+              !cliente.em_teste &&
               plano &&
               (situacao === "vencendo" || (situacao === "vencido" && !semSaldoPorVencimento)) && (
                 <span className={`badge ${SELO_SITUACAO[situacao].tom}`} title={plano.nome}>
                   Plano {prazoDoPlano(diasDoPlano!).toLowerCase()}
                 </span>
               )}
-            <span className={`badge ${saldo.disponivel === 0 ? "badge-danger" : ""}`} title="Imagens disponíveis para gerar">
-              {saldo.disponivel} {saldo.disponivel === 1 ? "imagem" : "imagens"}
+            <span
+              className={`badge ${saldo.disponivel === 0 ? "badge-danger" : ""}`}
+              title="Créditos disponíveis. Cada arte aprovada usa 1."
+            >
+              {saldo.disponivel === 0
+                ? "Sem crédito"
+                : `${saldo.disponivel} ${saldo.disponivel === 1 ? "crédito" : "créditos"}`}
             </span>
             {novoPedido}
           </>
@@ -437,7 +481,7 @@ export default async function ClientePage({
           <AlertTriangle size={18} className="text-[var(--danger)] shrink-0 mt-0.5" aria-hidden="true" />
           <div className="flex-1 min-w-[220px]">
             <p className="font-medium text-sm">
-              {semSaldoPorVencimento ? `Plano vencido em ${formatarDia(saldo.planoVencidoEm!)}` : "Cliente sem saldo"}
+              {semSaldoPorVencimento ? `Plano vencido em ${formatarDia(saldo.planoVencidoEm!)}` : "Cliente sem crédito"}
             </p>
             <p className="text-[13px] text-[var(--muted)] mt-0.5">
               {semSaldoPorVencimento
@@ -446,7 +490,7 @@ export default async function ClientePage({
                   : "A geração fica bloqueada até um sócio renovar o plano."
                 : gestao
                   ? "Venda um pacote antes de produzir, ou gere mesmo assim se o pagamento já foi combinado."
-                  : "Avise um sócio para lançar o pacote. Sem saldo, a geração fica bloqueada."}
+                  : "Avise um sócio para lançar o pacote. Sem crédito, a geração fica bloqueada."}
             </p>
           </div>
           {gestao && semSaldoPorVencimento && linkRenovar && (

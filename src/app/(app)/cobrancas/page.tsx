@@ -25,30 +25,39 @@ export default async function CobrancasPage({
   const periodo = mesAtual();
 
   const [{ data: clientesRaw }, { data: pacotesRaw }, { data: pagamentosRaw }, { data: logos }] = await Promise.all([
-    supabase.from("clientes").select("id, nome, nicho, ativo").order("nome"),
+    supabase.from("clientes").select("id, nome, nicho, ativo, em_teste").order("nome"),
     supabase.from("pacotes").select("*"),
     supabase.from("pagamentos").select("*"),
     supabase.from("referencias").select("cliente_id, url").eq("tipo", "logo"),
   ]);
 
-  const clientes = (clientesRaw ?? []) as { id: string; nome: string; nicho: string | null; ativo: boolean }[];
+  const clientes = (clientesRaw ?? []) as {
+    id: string;
+    nome: string;
+    nicho: string | null;
+    ativo: boolean;
+    em_teste: boolean;
+  }[];
   const pacotes = (pacotesRaw ?? []) as Pacote[];
   const pagamentos = (pagamentosRaw ?? []) as Pagamento[];
 
-  // Arquivado saiu da carteira: não entra na lista nem no número do menu.
+  // Arquivado saiu da carteira e cliente em teste não é cobrado: nenhum dos dois
+  // entra na lista nem no número do menu.
   const linhas = montarLinhas({
-    clientes: clientes.filter((c) => c.ativo),
+    clientes: clientes.filter((c) => c.ativo && !c.em_teste),
     pacotes,
     pagamentos,
     logos: new Map((logos ?? []).map((l) => [l.cliente_id as string, l.url as string])),
     hoje,
   });
 
-  // Mesma conta da receita do painel, para os dois números baterem.
+  // Mesma conta da receita do painel, para os dois números baterem: sem os
+  // clientes em teste.
   const inicio = Date.parse(periodo.inicio);
   const fim = Date.parse(periodo.fim);
+  const emTeste = new Set(clientes.filter((c) => c.em_teste).map((c) => c.id));
   const recebidoNoMesCentavos = pagamentos
-    .filter((pg) => pg.status === "confirmado" && pg.pago_em)
+    .filter((pg) => pg.status === "confirmado" && pg.pago_em && !emTeste.has(pg.cliente_id))
     .filter((pg) => {
       const quando = Date.parse(pg.pago_em!);
       return quando >= inicio && quando <= fim;
@@ -83,7 +92,10 @@ export default async function CobrancasPage({
 
   return (
     <main className="pagina flex flex-col gap-6">
-      <CabecalhoPagina titulo="Cobranças" descricao="Plano, vencimento e pagamento de cada cliente ativo." />
+      <CabecalhoPagina
+        titulo="Cobranças"
+        descricao="Plano, vencimento e pagamento de cada cliente. Arquivados e clientes em teste ficam de fora."
+      />
       <PainelCobrancas
         linhas={linhas}
         historico={historico}

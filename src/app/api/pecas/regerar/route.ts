@@ -27,10 +27,9 @@ function doNossoStorage(url: string): boolean {
 
 // Regera uma peça, opcionalmente com um ajuste pedido pelo operador.
 //
-// Não consome pacote de novo: a flag pacote_consumido da peça continua como
-// está. O cliente comprou peças entregues, não tentativas — o custo do
-// retrabalho sai da margem da agência, e aparece no dashboard como aumento
-// de gerações por peça.
+// Não gasta crédito: ele só sai quando a arte é aprovada, uma vez por peça. O
+// cliente comprou artes aprovadas, não tentativas — o custo do retrabalho sai
+// da margem da agência e aparece no painel como custo por arte aprovada.
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -109,6 +108,9 @@ export async function POST(request: NextRequest) {
       .from("pecas")
       .update({ briefing: { ...semFormatoPendente, ...ajuste, prompt: promptAcumulado } })
       .eq("id", peca.id);
+  } else if (briefing.adaptadaDe && !peca.imagem_url) {
+    // Peça do "Outro formato" que ainda não saiu: tentar de novo é adaptar de novo
+    // a mesma arte, não criar outra do zero com o pedido antigo.
   } else if (briefing.ajusteSobreUrl || briefing.instrucaoAjuste || briefing.formatoNovo || briefing.imagensAjuste) {
     // "Tentar de novo" sem instrução: refazer, não repetir o ajuste anterior.
     // Sem limpar, uma peça que falhou depois de um ajuste voltaria editando a

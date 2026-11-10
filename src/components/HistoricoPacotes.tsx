@@ -46,7 +46,7 @@ export default function HistoricoPacotes({
         const detalhes = [
           `Assinado em ${formatarDia(p.assinado_em)}`,
           p.validade && `${vencido ? "venceu" : "vence"} em ${formatarDia(p.validade)}`,
-          `${p.qtd_usadas} de ${p.qtd_imagens} ${p.qtd_imagens === 1 ? "imagem usada" : "imagens usadas"}`,
+          `${p.qtd_usadas} de ${p.qtd_imagens} ${p.qtd_imagens === 1 ? "crédito usado" : "créditos usados"}`,
         ].filter(Boolean);
 
         return (
@@ -93,7 +93,7 @@ export default function HistoricoPacotes({
                         className="btn btn-ghost btn-sm"
                         pergunta={`Cancelar ${p.nome.replace(/^(Plano|Pacote)/, (m) => m.toLowerCase())}? ${
                           restante > 0
-                            ? `${restante === 1 ? "A imagem que sobrou deixa" : `As ${restante} imagens que sobraram deixam`} de valer.`
+                            ? `${restante === 1 ? "O crédito que sobrou deixa" : `Os ${restante} créditos que sobraram deixam`} de valer.`
                             : ""
                         }${pendente ? " O pagamento em aberto deixa de ser cobrado." : ""}`.trim()}
                       >
