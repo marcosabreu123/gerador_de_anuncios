@@ -24,14 +24,17 @@ interface Numeros {
   prontas: number;
   geracoes: number;
   custo: number;
+  // A margem sai só do custo de quem paga, como no indicador do topo. Num total
+  // que mistura os dois (os arquivados), o custo do cliente em teste fica fora.
+  custoDeQuemPaga: number;
   receita: number | null;
   creditos: number | null;
 }
 
 const imgPorArte = (n: Numeros) => (n.aprovadas > 0 ? n.geracoes / n.aprovadas : null);
 const custoPorArte = (n: Numeros) => (n.aprovadas > 0 ? n.custo / n.aprovadas : null);
-const margem = (n: Numeros) => (n.receita === null ? null : n.receita - n.custo);
-const margemPct = (n: Numeros) => (n.receita ? ((n.receita - n.custo) / n.receita) * 100 : null);
+const margem = (n: Numeros) => (n.receita === null ? null : n.receita - n.custoDeQuemPaga);
+const margemPct = (n: Numeros) => (n.receita ? ((n.receita - n.custoDeQuemPaga) / n.receita) * 100 : null);
 
 function numerosDe(r: ResumoCustoCliente): Numeros {
   return {
@@ -40,26 +43,35 @@ function numerosDe(r: ResumoCustoCliente): Numeros {
     prontas: r.aguardando_aprovacao,
     geracoes: r.geracoes,
     custo: r.custo_brl,
-    // Cliente em teste não paga: receita e margem não se aplicam.
+    custoDeQuemPaga: r.em_teste ? 0 : r.custo_brl,
+    // Cliente em teste não paga nem usa crédito: receita, margem e créditos não se aplicam.
     receita: r.em_teste ? null : r.receita_brl,
     creditos: r.creditos,
   };
 }
 
-function somar(linhas: ResumoCustoCliente[], comReceita: boolean): Numeros {
-  const total: Numeros = { pedidos: 0, aprovadas: 0, prontas: 0, geracoes: 0, custo: 0, receita: 0, creditos: 0 };
-  for (const r of linhas) {
-    total.pedidos += r.pedidos;
-    total.aprovadas += r.artes_aprovadas;
-    total.prontas += r.aguardando_aprovacao;
-    total.geracoes += r.geracoes;
-    total.custo += r.custo_brl;
-    total.receita! += r.em_teste ? 0 : r.receita_brl;
-    total.creditos! += r.creditos ?? 0;
-  }
-  if (!comReceita) {
-    total.receita = null;
-    total.creditos = null;
+// Receita e créditos só somam as linhas que têm: um grupo só de clientes em
+// teste fecha com traço, e não com R$ 0,00 e uma margem negativa.
+function somar(linhas: ResumoCustoCliente[]): Numeros {
+  const total: Numeros = {
+    pedidos: 0,
+    aprovadas: 0,
+    prontas: 0,
+    geracoes: 0,
+    custo: 0,
+    custoDeQuemPaga: 0,
+    receita: null,
+    creditos: null,
+  };
+  for (const n of linhas.map(numerosDe)) {
+    total.pedidos += n.pedidos;
+    total.aprovadas += n.aprovadas;
+    total.prontas += n.prontas;
+    total.geracoes += n.geracoes;
+    total.custo += n.custo;
+    total.custoDeQuemPaga += n.custoDeQuemPaga;
+    if (n.receita !== null) total.receita = (total.receita ?? 0) + n.receita;
+    if (n.creditos !== null) total.creditos = (total.creditos ?? 0) + n.creditos;
   }
   return total;
 }
@@ -194,21 +206,18 @@ export default function TabelaPorCliente({ resumos }: { resumos: ResumoCustoClie
         titulo: "Pagantes",
         nota: null,
         linhas: ordenar(resumos.filter((r) => !r.em_teste && r.situacao !== "arquivado")),
-        comReceita: true,
       },
       {
         id: "teste",
         titulo: "Em teste",
         nota: "Não pagam: o custo é da agência",
         linhas: ordenar(resumos.filter((r) => r.situacao === "em_teste")),
-        comReceita: false,
       },
       {
         id: "arquivados",
         titulo: "Arquivados",
         nota: "Só os que tiveram alguma coisa no mês",
         linhas: ordenar(resumos.filter((r) => r.situacao === "arquivado")),
-        comReceita: true,
       },
     ].filter((g) => g.linhas.length > 0);
   }, [resumos, ordem]);
@@ -281,7 +290,7 @@ export default function TabelaPorCliente({ resumos }: { resumos: ResumoCustoClie
             {g.linhas.map((r) => (
               <LinhaCliente key={r.cliente_id} resumo={r} />
             ))}
-            <LinhaTotal numeros={somar(g.linhas, g.comReceita)} rotulo={`Total ${g.titulo.toLowerCase()}`} />
+            <LinhaTotal numeros={somar(g.linhas)} rotulo={`Total ${g.titulo.toLowerCase()}`} />
           </tbody>
         ))}
       </table>
