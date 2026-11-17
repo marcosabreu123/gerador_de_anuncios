@@ -45,12 +45,17 @@ export default function NavLinks({
   const itens = ITENS.filter((item) => ehSocio || !item.soSocio);
 
   // O pedido e a página de cada cliente são onde as artes são feitas: contam como
-  // Produção. "Clientes" é só a carteira.
+  // Produção. "Clientes" é a carteira e o cadastro de cliente novo.
+  const cadastro = caminho === "/clientes/novo";
   const ativo = (href: string) => {
     if (href === "/producao") {
-      return caminho.startsWith("/producao") || caminho.startsWith("/pedidos") || caminho.startsWith("/clientes/");
+      return (
+        caminho.startsWith("/producao") ||
+        caminho.startsWith("/pedidos") ||
+        (caminho.startsWith("/clientes/") && !cadastro)
+      );
     }
-    if (href === "/clientes") return caminho === "/clientes";
+    if (href === "/clientes") return caminho === "/clientes" || cadastro;
     return caminho.startsWith(href);
   };
 
