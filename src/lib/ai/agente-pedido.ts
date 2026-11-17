@@ -37,8 +37,12 @@ function regrasDoCliente(brandKit: BrandKit | null): string[] {
   if (brandKit.tom_de_voz?.trim()) {
     linhas.push(`Tom de voz da marca (é norte, e frase citada aqui é exemplo, não texto pronto): ${brandKit.tom_de_voz.trim()}`);
   }
+  // Estilo, e não fonte: o dono quer a letra variando de um post para outro, dentro
+  // da identidade e do segmento. Cada peça escolhe a sua dentro desta faixa.
   if (brandKit.tipografia?.trim()) {
-    linhas.push(`Preferência tipográfica (é norte): ${brandKit.tipografia.trim()}`);
+    linhas.push(
+      `Estilo de letra da marca (é norte, não fonte fixa: escolha a fonte de cada peça dentro deste estilo e varie entre as peças): ${brandKit.tipografia.trim()}`,
+    );
   }
   return linhas;
 }

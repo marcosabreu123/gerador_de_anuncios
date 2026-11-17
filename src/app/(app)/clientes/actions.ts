@@ -3,7 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { ehSocio, requireOperador, requireSocio } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { diaValido, hojeSP } from "@/lib/datas";
+import {
+  anexosValidos,
+  fichaValida,
+  regrasEmLista,
+  sessaoValida,
+  type AnexoCadastro,
+  type FichaCadastro,
+} from "@/lib/agencia/cadastro-ia";
 import { duracaoValida, nomeDoPlano, ultimoPlano, vencimentoDoPlano } from "@/lib/agencia/cobrancas";
 import { debitarCredito } from "@/lib/agencia/pacotes";
 import {
@@ -141,14 +150,26 @@ async function gravarPlano(
   return {};
 }
 
-// Cadastro de cliente novo. Todo cliente entra com o primeiro plano ou em teste,
-// e as duas coisas são decisão comercial: só o sócio cadastra.
-export async function criarCliente(form: FormData): Promise<{ erro?: string; id?: string }> {
-  const { authId } = await requireSocio();
-  const supabase = await createClient();
+interface DadosEmpresa {
+  nome: string;
+  nicho: string | null;
+  contato_nome: string | null;
+  contato_telefone: string | null;
+  observacoes: string | null;
+}
 
-  const nome = texto(form, "nome");
-  if (!nome) return { erro: "Informe o nome da empresa." };
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+// Cadastra a empresa com o primeiro plano ou em teste, como o formulário mandou.
+// `completar` grava o que vem junto (identidade e materiais, no cadastro com IA) e
+// devolve o aviso do que não entrou.
+async function cadastrarEmpresa(
+  form: FormData,
+  empresa: DadosEmpresa,
+  authId: string,
+  completar?: (supabase: Supabase, clienteId: string) => Promise<string | null>,
+): Promise<{ erro?: string; id?: string }> {
+  const supabase = await createClient();
 
   const emTeste = form.get("modo") === "teste";
   let plano: DadosPlano | null = null;
@@ -161,15 +182,7 @@ export async function criarCliente(form: FormData): Promise<{ erro?: string; id?
 
   const { data, error } = await supabase
     .from("clientes")
-    .insert({
-      nome,
-      nicho: texto(form, "nicho"),
-      contato_nome: texto(form, "contato_nome"),
-      contato_telefone: texto(form, "contato_telefone"),
-      observacoes: texto(form, "observacoes"),
-      em_teste: emTeste,
-      criado_por: authId,
-    })
+    .insert({ ...empresa, em_teste: emTeste, criado_por: authId })
     .select("id")
     .single();
   if (error || !data) {
@@ -177,6 +190,7 @@ export async function criarCliente(form: FormData): Promise<{ erro?: string; id?
     return { erro: "Não consegui cadastrar. Tente de novo." };
   }
 
+  const aviso = completar ? await completar(supabase, data.id) : null;
   const resultado = plano ? await gravarPlano(supabase, data.id, plano, authId) : {};
   revalidarCobranca(data.id);
   if (resultado.falhou === "plano") {
@@ -185,7 +199,142 @@ export async function criarCliente(form: FormData): Promise<{ erro?: string; id?
   if (resultado.falhou === "pagamento") {
     return { id: data.id, erro: "O cliente e o plano foram cadastrados, mas o pagamento não. Confira na página dele." };
   }
-  return { id: data.id };
+  return aviso ? { id: data.id, erro: aviso } : { id: data.id };
+}
+
+// Cadastro de cliente novo. Todo cliente entra com o primeiro plano ou em teste,
+// e as duas coisas são decisão comercial: só o sócio cadastra.
+export async function criarCliente(form: FormData): Promise<{ erro?: string; id?: string }> {
+  const { authId } = await requireSocio();
+
+  const nome = texto(form, "nome");
+  if (!nome) return { erro: "Informe o nome da empresa." };
+
+  return cadastrarEmpresa(
+    form,
+    {
+      nome,
+      nicho: texto(form, "nicho"),
+      contato_nome: texto(form, "contato_nome"),
+      contato_telefone: texto(form, "contato_telefone"),
+      observacoes: texto(form, "observacoes"),
+    },
+    authId,
+  );
+}
+
+const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET ?? "produtos";
+
+// Cadastro com IA: a ficha que o sócio montou conversando, com identidade e
+// materiais, entra de uma vez, junto com o plano ou o teste.
+export async function cadastrarComIA(form: FormData): Promise<{ erro?: string; id?: string }> {
+  const { authId } = await requireSocio();
+
+  let ficha: FichaCadastro;
+  let materiaisBrutos: unknown;
+  try {
+    ficha = fichaValida(JSON.parse(String(form.get("ficha") ?? "{}")));
+    materiaisBrutos = JSON.parse(String(form.get("materiais") ?? "[]"));
+  } catch {
+    return { erro: "Não consegui ler a ficha. Tente de novo." };
+  }
+  if (!ficha.nome) return { erro: "Falta o nome da empresa." };
+
+  // Só imagens que o próprio sócio subiu, e só as que ficam como material.
+  const supabaseSessao = await createClient();
+  const prefixo = supabaseSessao.storage.from(BUCKET).getPublicUrl(`${authId}/`).data.publicUrl;
+  const materiais = anexosValidos(materiaisBrutos, prefixo).filter((m) => m.tipo && m.tipo !== "descartar");
+  if (materiais.some((m) => m.tipo === "logo_parceiro" && !m.descricao)) {
+    return { erro: "Escreva o nome que aciona cada logo de parceiro." };
+  }
+  const sessao = sessaoValida(form.get("sessao"));
+  const ouNulo = (valor: string) => valor || null;
+
+  return cadastrarEmpresa(
+    form,
+    {
+      nome: ficha.nome,
+      nicho: ouNulo(ficha.nicho),
+      contato_nome: ouNulo(ficha.contato_nome),
+      contato_telefone: ouNulo(ficha.contato_telefone),
+      observacoes: ouNulo(ficha.sobre),
+    },
+    authId,
+    async (supabase, clienteId) => {
+      const faltou: string[] = [];
+
+      const identidade = {
+        cores_primarias: ouNulo(ficha.cores_primarias),
+        cores_secundarias: ouNulo(ficha.cores_secundarias),
+        tipografia: ouNulo(ficha.tipografia),
+        estilo_visual: ouNulo(ficha.estilo_visual),
+        tom_de_voz: ouNulo(ficha.tom_de_voz),
+        regras_obrigatorias: regrasEmLista(ficha.regras_obrigatorias),
+        regras_proibidas: regrasEmLista(ficha.regras_proibidas),
+        whatsapp: ouNulo(ficha.whatsapp),
+        endereco: ouNulo(ficha.endereco),
+        horario_funcionamento: ouNulo(ficha.horario_funcionamento),
+        instagram: ouNulo(ficha.instagram),
+      };
+      if (Object.values(identidade).some((v) => (Array.isArray(v) ? v.length > 0 : Boolean(v)))) {
+        const { error } = await supabase
+          .from("brand_kits")
+          .upsert(
+            { cliente_id: clienteId, ...identidade, updated_at: new Date().toISOString() },
+            { onConflict: "cliente_id" },
+          );
+        if (error) {
+          console.error("[clientes] cadastro com IA, identidade:", error);
+          faltou.push("a identidade");
+        }
+      }
+
+      // A geração usa a logo mais recente, então as logos entram por último, uma por
+      // vez, e a primeira da lista é a última a entrar.
+      const linha = (m: AnexoCadastro) => ({
+        cliente_id: clienteId,
+        tipo: m.tipo,
+        url: m.url,
+        descricao: m.descricao || null,
+      });
+      const outros = materiais.filter((m) => m.tipo !== "logo");
+      const logos = materiais.filter((m) => m.tipo === "logo").reverse();
+      let materialFalhou = false;
+      if (outros.length > 0) {
+        const { error } = await supabase.from("referencias").insert(outros.map(linha));
+        if (error) {
+          console.error("[clientes] cadastro com IA, materiais:", error);
+          materialFalhou = true;
+        }
+      }
+      for (const logo of logos) {
+        const { error } = await supabase.from("referencias").insert(linha(logo));
+        if (error) {
+          console.error("[clientes] cadastro com IA, logo:", error);
+          materialFalhou = true;
+        }
+      }
+      if (materialFalhou) faltou.push("parte dos materiais");
+
+      // O custo da conversa entrou sem cliente, marcado com a sessão: agora ele é deste
+      // cliente. Admin porque `geracoes` só é gravada pelo servidor.
+      if (sessao) {
+        try {
+          const { error } = await createAdminClient()
+            .from("geracoes")
+            .update({ cliente_id: clienteId })
+            .is("cliente_id", null)
+            .eq("usage_raw->>cadastro", sessao);
+          if (error) throw error;
+        } catch (e) {
+          // Só o relatório perde: o cliente e a ficha já estão gravados.
+          console.error("[clientes] cadastro com IA, custo da conversa:", e);
+        }
+      }
+
+      return faltou.length > 0 ? `O cliente foi cadastrado, mas ${faltou.join(" e ")} não. Confira na página dele.` : null;
+    },
+  );
 }
 
 export async function atualizarCliente(form: FormData) {

@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { PROMESSAS } from "@/lib/agencia/promessas";
 import { criarCompletionComRetry } from "./completions";
 import { dataAtual } from "./diretor-arte";
 import { leituraParaBriefing, type LeituraDasReferencias } from "./ler-referencias";
@@ -226,10 +227,8 @@ function numerosDe(texto: string): string[] {
   return texto.match(/\d+(?:[.,]\d+)*/g) ?? [];
 }
 
-// O que a loja teria de cumprir se aparecesse na arte. O prompt proíbe tudo isto
-// sem o pedido dizer, mas nos testes ainda escapou um "Hoje" num título.
-const PROMESSAS =
-  /(?<!\p{L})(hoje|gr[aá]tis|descontos?|brindes?|garantias?|parcel\p{L}*|[uú]ltimas?|limitad[ao]s?|melhor(es)?|mais barat[ao]s?|menor pre[çc]o|por menos)(?!\p{L})/giu;
+// PROMESSAS é o que a loja teria de cumprir se aparecesse na arte. O prompt proíbe
+// tudo isto sem o pedido dizer, mas nos testes ainda escapou um "Hoje" num título.
 
 function semAcento(texto: string): string {
   return texto.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();

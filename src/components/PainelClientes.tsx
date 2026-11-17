@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, RefreshCw, Wallet } from "lucide-react";
+import { Plus, RefreshCw, Sparkles, Wallet } from "lucide-react";
 import { confirmarPagamento } from "@/app/(app)/clientes/actions";
 import BotaoEnviar from "@/components/BotaoEnviar";
 import FormNovoCliente from "@/components/FormNovoCliente";
@@ -127,11 +127,19 @@ export default function PainelClientes({
     if (cadastroAberto) window.history.replaceState(null, "", filtro === "todos" ? "/clientes" : `/clientes?filtro=${filtro}`);
   }
 
+  // Dois caminhos para o mesmo cadastro: conversando com a IA, que preenche a
+  // identidade e organiza os materiais, ou à mão, só com os dados básicos.
   const botaoNovo = (
-    <button type="button" onClick={() => setFormAberto(true)} className="btn btn-primary">
-      <Plus size={16} aria-hidden="true" />
-      Novo cliente
-    </button>
+    <div className="flex flex-wrap items-center justify-center gap-2">
+      <button type="button" onClick={() => setFormAberto(true)} className="btn btn-outline">
+        <Plus size={16} aria-hidden="true" />
+        Cadastro manual
+      </button>
+      <Link href="/clientes/novo" className="btn btn-primary">
+        <Sparkles size={16} aria-hidden="true" />
+        Cadastrar com IA
+      </Link>
+    </div>
   );
 
   // Só os filtros que têm alguém, mais o escolhido: com todos em teste, a fila de
