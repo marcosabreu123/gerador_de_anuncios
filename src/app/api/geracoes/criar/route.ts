@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
   let objetivo: ObjetivoArte = "livre";
   // Os campos do objetivo como vieram da tela: { produto: "...", preco: "..." }.
   let camposBrutos: unknown = {};
+  let arteDeEvento = false;
 
   const contentType = request.headers.get("content-type") ?? "";
 
@@ -92,6 +93,7 @@ export async function POST(request: NextRequest) {
       produtoRefId = (form.get("produtoRefId") as string) || undefined;
       objetivo = objetivoValido(form.get("objetivo"));
       camposBrutos = JSON.parse(String(form.get("campos") ?? "{}"));
+      arteDeEvento = form.get("arteDeEvento") === "true";
 
       const audio = form.get("audio");
       if (audio instanceof File && audio.size > 0) {
@@ -115,6 +117,7 @@ export async function POST(request: NextRequest) {
       produtoRefId = (body.produtoRefId as string) || undefined;
       objetivo = objetivoValido(body.objetivo);
       camposBrutos = body.campos ?? {};
+      arteDeEvento = body.arteDeEvento === true;
     }
   } catch {
     return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
@@ -227,6 +230,7 @@ export async function POST(request: NextRequest) {
           ...(arteBaseUrl ? { arteBaseUrl, modoTransformacao } : {}),
           ...(objetivo !== "livre" ? { objetivo } : {}),
           ...(obrigatorios.length > 0 ? { obrigatorios } : {}),
+          ...(arteDeEvento ? { arteDeEvento } : {}),
         },
         status: "pendente",
       }));

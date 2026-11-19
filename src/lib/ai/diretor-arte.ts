@@ -91,18 +91,35 @@ Varie o layout entre peças. Título no topo, produto no meio e contato no rodap
 
 O produto nunca pode parecer recortado e colado. Ele divide a mesma luz, a mesma sombra e o mesmo plano focal da cena.`;
 
+// Vale para toda peça, de marca ou de evento.
+const TEXTO_INTEIRO = `Texto curto e inteiro. Palavra nunca quebra no meio, e nenhum objeto da cena cobre parte de uma letra: "HOJE" com o pé do E tapado vira "HOJF". Preço é elemento gráfico: trabalhe o tamanho relativo entre o símbolo da moeda, os inteiros e os centavos, sempre na mesma linha de base. Nunca peça centavos elevados ou sobrescritos: é o que faz o gerador de imagem duplicar a vírgula.`;
+
 const TIPOGRAFIA = `## Tipografia
 No máximo duas famílias. Hierarquia se faz com peso, tamanho e espaçamento, não com variedade de fontes.
 
 Headline: escolha deliberada, nunca o padrão. Sans-serif condensada pesada para urgência comercial, serif alta para sofisticação, geométrica espaçada para tecnologia e arquitetura, humanista para confiança e saúde.
 Secundária: sans-serif regular e legível, sempre.
 
-Texto curto e inteiro. Palavra nunca quebra no meio, e nenhum objeto da cena cobre parte de uma letra: "HOJE" com o pé do E tapado vira "HOJF". Preço é elemento gráfico: trabalhe o tamanho relativo entre o símbolo da moeda, os inteiros e os centavos, sempre na mesma linha de base. Nunca peça centavos elevados ou sobrescritos: é o que faz o gerador de imagem duplicar a vírgula.
+${TEXTO_INTEIRO}
 
 Proibido: contorno preto grosso, sombra dura, efeito 3D, letra inflada, degradê dentro da letra, amarelo com borda preta. Todos marcam a peça como amadora instantaneamente.`;
 
+// Na arte de evento a letra é o que mais faz o estilo ser reconhecido, e a lista de
+// proibições acima barraria justamente ela: a do jogo que motivou a opção tem degradê.
+const TIPOGRAFIA_EVENTO = `## Tipografia
+No máximo duas famílias. Hierarquia se faz com peso, tamanho e espaçamento, não com variedade de fontes.
+
+Headline: a letra segue o estilo do evento, com a forma, o peso, o tratamento e o efeito que fazem esse estilo ser reconhecido de longe. Contorno, sombra, degradê dentro da letra e efeito 3D valem quando fazem parte do estilo do evento. Recrie o estilo com o texto da peça, sem copiar o logotipo oficial.
+Secundária: legível e no mesmo clima, sem disputar com a headline.
+
+${TEXTO_INTEIRO}`;
+
+const TRES_PAPEIS = `Trabalhe com três papéis: base (domina o quadro), apoio (dá profundidade) e destaque (aparece em um só lugar, geralmente o preço ou o CTA).`;
+
+const CORES_EM_HEX = `Sempre devolva cores em hexadecimal. Os geradores de imagem atuais respeitam hex com fidelidade alta quando o código está amarrado a um objeto específico.`;
+
 const COR = `## Cor
-Trabalhe com três papéis: base (domina o quadro), apoio (dá profundidade) e destaque (aparece em um só lugar, geralmente o preço ou o CTA).
+${TRES_PAPEIS}
 
 A cor de destaque perde força na proporção em que é repetida. Usada uma vez, ela dirige o olho; usada em cinco lugares, vira ruído.
 
@@ -110,7 +127,14 @@ Fundo saturado chapado é a assinatura do panfleto. Prefira base neutra profunda
 
 Quando o cliente tem cores e regras cadastradas, elas mandam. A paleta do segmento é só o padrão de mercado para quando a marca não define nada. Estilo, tipografia e referências da marca são norte: dão o jeito da peça, e a ideia continua sendo sua, sem repetir objeto ou recurso de arte antiga.
 
-Sempre devolva cores em hexadecimal. Os geradores de imagem atuais respeitam hex com fidelidade alta quando o código está amarrado a um objeto específico.`;
+${CORES_EM_HEX}`;
+
+const COR_EVENTO = `## Cor
+A paleta vem do estilo do evento ou da tendência, e da imagem anexada quando houver: use as cores que fazem quem vê reconhecer esse estilo na hora. As cores da marca e a paleta do segmento não valem nesta peça.
+
+Mesmo assim, ${TRES_PAPEIS.charAt(0).toLowerCase()}${TRES_PAPEIS.slice(1)}
+
+${CORES_EM_HEX}`;
 
 const LUZ = `## Luz e realismo
 Luz é o que separa foto publicitária de foto de celular. Defina sempre direção, qualidade e temperatura.
@@ -129,6 +153,28 @@ O padrão é foto publicitária realista. Quando o pedido ou a direção do oper
 Ilustração é desenho do começo ao fim: produto, objetos e fundo também são desenhados, no mesmo traço. Flyer gráfico tem fundo de design, com formas, cores, ícones e elementos gráficos, e não um cenário fotográfico; o produto, quando entra, pode ser foto recortada sobre esse fundo.
 
 Fora da foto, "estiloFotografico" descreve o estilo da ilustração ou do design gráfico, "camera" descreve só o enquadramento, e as regras de luz e realismo valem só no que fizer sentido para aquele tipo.`;
+
+const TIPO_DE_IMAGEM_EVENTO = `${TIPO_DE_IMAGEM}
+
+Na arte de evento, o tipo de imagem também vem do evento: use a linguagem visual que o público liga a ele, como ilustração, cartaz de cinema, colagem ou foto. O tipo que o operador escolheu nos botões continua valendo mais.`;
+
+// O dono quer artes de evento e de tendência, como as que todo mundo faz no estilo do
+// jogo que está lançando, fora da identidade do cliente. A logo continua assinando.
+// Num teste, o "motel-style neon" da ficha virou um letreiro MOTEL atrás da carne do açougue.
+const ARTE_DE_EVENTO = `## Esta é uma arte de evento
+Esta peça não segue a identidade visual do cliente. Ela entra num evento ou numa tendência do momento, como o lançamento de um jogo ou de um filme, a Copa, o Carnaval ou o Halloween, e quem vê precisa reconhecer esse estilo de longe. Onde as seções abaixo falarem de cor, letra ou acabamento da marca, vale o estilo do evento.
+
+Do evento vêm a paleta, a letra e o tratamento dos títulos, o tipo de imagem, o clima, a composição e os elementos de cena. Do cliente continuam o que ele vende, o público, os textos do pedido e a logo, que assina a peça.
+
+Recrie o estilo com elementos próprios. Logotipo oficial, personagens, capas e artes oficiais do evento nunca são copiados: a peça anuncia o cliente, e não o dono do evento. O nome do evento pode aparecer escrito quando o pedido citar, como texto da peça, e nunca desenhado como o logotipo oficial.
+
+Letreiro, placa, fachada e tela do cenário ficam sem palavra legível: em cena de cidade o gerador inventa texto.
+
+Quando o pedido pedir o nome da empresa escrito no estilo do evento, esse nome vira a headline nesse estilo, e a logo continua assinando, pequena.
+
+Se o pedido não disser qual é o evento, use a ocasião que ele cita ou o estilo da imagem anexada.`;
+
+const SEGMENTO_NA_ARTE_DE_EVENTO = `Nesta arte de evento, use o bloco do segmento só para entender o público e o que a empresa vende. Paleta, letra, luz e composição vêm do evento.`;
 
 const ANTI_IA = `## O que faz uma imagem parecer gerada por IA, e como evitar
 Este é o critério mais importante da peça. O cliente não sabe nomear, mas reconhece na hora.
@@ -177,9 +223,13 @@ Os campos descritivos vão em INGLÊS porque é o idioma em que os geradores de 
 
 A paleta traz de três a cinco cores com hex. O array "textos" traz no máximo quatro blocos, e só os que a peça realmente precisa.`;
 
-export const NUCLEO_DIRETOR_ARTE = [
+const ABERTURA = [
   "Você é diretor de arte publicitário sênior. Trabalhou em agência, dirigiu campanha de produto e sabe a diferença entre uma peça que organiza informação e uma peça que vende.",
   "Seu trabalho aqui é decidir a direção de arte de uma peça de social media para um negócio brasileiro e entregá-la como ficha estruturada. Outro sistema vai transformar sua ficha em imagem — por isso a ficha precisa ser específica e executável, nunca um desejo vago como 'composição moderna e elegante'.",
+];
+
+export const NUCLEO_DIRETOR_ARTE = [
+  ...ABERTURA,
   PROCESSO,
   TIPO_DE_PEDIDO,
   HIERARQUIA,
@@ -192,9 +242,30 @@ export const NUCLEO_DIRETOR_ARTE = [
   FIDELIDADE,
 ].join("\n\n");
 
+// Mesmo diretor, com a cor, a letra e o tipo de imagem vindo do evento. As seções
+// trocadas saem inteiras, em vez de ressalvas: com a regra da marca e a exceção lado a
+// lado, o modelo tende a obedecer pela metade.
+const NUCLEO_ARTE_DE_EVENTO = [
+  ...ABERTURA,
+  PROCESSO,
+  TIPO_DE_PEDIDO,
+  ARTE_DE_EVENTO,
+  HIERARQUIA,
+  COMPOSICAO,
+  TIPOGRAFIA_EVENTO,
+  COR_EVENTO,
+  LUZ,
+  TIPO_DE_IMAGEM_EVENTO,
+  ANTI_IA,
+  FIDELIDADE,
+].join("\n\n");
+
 // Monta o system completo: núcleo + o segmento daquele cliente + formato.
-export function systemDiretorArte(nicho: string | null | undefined, pedido: string): string {
-  return [NUCLEO_DIRETOR_ARTE, blocoDeNicho(guiaDoNicho(nicho, pedido)), FORMATO_SAIDA].join("\n\n");
+export function systemDiretorArte(nicho: string | null | undefined, pedido: string, evento = false): string {
+  const segmento = blocoDeNicho(guiaDoNicho(nicho, pedido));
+  return evento
+    ? [NUCLEO_ARTE_DE_EVENTO, `${segmento}\n${SEGMENTO_NA_ARTE_DE_EVENTO}`, FORMATO_SAIDA].join("\n\n")
+    : [NUCLEO_DIRETOR_ARTE, segmento, FORMATO_SAIDA].join("\n\n");
 }
 
 // Valida e normaliza o que o modelo devolveu. Campo faltando não pode derrubar
@@ -314,6 +385,9 @@ export interface ContextoPeca {
   // Nomes das logos de programa ou parceiro anexadas porque o pedido as cita, como
   // "CNH do Brasil" (ver logo-parceiro.ts). Entram na peça além da logo da marca.
   logosParceiros?: string[];
+  // O visual segue o evento ou a tendência do pedido, e não a identidade do cliente.
+  // Quem chama já manda a identidade sem cores e sem a leitura das referências.
+  arteDeEvento?: boolean;
 }
 
 export interface ResultadoDiretorArte {
@@ -332,8 +406,10 @@ const ROTAS_DE_VARIACAO = [
   "Rota desta peça: quadro dividido. Um campo liso na cor de base da marca ocupa cerca de um terço do quadro e leva todo o texto; o assunto sangra na borda oposta.",
 ];
 
-export function rotaDeVariacao(indice: number): string {
-  return ROTAS_DE_VARIACAO[indice % ROTAS_DE_VARIACAO.length];
+export function rotaDeVariacao(indice: number, evento = false): string {
+  const rota = ROTAS_DE_VARIACAO[indice % ROTAS_DE_VARIACAO.length];
+  // Na arte de evento a cor de base é a do evento.
+  return evento ? rota.replace("da marca", "da peça") : rota;
 }
 
 // Só pedir "não repita o layout" não bastou: em um dos testes a ficha descreveu o
@@ -455,16 +531,26 @@ export async function montarPromptDiretorArte(ctx: ContextoPeca): Promise<Result
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY ausente.");
 
+  const evento = ctx.arteDeEvento === true;
   const variacao = ctx.variacao && ctx.variacao.total > 1
-    ? `ESTA É A PEÇA ${ctx.variacao.indice + 1} DE ${ctx.variacao.total} do mesmo pedido. ${rotaDeVariacao(ctx.variacao.indice)} As mesmas informações, com um conceito próprio que não repita a ideia das outras peças.`
+    ? `ESTA É A PEÇA ${ctx.variacao.indice + 1} DE ${ctx.variacao.total} do mesmo pedido. ${rotaDeVariacao(ctx.variacao.indice, evento)} As mesmas informações, com um conceito próprio que não repita a ideia das outras peças.`
+    : null;
+
+  const identidade = ctx.identidade?.trim()
+    ? evento
+      ? `O CLIENTE (nesta arte de evento o visual vem do evento; daqui valem o que a empresa é, o tom e as regras de conteúdo):\n${ctx.identidade.trim()}`
+      : `IDENTIDADE VISUAL DO CLIENTE (tem precedência sobre a paleta do segmento):\n${ctx.identidade.trim()}`
     : null;
 
   const usuario = [
     `PEDIDO DO OPERADOR: ${ctx.pedido}`,
+    evento
+      ? "ARTE DE EVENTO: o operador marcou que esta peça segue o estilo do evento ou da tendência do pedido, e não a identidade visual do cliente."
+      : null,
     `DATA ATUAL: ${dataAtual()}. Serve para você se situar no tempo, e não entra na arte por conta própria.`,
     `EMPRESA: ${ctx.empresa}${ctx.nicho ? ` (nicho: ${ctx.nicho})` : ""}`,
-    ctx.identidade?.trim() ? `IDENTIDADE VISUAL DO CLIENTE (tem precedência sobre a paleta do segmento):\n${ctx.identidade.trim()}` : null,
-    ctx.referencias?.trim() ? `O QUE AS ARTES DE REFERÊNCIA DO CLIENTE MOSTRAM (é norte da linguagem da marca, a ideia desta peça é nova):\n${ctx.referencias.trim()}` : null,
+    identidade,
+    ctx.referencias?.trim() && !evento ? `O QUE AS ARTES DE REFERÊNCIA DO CLIENTE MOSTRAM (é norte da linguagem da marca, a ideia desta peça é nova):\n${ctx.referencias.trim()}` : null,
     ctx.direcaoVisual?.trim() ? `DIREÇÃO ESCOLHIDA PELO OPERADOR (siga, tem precedência sobre o padrão do segmento):\n${ctx.direcaoVisual.trim()}` : null,
     ctx.objetivo?.trim() ? `OBJETIVO DA PEÇA, escolhido pelo operador: ${ctx.objetivo.trim()}` : null,
     ctx.textosObrigatorios?.trim()
@@ -488,7 +574,7 @@ export async function montarPromptDiretorArte(ctx: ContextoPeca): Promise<Result
     temperature: 0.85,
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: systemDiretorArte(ctx.nicho, ctx.pedido) },
+      { role: "system", content: systemDiretorArte(ctx.nicho, ctx.pedido, evento) },
       {
         role: "user",
         content: ctx.imagemDoPedido

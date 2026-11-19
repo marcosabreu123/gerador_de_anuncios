@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { montarPrompt, montarPromptMelhorarArteExistente } from "@/lib/ai/prompt-builder";
 import { montarOrdemDeAjuste, nomeDaReferenciaDoAjuste } from "@/lib/ai/ajuste-arte";
 import {
+  INSTRUCAO_ARTE_DE_EVENTO,
   contatosParaInstrucao,
   direcaoDosControles,
   identidadeParaInstrucao,
@@ -125,8 +126,9 @@ async function materiaisDaPeca(
 
   // Referência de estilo só na criação sem imagem: com ela, quem dá o tom é a imagem
   // enviada. A que o operador cadastrou manda; sem ela vale a última arte aprovada,
-  // que é como os pedidos seguintes saem mais perto do que já agradou.
-  const estilo = caminho.imagemEnviada
+  // que é como os pedidos seguintes saem mais perto do que já agradou. Na arte de
+  // evento nenhuma vai: ela puxaria a peça de volta para a identidade do cliente.
+  const estilo = caminho.imagemEnviada || manual.arteDeEvento
     ? undefined
     : (referencias.find((r) => r.tipo === "referencia_visual") ??
       referencias.find((r) => r.tipo === "arte_aprovada"));
@@ -319,12 +321,15 @@ export async function gerarPeca(pecaId: string): Promise<ResultadoGeracaoPeca> {
             ordem: operadorEscreveu(manual.prompt) ? manual.prompt : undefined,
             formatoSaida: DESCRICAO_FORMATO[formato],
             instrucaoUsuario: [
-              identidadeParaInstrucao(cliente as Cliente, (brandKit as BrandKit) ?? null),
+              manual.arteDeEvento && INSTRUCAO_ARTE_DE_EVENTO,
+              identidadeParaInstrucao(cliente as Cliente, (brandKit as BrandKit) ?? null, {
+                evento: manual.arteDeEvento,
+              }),
               direcaoDosControles(manual),
               orientacaoDoObjetivo(manual.objetivo) && `Objetivo da peça: ${orientacaoDoObjetivo(manual.objetivo)}`,
               textosObrigatoriosEmTexto(manual.obrigatorios) &&
                 `Textos obrigatórios, que entram na arte exatamente como estão escritos:\n${textosObrigatoriosEmTexto(manual.obrigatorios)}`,
-              instrucaoDeVariacao(manual.variacao, manual.total),
+              instrucaoDeVariacao(manual.variacao, manual.total, manual.arteDeEvento),
             ]
               .filter(Boolean)
               .join("\n\n"),
@@ -490,14 +495,17 @@ async function criarComDiretorArte(
     logosParceiros: string[];
   },
 ): Promise<{ prompts: string[]; uso?: { modelo: string; entrada: number; saida: number } }> {
+  const evento = manual.arteDeEvento === true;
   try {
     const r = await montarPromptDiretorArte({
       empresa: cliente.nome,
       nicho: cliente.nicho,
       pedido: manual.prompt,
-      identidade: identidadeParaInstrucao(cliente, brandKit),
-      // Só a guardada: reler aqui gastaria o tempo que a peça precisa para sair.
-      referencias: brandKit?.direcao_arte ? leituraParaDiretor(brandKit.direcao_arte) : undefined,
+      identidade: identidadeParaInstrucao(cliente, brandKit, { evento }),
+      // Só a guardada: reler aqui gastaria o tempo que a peça precisa para sair. Na
+      // arte de evento ela fica de fora, porque descreve o visual da marca.
+      referencias: brandKit?.direcao_arte && !evento ? leituraParaDiretor(brandKit.direcao_arte) : undefined,
+      arteDeEvento: evento,
       direcaoVisual: direcaoDosControles(manual),
       objetivo: orientacaoDoObjetivo(manual.objetivo),
       textosObrigatorios: textosObrigatoriosEmTexto(manual.obrigatorios),

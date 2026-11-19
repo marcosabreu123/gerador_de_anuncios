@@ -81,6 +81,10 @@ const INTENSIDADES: { valor: IntensidadeVisual; label: string }[] = [
   { valor: "impactante", label: "Impactante" },
 ];
 
+// Na arte de evento o visual vem do evento: a identidade e a referência de estilo do
+// cliente não vão para a IA (ver gerar-peca.ts).
+const FORA_DA_ARTE_DE_EVENTO = ["referencia_visual", "identidade"];
+
 export default function NovaGeracaoForm({
   clienteId,
   saldoDisponivel,
@@ -115,6 +119,7 @@ export default function NovaGeracaoForm({
   const [estilo, setEstilo] = useState<EstiloComunicacao>(repetir?.estilo ?? "ia_decide");
   const [intensidade, setIntensidade] = useState<IntensidadeVisual>(repetir?.intensidade ?? "ia_decide");
   const [tipoImagem, setTipoImagem] = useState<TipoImagem>(repetir?.tipoImagem ?? "ia_decide");
+  const [arteDeEvento, setArteDeEvento] = useState(repetir?.arteDeEvento ?? false);
   const [gravando, setGravando] = useState(false);
   const [transcrevendo, setTranscrevendo] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -215,6 +220,12 @@ export default function NovaGeracaoForm({
     descartarSugestao();
   }
 
+  // A sugestão aberta foi escrita sabendo, ou não, que a arte é de evento.
+  function mudarArteDeEvento(valor: boolean) {
+    setArteDeEvento(valor);
+    descartarSugestao();
+  }
+
   async function melhorar(audio?: Blob) {
     setMelhorando(true);
     setErroMelhoria(null);
@@ -228,6 +239,7 @@ export default function NovaGeracaoForm({
         form.append("objetivo", objetivo);
         form.append("campos", JSON.stringify(camposPreenchidos));
         if (arteBaseUrl) form.append("imagemUrl", arteBaseUrl);
+        if (arteDeEvento) form.append("arteDeEvento", "true");
         res = await fetch("/api/geracoes/melhorar-ideia", { method: "POST", body: form });
       } else {
         res = await fetch("/api/geracoes/melhorar-ideia", {
@@ -240,6 +252,7 @@ export default function NovaGeracaoForm({
             campos: camposPreenchidos,
             anterior: sugestao?.briefing,
             ...(arteBaseUrl ? { imagemUrl: arteBaseUrl } : {}),
+            ...(arteDeEvento ? { arteDeEvento: true } : {}),
           }),
         });
       }
@@ -310,6 +323,7 @@ export default function NovaGeracaoForm({
         form.append("objetivo", objetivo);
         form.append("campos", JSON.stringify(camposPreenchidos));
         if (forcarSemSaldo) form.append("forcarSemSaldo", "true");
+        if (arteDeEvento) form.append("arteDeEvento", "true");
         if (produtoRefId) form.append("produtoRefId", produtoRefId);
         if (arteBaseUrl) {
           form.append("arteBaseUrl", arteBaseUrl);
@@ -331,6 +345,7 @@ export default function NovaGeracaoForm({
             objetivo,
             campos: camposPreenchidos,
             forcarSemSaldo,
+            ...(arteDeEvento ? { arteDeEvento: true } : {}),
             ...(produtoRefId ? { produtoRefId } : {}),
             ...(arteBaseUrl ? { arteBaseUrl, modoTransformacao } : {}),
           }),
@@ -384,7 +399,11 @@ export default function NovaGeracaoForm({
   // não usa crédito.
   const semCredito = !emTeste && saldoDisponivel < 1;
   const bloqueadoSemSaldo = semCredito && !ehSocio;
-  const semIdentidade = materiais.some((m) => m.tipo === "identidade" && !m.tem);
+  const semIdentidade = !arteDeEvento && materiais.some((m) => m.tipo === "identidade" && !m.tem);
+  const materiaisDaArte = materiais.map((m) => ({
+    ...m,
+    fora: arteDeEvento && m.tem && FORA_DA_ARTE_DE_EVENTO.includes(m.tipo),
+  }));
   const proporcao = FORMATOS.find((f) => f.valor === formato)?.proporcao;
   const aprovacaoPendente = Boolean(sugestao?.briefing);
   const palavras = prompt.trim() ? prompt.trim().split(/\s+/).length : 0;
@@ -704,6 +723,22 @@ export default function NovaGeracaoForm({
 
         <section className="card p-5 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
           <div className="lg:col-span-2 flex flex-col gap-2">
+            <Grupo titulo="Visual da arte">
+              <Opcao ativo={!arteDeEvento} onClick={() => mudarArteDeEvento(false)}>
+                Identidade do cliente
+              </Opcao>
+              <Opcao ativo={arteDeEvento} onClick={() => mudarArteDeEvento(true)}>
+                Arte de evento
+              </Opcao>
+            </Grupo>
+            <p className="text-[13px] text-[var(--muted)]">
+              {arteDeEvento
+                ? "Segue o estilo do evento ou da tendência que o pedido citar, como o lançamento de um jogo, a Copa ou o Halloween. Uma imagem do estilo ajuda. Cores, letra e referências do cliente ficam de fora, e a logo continua assinando."
+                : "Cores, letra e estilo cadastrados do cliente."}
+            </p>
+          </div>
+
+          <div className="lg:col-span-2 flex flex-col gap-2">
             <Grupo titulo="Tipo de imagem">
               {TIPOS_IMAGEM.map((t) => (
                 <Opcao key={t.valor} ativo={tipoImagem === t.valor} onClick={() => setTipoImagem(t.valor)}>
@@ -772,18 +807,18 @@ export default function NovaGeracaoForm({
         <div className="flex flex-col gap-2 border-t border-[var(--border)] pt-4">
           <span className="label mb-0.5">O agente vai usar</span>
           <ul className="flex flex-col gap-1.5">
-            {materiais.map((m) => (
+            {materiaisDaArte.map((m) => (
               <li
                 key={m.tipo}
-                className={`flex items-center gap-2 text-[13px] ${m.tem ? "" : "text-[var(--muted)]"}`}
-                title={m.tem ? "Disponível" : "Não cadastrado"}
+                className={`flex items-center gap-2 text-[13px] ${m.tem && !m.fora ? "" : "text-[var(--muted)]"}`}
+                title={m.fora ? "Fica de fora na arte de evento" : m.tem ? "Disponível" : "Não cadastrado"}
               >
-                {m.tem ? (
+                {m.tem && !m.fora ? (
                   <Check size={14} className="text-[var(--success)] shrink-0" aria-hidden="true" />
                 ) : (
                   <Minus size={14} className="shrink-0" aria-hidden="true" />
                 )}
-                {m.label}
+                {m.fora ? `${m.label}: fica de fora` : m.label}
               </li>
             ))}
           </ul>

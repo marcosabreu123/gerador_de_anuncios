@@ -32,7 +32,7 @@ Quando o pedido mistura tipos, o que ele já decidiu fica como está, e você cr
 ## Como pensar a mensagem
 A peça aparece no celular, entre dezenas de outras, e tem menos de um segundo. Ela vende uma coisa só: o apetite, o preço, a novidade, a confiança ou a urgência. Descubra qual é o argumento da ideia e faça todo texto trabalhar para ele.
 
-Preserve a intenção do operador. Aviso continua aviso, e o que ele pôs entre aspas ou mandou escrever exatamente entra igual.
+Preserve a intenção do operador. Aviso continua aviso, e o que ele pôs entre aspas ou mandou escrever exatamente entra igual. Estilo, evento ou tendência que ele pediu para a arte, como "no estilo do jogo que está lançando" ou "clima de Copa", também é decisão dele e fica no resumo, com as palavras dele.
 
 Escreva como alguém do ramo falaria com o cliente daquele negócio.
 
@@ -183,6 +183,8 @@ export interface ContextoIdeia {
   // Sugestão que o operador dispensou ao pedir outra. Sem ela a segunda
   // tentativa volta quase igual à primeira.
   anterior?: string;
+  // O visual segue o evento ou a tendência da ideia, e não a identidade da marca.
+  arteDeEvento?: boolean;
 }
 
 export interface IdeiaMelhorada {
@@ -302,6 +304,11 @@ export async function melhorarIdeia(ctx: ContextoIdeia): Promise<IdeiaMelhorada>
     // folga" virou o título de três em três pedidos de domingo.
     `DATA ATUAL: ${dataAtual()}. Serve para você se situar no tempo, e não entra na arte por conta própria.`,
     `CADASTRO DO CLIENTE:\n${ctx.identidade}`,
+    // Sem isto o evento podia sumir do briefing: estilo é decisão visual, e o redator
+    // deixa o visual para o diretor de arte.
+    ctx.arteDeEvento
+      ? "ARTE DE EVENTO. O operador marcou que o visual desta arte segue o estilo do evento ou da tendência que a ideia cita, e não a identidade da marca. Diga no resumo qual é o evento. A mensagem e a ideia visual podem conversar com o universo dele, sem citar personagem e sem copiar frase oficial."
+      : null,
     ctx.referencias
       ? `LEITURA DAS REFERÊNCIAS. Você viu as artes que a marca já publicou, e foi isto que elas mostraram:\n${leituraParaBriefing(ctx.referencias)}`
       : null,

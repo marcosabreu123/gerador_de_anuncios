@@ -19,6 +19,7 @@ export interface PedidoParaRepetir {
   objetivo: ObjetivoArte;
   // Os campos do objetivo como a tela guarda: { produto: "...", preco: "..." }.
   campos: Record<string, string>;
+  arteDeEvento: boolean;
 }
 
 // O pedido antigo como estava: o texto do operador e os controles da primeira peça.
@@ -60,5 +61,6 @@ export async function pedidoParaRepetir(
     modoTransformacao: primeira.modoTransformacao ?? "referencia",
     objetivo,
     campos: Object.fromEntries(obrigatorios.map((t) => [t.campo, t.valor])),
+    arteDeEvento: primeira.arteDeEvento === true,
   };
 }

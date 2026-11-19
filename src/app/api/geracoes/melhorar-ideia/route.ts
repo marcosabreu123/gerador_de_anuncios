@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
   let audio: File | null = null;
   let objetivo: ObjetivoArte = "livre";
   let camposBrutos: unknown = {};
+  let arteDeEvento = false;
 
   try {
     if ((request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
       imagemUrl = (form.get("imagemUrl") as string) || undefined;
       objetivo = objetivoValido(form.get("objetivo"));
       camposBrutos = JSON.parse(String(form.get("campos") ?? "{}"));
+      arteDeEvento = form.get("arteDeEvento") === "true";
       const arquivo = form.get("audio");
       if (arquivo instanceof File && arquivo.size > 0) audio = arquivo;
     } else {
@@ -67,6 +69,7 @@ export async function POST(request: NextRequest) {
       imagemUrl = (body.imagemUrl as string) || undefined;
       objetivo = objetivoValido(body.objetivo);
       camposBrutos = body.campos ?? {};
+      arteDeEvento = body.arteDeEvento === true;
     }
   } catch {
     return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
@@ -132,11 +135,12 @@ export async function POST(request: NextRequest) {
   try {
     const { briefing, faltou, avisos, uso } = await melhorarIdeia({
       ideia: ideiaCompleta,
-      identidade: identidadeParaInstrucao(cliente, brandKit),
+      identidade: identidadeParaInstrucao(cliente, brandKit, { evento: arteDeEvento }),
       contatos: contatosParaInstrucao(brandKit),
       referencias,
       imagemDoPedido: imagemDoPedido ?? undefined,
       anterior,
+      arteDeEvento,
     });
 
     await registrarGeracao({

@@ -19,19 +19,30 @@ import type { BrandKit, BriefingPecaManual, Cliente, Referencia } from "@/lib/ag
 // Perfil do cliente -> instruções que o prompt-builder entende
 // ---------------------------------------------------------------------------
 
+// Na arte de evento o visual vem do evento, mas regra de conteúdo continua valendo. O
+// cadastro não separa uma da outra, então quem separa é o modelo.
+const RESSALVA_DO_EVENTO = "menos as que falam só de cor, letra ou estilo visual, que não valem nesta arte de evento";
+
+// Instrução da arte de evento para quem não recebe o system do diretor: o montador
+// antigo e o prompt de melhorar arte-base.
+export const INSTRUCAO_ARTE_DE_EVENTO =
+  "Arte de evento: o visual segue o estilo do evento ou da tendência que o pedido cita (paleta, letra, tipo de imagem e clima), e não a identidade da marca. Recrie o estilo sem copiar o logotipo oficial, os personagens ou as artes oficiais do evento. A logo da marca continua assinando a peça.";
+
 // Regras que o agente trata como inegociáveis. Ficam em observacaoUsuario
 // porque o prompt-builder já repassa esse campo como pedido explícito do
 // lojista, que é exatamente o peso que elas precisam ter.
-function regrasDoCliente(brandKit: BrandKit | null): string[] {
+function regrasDoCliente(brandKit: BrandKit | null, evento = false): string[] {
   if (!brandKit) return [];
   const linhas: string[] = [];
 
   if (brandKit.regras_obrigatorias?.length) {
-    linhas.push(`Regras obrigatórias da marca (nunca descumprir): ${brandKit.regras_obrigatorias.join("; ")}`);
+    linhas.push(
+      `Regras obrigatórias da marca (nunca descumprir${evento ? `, ${RESSALVA_DO_EVENTO}` : ""}): ${brandKit.regras_obrigatorias.join("; ")}`,
+    );
   }
   // Só as regras são obrigação. Com estes três escritos como regra, a IA passou a
   // repetir nas peças cada frase e cada objeto citado neles.
-  if (brandKit.estilo_visual?.trim()) {
+  if (brandKit.estilo_visual?.trim() && !evento) {
     linhas.push(`Estilo visual da marca (é norte, não roteiro): ${brandKit.estilo_visual.trim()}`);
   }
   if (brandKit.tom_de_voz?.trim()) {
@@ -39,7 +50,7 @@ function regrasDoCliente(brandKit: BrandKit | null): string[] {
   }
   // Estilo, e não fonte: o dono quer a letra variando de um post para outro, dentro
   // da identidade e do segmento. Cada peça escolhe a sua dentro desta faixa.
-  if (brandKit.tipografia?.trim()) {
+  if (brandKit.tipografia?.trim() && !evento) {
     linhas.push(
       `Estilo de letra da marca (é norte, não fonte fixa: escolha a fonte de cada peça dentro deste estilo e varie entre as peças): ${brandKit.tipografia.trim()}`,
     );
@@ -50,9 +61,9 @@ function regrasDoCliente(brandKit: BrandKit | null): string[] {
 // Quando o operador pede mais de uma imagem, cada peça precisa buscar uma
 // saída diferente — senão voltam variações quase idênticas e o cliente
 // recebe a mesma arte três vezes.
-export function instrucaoDeVariacao(variacao: number, total: number): string | null {
+export function instrucaoDeVariacao(variacao: number, total: number, evento = false): string | null {
   if (total <= 1) return null;
-  return `Esta é a peça ${variacao + 1} de ${total} do mesmo pedido. ${rotaDeVariacao(variacao)} Mesmas informações, direção criativa diferente.`;
+  return `Esta é a peça ${variacao + 1} de ${total} do mesmo pedido. ${rotaDeVariacao(variacao, evento)} Mesmas informações, direção criativa diferente.`;
 }
 
 // O prompt-builder espera um "produto" curto para montar a hierarquia da
@@ -95,6 +106,7 @@ export function pedidoManualParaBriefing(
   opcoes: { temFotoProduto?: boolean; temLogotipo?: boolean; temReferencia?: boolean } = {},
 ): BriefingCompleto {
   const contextoComida = `${cliente.nicho ?? ""} ${manual.prompt}`;
+  const evento = manual.arteDeEvento === true;
   const temCores = Boolean(brandKit?.cores_primarias?.trim());
 
   const tipoImagem = manual.tipoImagem && manual.tipoImagem !== "ia_decide" ? manual.tipoImagem : null;
@@ -103,10 +115,11 @@ export function pedidoManualParaBriefing(
     .map((t) => `${t.rotulo}: ${t.valor.replace(/\s*\n\s*/g, "; ")}`)
     .join(" / ");
   const observacoes = [
-    ...regrasDoCliente(brandKit),
+    evento && INSTRUCAO_ARTE_DE_EVENTO,
+    ...regrasDoCliente(brandKit, evento),
     tipoImagem && `Tipo de imagem escolhido pelo operador: ${TIPOS_IMAGEM[tipoImagem]}`,
     obrigatorios && `Textos obrigatórios, que entram na arte exatamente como estão escritos: ${obrigatorios}`,
-    instrucaoDeVariacao(manual.variacao, manual.total),
+    instrucaoDeVariacao(manual.variacao, manual.total, evento),
   ].filter(Boolean) as string[];
 
   return {
@@ -128,9 +141,10 @@ export function pedidoManualParaBriefing(
     nivelProducaoVisual: "premium-editorial",
 
     // Cor: paleta cadastrada manda; sem ela, o diretor de arte decide pelo
-    // segmento em vez de inventar identidade que o cliente não tem.
-    preferenciaCores: temCores ? "marca" : "segmento",
-    coresMarca: brandKit?.cores_primarias ?? undefined,
+    // segmento em vez de inventar identidade que o cliente não tem. Na arte de
+    // evento quem decide é o modelo, pelo evento.
+    preferenciaCores: evento ? "ia_decide" : temCores ? "marca" : "segmento",
+    coresMarca: evento ? undefined : (brandKit?.cores_primarias ?? undefined),
 
     // Ilustração desenha a comida também: o bloco de comida fotográfica brigaria com ela.
     modoComidaRealista: tipoImagem !== "ilustracao" && textoEnvolveComida(contextoComida),
@@ -233,23 +247,26 @@ export async function transcreverAudio(
 }
 
 // Identidade do cliente em texto corrido, para quem não recebe o briefing inteiro:
-// o diretor de arte e o prompt de melhorar arte-base.
+// o diretor de arte e o prompt de melhorar arte-base. Na arte de evento saem as
+// cores, o estilo e a letra: fica o que a empresa é, o tom e as regras.
 export function identidadeParaInstrucao(
   cliente: Cliente,
   brandKit: BrandKit | null,
+  opcoes: { evento?: boolean } = {},
 ): string {
+  const evento = opcoes.evento === true;
   const partes: string[] = [`Empresa: ${cliente.nome}`];
   if (cliente.nicho?.trim()) partes.push(`Ramo: ${cliente.nicho.trim()}`);
   if (cliente.observacoes?.trim()) partes.push(`Sobre a empresa: ${cliente.observacoes.trim()}`);
-  if (brandKit?.cores_primarias?.trim()) {
+  if (brandKit?.cores_primarias?.trim() && !evento) {
     partes.push(`Cores primárias da marca: ${brandKit.cores_primarias.trim()}`);
   }
-  if (brandKit?.cores_secundarias?.trim()) {
+  if (brandKit?.cores_secundarias?.trim() && !evento) {
     partes.push(`Cores secundárias: ${brandKit.cores_secundarias.trim()}`);
   }
-  partes.push(...regrasDoCliente(brandKit));
+  partes.push(...regrasDoCliente(brandKit, evento));
   if (brandKit?.regras_proibidas?.length) {
-    partes.push(`Nunca usar: ${brandKit.regras_proibidas.join("; ")}`);
+    partes.push(`Nunca usar${evento ? ` (${RESSALVA_DO_EVENTO})` : ""}: ${brandKit.regras_proibidas.join("; ")}`);
   }
   return partes.join("\n");
 }

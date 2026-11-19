@@ -219,6 +219,10 @@ export interface BriefingPecaManual {
   // escreveu (ver objetivos.ts). Sem objetivo, o pedido é livre.
   objetivo?: ObjetivoArte;
   obrigatorios?: TextoObrigatorio[];
+  // Arte de evento ou tendência, como o lançamento de um jogo, a Copa ou o Halloween:
+  // o visual segue o evento, e não as cores, a letra e o estilo do cliente. A logo
+  // continua assinando, e as regras de conteúdo do cliente continuam valendo.
+  arteDeEvento?: boolean;
   // Peça criada pelo botão "Outro formato": o id da peça cuja arte ela adapta.
   // Enquanto a adaptação não sai, "Tentar de novo" continua adaptando aquela arte.
   adaptadaDe?: string;
