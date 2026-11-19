@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ImagePlus, Mic, Minus, Sparkles, Square, WandSparkles } from "lucide-react";
@@ -581,9 +581,9 @@ export default function NovaGeracaoForm({
           {sugestao && (
             <div ref={sugestaoRef} className="quadro p-4 flex flex-col gap-3 scroll-mt-20 scroll-mb-24 lg:scroll-mb-4">
               {sugestao.briefing ? (
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-2">
                   <span className="label mb-0">Briefing sugerido</span>
-                  <p className="text-sm whitespace-pre-wrap">{sugestao.briefing}</p>
+                  <BriefingSugerido texto={sugestao.briefing} />
                 </div>
               ) : (
                 <p className="text-sm">Sua ideia já está boa. Pode gerar assim.</p>
@@ -882,6 +882,59 @@ export default function NovaGeracaoForm({
           )}
         </div>
       </aside>
+    </div>
+  );
+}
+
+// O briefing chega em texto, porque é texto que vai para a caixa ao aprovar (ver
+// melhorar-ideia.ts). Na sugestão ele aparece em partes, para o operador bater o olho
+// nos textos da arte antes de aprovar. Parte que não for reconhecida aparece como veio.
+const CABECALHO_TEXTOS = "Textos da arte, nesta ordem e exatamente assim:";
+const ROTULO_VISUAL = "Ideia visual (não escrever na arte): ";
+
+function BriefingSugerido({ texto }: { texto: string }) {
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      {texto.split("\n\n").map((parte, i) => {
+        if (parte.startsWith(CABECALHO_TEXTOS)) {
+          const itens: { papel: string; texto: string }[] = [];
+          for (const linha of parte.slice(CABECALHO_TEXTOS.length).split("\n")) {
+            const item = linha.match(/^- ([^:]+):\s?(.*)$/);
+            if (item) itens.push({ papel: item[1], texto: item[2] });
+            // Lista de várias linhas, como os itens de um cardápio, continua o texto anterior.
+            else if (linha.trim() && itens.length > 0) {
+              const ultimo = itens[itens.length - 1];
+              ultimo.texto = ultimo.texto ? `${ultimo.texto}\n${linha}` : linha;
+            }
+          }
+          return (
+            <div key={i} className="flex flex-col gap-1.5">
+              <span className="text-[13px] text-[var(--muted)]">Textos da arte, nesta ordem</span>
+              <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+                {itens.map((item, j) => (
+                  <Fragment key={j}>
+                    <dt className="text-[var(--muted)] max-w-32">{item.papel}</dt>
+                    <dd className="font-medium whitespace-pre-wrap break-words">{item.texto}</dd>
+                  </Fragment>
+                ))}
+              </dl>
+            </div>
+          );
+        }
+        if (parte.startsWith(ROTULO_VISUAL)) {
+          return (
+            <div key={i} className="flex flex-col gap-1">
+              <span className="text-[13px] text-[var(--muted)]">Ideia visual (não vai escrita na arte)</span>
+              <p>{parte.slice(ROTULO_VISUAL.length)}</p>
+            </div>
+          );
+        }
+        return (
+          <p key={i} className="whitespace-pre-wrap">
+            {parte}
+          </p>
+        );
+      })}
     </div>
   );
 }

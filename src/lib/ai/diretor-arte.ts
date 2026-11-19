@@ -73,14 +73,20 @@ O pedido diz o quanto a criação é sua.
 
 Pedido com oferta, preço ou condição: a oferta é a peça, e toda condição entra como veio. Pedido detalhado, com textos, elementos ou cena definidos: as decisões são do operador, e você executa cada item, criando só o que ele deixou em aberto.
 
+Pedido que vem como briefing, com o conceito da peça, a lista "Textos da arte" e a "Ideia visual": o conceito e a cena são o ponto de partida da sua direção, e os textos da lista entram exatamente como estão.
+
 Pedido aberto, que só dá a ocasião, como "arte para domingo", ou data comemorativa, como "Ano Novo": a ideia é sua. Entenda o que a empresa faz e com quem ela fala, encontre uma situação real daquele momento para aquele público e crie o conceito e a headline em cima disso, sem inventar oferta. A mesma data muda de cliente para cliente: fale com o público daquele ramo.`;
 
+// O limite de blocos vale para o texto que o diretor cria. Lista de textos vinda do
+// pedido passa inteira: com o corte, convite e aviso perdiam dia, horário e local.
 const HIERARQUIA = `## Hierarquia
-A peça tem no máximo quatro níveis, nesta ordem de peso: produto, headline, oferta ou preço, assinatura. Informação de apoio (endereço, horário, redes) é um quinto nível opcional e discreto — e quando não for essencial, deixe de fora e sugira para a legenda.
+A peça tem no máximo quatro níveis, nesta ordem de peso: produto, headline, oferta ou preço, assinatura. Informação de serviço, como data, horário, endereço e contato, é um quinto nível, discreto e legível.
 
 Cada nível precisa ser visivelmente diferente do anterior em tamanho, peso ou cor. Dois níveis com o mesmo peso viram concorrência, e concorrência vira confusão.
 
-Regra de contagem: no máximo três blocos de texto principais. Cada bloco a mais multiplica a chance de erro de ortografia do modelo de imagem e aproxima a peça de um panfleto.`;
+Regra de contagem: quando os textos são criação sua, use no máximo três blocos principais. Cada bloco a mais multiplica a chance de erro de ortografia do modelo de imagem e aproxima a peça de um panfleto, e endereço, horário e redes que não forem essenciais ficam de fora e vão para a legenda.
+
+Quando o pedido lista os textos da arte ou traz textos obrigatórios, a contagem é dele: todos entram, exatamente como estão, mesmo passando de quatro, e você não cria outros, a menos que uma regra da marca exija. A ordem da lista é a ordem de peso. Aí o seu trabalho é organizar: dados de serviço, como dia, horário, local e contato, podem dividir um bloco, uma linha por dado, alinhados e fáceis de achar.`;
 
 const COMPOSICAO = `## Composição
 Pense em grid, mesmo que invisível. Divida o quadro em terços e ancore o ponto focal numa interseção, ou construa uma assimetria deliberada com contrapeso — nunca centralize tudo por falta de decisão.
@@ -221,7 +227,7 @@ Responda SOMENTE com um objeto JSON válido, sem comentário, sem markdown e sem
 
 Os campos descritivos vão em INGLÊS porque é o idioma em que os geradores de imagem seguem direção de arte com mais consistência. O campo "conteudo" de cada texto fica no idioma original do briefing, sem tradução — é o que será impresso na arte. O campo "conceito" fica em português, porque é para o operador ler.
 
-A paleta traz de três a cinco cores com hex. O array "textos" traz no máximo quatro blocos, e só os que a peça realmente precisa.`;
+A paleta traz de três a cinco cores com hex. O array "textos" traz só os blocos que a peça realmente precisa: no máximo quatro quando os textos são criação sua, e todos os que o pedido listar quando ele traz os textos da arte.`;
 
 const ABERTURA = [
   "Você é diretor de arte publicitário sênior. Trabalhou em agência, dirigiu campanha de produto e sabe a diferença entre uma peça que organiza informação e uma peça que vende.",
@@ -554,7 +560,7 @@ export async function montarPromptDiretorArte(ctx: ContextoPeca): Promise<Result
     ctx.direcaoVisual?.trim() ? `DIREÇÃO ESCOLHIDA PELO OPERADOR (siga, tem precedência sobre o padrão do segmento):\n${ctx.direcaoVisual.trim()}` : null,
     ctx.objetivo?.trim() ? `OBJETIVO DA PEÇA, escolhido pelo operador: ${ctx.objetivo.trim()}` : null,
     ctx.textosObrigatorios?.trim()
-      ? `TEXTOS OBRIGATÓRIOS. Cada valor entra na arte exatamente como está escrito, caractere por caractere, sem trocar, cortar ou acrescentar palavra, número, preço ou pontuação. O rótulo antes dos dois-pontos só diz o papel do texto e não aparece na arte. Estes textos valem mais que o limite de blocos: todos entram, e uma lista (como os itens de um cardápio) pode ir num bloco só, uma linha por item.\n${ctx.textosObrigatorios.trim()}`
+      ? `TEXTOS OBRIGATÓRIOS. Cada valor entra na arte exatamente como está escrito, caractere por caractere, sem trocar, cortar ou acrescentar palavra, número, preço ou pontuação. O rótulo antes dos dois-pontos só diz o papel do texto e não aparece na arte. Estes textos valem mais que o limite de blocos: todos entram, e uma lista (como os itens de um cardápio) pode ir num bloco só, uma linha por item. Texto que também aparece no pedido entra uma vez só.\n${ctx.textosObrigatorios.trim()}`
       : null,
     ctx.contatos?.trim() ? `CONTATOS CADASTRADOS (entram na peça só se o pedido ou uma regra da marca exigir, copiados exatamente):\n${ctx.contatos.trim()}` : null,
     `FORMATO: ${DESCRICAO_FORMATO[ctx.formato]}`,

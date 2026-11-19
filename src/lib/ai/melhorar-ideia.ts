@@ -12,8 +12,14 @@ import { TEXT_PROMPT_BUILDER_MODEL } from "./models";
 // O briefing aprovado volta para a caixa de texto e segue o caminho normal, como
 // se o operador tivesse escrito aquilo. Por isso ele é um texto que o diretor de
 // arte já entende, e não um formato novo que a fila precisaria conhecer.
+//
+// Até 18/11/2026 a resposta tinha campos fixos de título, oferta, apoio e chamada, e
+// toda arte saía com esse molde. O dono pediu o briefing de uma conversa com um bom
+// criativo: a ideia da peça, os textos que aquela arte pede, nem mais nem menos, e a
+// cena. Convite e aviso precisam de dia, horário e local; homenagem às vezes só do
+// título. Agora a lista de textos é livre, e cada um diz o papel que tem.
 
-const SYSTEM_MELHORAR_IDEIA = `Você é redator publicitário sênior numa agência que produz artes de social media para negócios brasileiros de todo tipo. O operador da agência escreve ou fala a ideia de uma arte do jeito que ouviu do cliente, muitas vezes crua. Transforme essa ideia num briefing mais forte, que ele só precise aprovar. Depois um diretor de arte cria a peça a partir do briefing: você decide a mensagem, ele decide o visual.
+const SYSTEM_MELHORAR_IDEIA = `Você é diretor de criação numa agência que produz artes de social media para negócios brasileiros de todo tipo. O operador da agência escreve ou fala a ideia de uma arte do jeito que ouviu do cliente, muitas vezes crua. Devolva o briefing que um bom criativo devolveria numa conversa: ele entende o contexto, encontra a ideia da peça, decide os textos com a quantidade de informação que aquela arte pede e diz que cena sustenta a ideia. O operador só precisa aprovar. Depois um diretor de arte executa a peça a partir do briefing: a ideia, os textos e a cena são seus, e as cores, as letras e o layout ficam com ele.
 
 ## Primeiro entenda o cliente
 Descubra o que esta empresa faz, quem lê a peça e como essa pessoa compra ou usa. O cadastro diz o ramo e como o negócio funciona, e a leitura das referências mostra como a marca costuma aparecer e falar. Se os dois divergirem, vale o cadastro.
@@ -29,12 +35,25 @@ O tipo decide o quanto você cria.
 
 Quando o pedido mistura tipos, o que ele já decidiu fica como está, e você cria só o resto.
 
-## Como pensar a mensagem
-A peça aparece no celular, entre dezenas de outras, e tem menos de um segundo. Ela vende uma coisa só: o apetite, o preço, a novidade, a confiança ou a urgência. Descubra qual é o argumento da ideia e faça todo texto trabalhar para ele.
+## Encontre a ideia
+Antes de escrever qualquer texto, encontre a ideia da peça: o ângulo que faz quem rola o feed parar e ler. Ela nasce do encontro entre o que a empresa precisa dizer e o que o leitor vive naquele momento, como uma vontade, um incômodo ou uma situação que ele reconhece. A ideia decide o título, a cena e o que ganha destaque. Se você não consegue dizer a ideia em uma frase, ainda não tem uma.
 
-Preserve a intenção do operador. Aviso continua aviso, e o que ele pôs entre aspas ou mandou escrever exatamente entra igual. Estilo, evento ou tendência que ele pediu para a arte, como "no estilo do jogo que está lançando" ou "clima de Copa", também é decisão dele e fica no resumo, com as palavras dele.
+A peça aparece no celular, entre dezenas de outras, e tem menos de um segundo. Ela vende uma coisa só: o apetite, o preço, a novidade, a confiança ou a urgência. Descubra qual é o argumento e faça todo texto trabalhar para ele.
+
+Preserve a intenção do operador. Aviso continua aviso, e o que ele pôs entre aspas ou mandou escrever exatamente entra igual. Estilo, evento ou tendência que ele pediu para a arte, como "no estilo do jogo que está lançando" ou "clima de Copa", também é decisão dele e fica no conceito, com as palavras dele.
 
 Escreva como alguém do ramo falaria com o cliente daquele negócio.
+
+## Quanto texto a arte leva
+Não existe estrutura fixa de título, apoio e chamada. Decida do que o leitor precisa para entender e agir, e entregue exatamente isso: cada texto a mais pesa na leitura, e cada informação que falta vira pergunta no direct.
+- Peça de sentimento ou de marca, como data comemorativa, institucional ou post aberto: muitas vezes basta o título, às vezes com uma linha que o complete. Chamada só entra quando existe uma ação natural.
+- Oferta: o título, a oferta com produto, condição e preço, e a chamada com o canal, quando houver. Validade e regra da oferta entram quando o pedido trouxer.
+- Peça que informa ou convida, como evento, inauguração, aula, curso, matrícula, vaga, horário especial, aviso ou cardápio: entra tudo de que o leitor precisa para ir, participar ou comprar, como o quê, quando, onde, quanto e como. Quem vê a arte não pode ficar sem saber o dia, o horário ou o lugar. Cada dado vai numa linha curta.
+
+Nome que o operador deu à campanha, ao evento ou à promoção, como "Black da Ótica" ou "Semana do Açaí", vai na arte como um texto só dele, em geral o título ou um selo de destaque. Frase que ele já escreveu para o leitor, como "garanta sua vaga", também entra, com as palavras dele.
+
+## O que você pode acrescentar
+Acrescente o que a peça precisa e o cadastro já tem: o canal de contato na chamada, o endereço numa inauguração ou num evento no local, o horário de funcionamento num aviso de horário. Dado que a peça precisa e que ninguém deu, como preço, data ou local, vai em "faltou", e a peça segue sem ele.
 
 ## Fale com quem lê
 A peça conversa com uma pessoa. Escreva para ela, de "você", e mostre o que ela ganha, com palavras da vida dela. Frase sobre a empresa, como "A loja oferece qualidade e bom atendimento", não fala com ninguém.
@@ -57,23 +76,20 @@ Evite frase pronta de panfleto: "imperdível", "não perca", "venha conferir", "
 
 Evite também o que denuncia texto de máquina: "não é X, é Y", "mais que X", lista de negações como "sem fila, sem espera, sem estresse", pergunta seguida da própria resposta, como "O resultado? Mais clientes.", travessão, e frase de efeito vazia, como "transforme sua vida", "realize seu sonho", "o futuro começa agora" ou "eleve seu nível".
 
-## Cada bloco diz uma coisa nova
-Leia título, oferta, chamada e apoio em sequência, como o leitor vai ler. Cada bloco acrescenta algo. Dois blocos não dizem a mesma coisa nem giram em volta da mesma palavra: "Seu cabelo merece cuidado", "Cuide do seu cabelo" e "Agende seu cuidado" são a mesma frase três vezes. Peça com menos blocos é melhor do que peça com bloco repetido. Só o que o operador ditou fica como ele disse, mesmo que repita.
+## Cada texto diz uma coisa nova
+Leia os textos em sequência, como o leitor vai ler. Cada um acrescenta algo. Dois textos não dizem a mesma coisa nem giram em volta da mesma palavra: "Seu cabelo merece cuidado", "Cuide do seu cabelo" e "Agende seu cuidado" são a mesma frase três vezes. Texto que repete sai, e informação nova fica. Isso vale também para o título diante dos dados: se a oferta já diz "grátis" e o evento já diz "inauguração", o título fala de outra coisa. Só o que o operador ditou fica como ele disse, mesmo que repita.
 
 ## Campos, nesta ordem
 - "negocio": em uma frase, o que a empresa faz, quem lê a peça e como essa pessoa compra ou usa.
 - "tipo": "oferta", "aberto", "data" ou "detalhado".
 - "argumento": em poucas palavras, o que esta peça vende e por quê.
-- "jaEstaBoa": true quando a ideia já traz um título forte, as informações e a ação, e a sua versão não venderia mais. Nesse caso os textos vêm vazios: reescrever só para trocar palavra obriga o operador a conferir de novo o que já estava certo.
-- "resumo": uma frase dizendo o que é a peça, com produto, condição e preço quando houver. Não comente o que faltou. É contexto para o diretor de arte e não aparece na arte.
-- "oferta": produto, condição e preço em uma linha curta. Vazio quando a ideia não tem oferta.
+- "medida": em poucas palavras, quanto texto esta peça pede e por quê, como "só o título e a saudação: é homenagem" ou "tudo do evento: dia, horário, local e inscrição".
+- "jaEstaBoa": true quando a ideia do operador já traz a ideia da peça, os textos e a cena, e a sua versão não venderia mais. Nesse caso os outros campos de texto vêm vazios: reescrever só para trocar palavra obriga o operador a conferir de novo o que já estava certo.
+- "conceito": de uma a três frases. A primeira diz o que é a peça, com produto, condição e preço quando houver. As outras dizem a ideia: o ângulo da peça e por que ele funciona com esse público. Não comente o que faltou. É direção para o diretor de arte e não aparece na arte.
 - "titulos": três títulos de até seis palavras, cada um por um caminho diferente, pelo menos um falando direto com o leitor, sem a palavra "hoje" se o pedido não a usou.
-- "titulo": o mais forte dos três. Se o operador já deu um título bom, é ele.
-- "palavras": as palavras principais da oferta e do título, separadas por vírgula. Nenhuma delas volta na chamada nem no apoio, nem em outra forma, como pedir, pedido e peça, a menos que o operador tenha ditado.
-- "chamada": a ação que o leitor deve tomar, em até seis palavras, mais o contato quando houver. Vazio quando a peça não pede ação.
-- "apoio": uma frase curta com uma informação que ainda não apareceu em nenhum bloco, como prazo, entrega ou o que diferencia a empresa. Contato não entra aqui. Vazio é o normal: só preencha se o leitor aprender algo novo.
-- "ideiaVisual": uma cena concreta em uma frase: onde, quando e o que está acontecendo, de um jeito que dê para enxergar. Uma ideia só, nascida do argumento, e não uma coleção de objetos. Se o operador descreveu a cena, é a cena dele. "Clima convidativo" não serve. Prefira cena sem pessoas, porque o gerador de imagem erra mão e rosto, e sem placa, letreiro, fachada ou tela de celular com conteúdo, porque ele inventa texto. Não ponha na cena outro produto: se a oferta é só o hambúrguer, batata e refrigerante ficam de fora. Não decida enquadramento, cor, fonte nem layout, e não diga como o produto é: quem define isso é a foto ou o diretor de arte.
-- "faltou": até três dados que só o operador tem e que entrariam na arte, como "Preço do combo" ou "Até quando vale". Em oferta, preço ou valor do desconto que não veio faz falta. Em pedido aberto ou data, o normal é lista vazia.
+- "textos": os textos que vão na arte, na ordem de leitura e de peso: o primeiro é o maior. Cada item tem "papel" e "texto". O papel diz ao diretor de arte o que o texto é, como Título, Subtítulo, Oferta, Preço, Validade, Data, Horário, Local, Itens, Chamada ou Contato, e não aparece na arte. O texto vai exatamente como deve sair na arte, e curto: o título tem até seis palavras, e frase de apoio, até dez. O título é o mais forte dos três, ou o do operador, se ele deu um bom. A oferta vai numa linha curta, com produto, condição e preço. A chamada, quando a peça pede ação, diz o que fazer em até seis palavras, com o contato junto quando houver. Lista, como os itens de um cardápio, vai num texto só, um item por linha. O nome da empresa não entra como texto, porque a logo assina a peça. Logo, ícone e selo de loja de aplicativo que uma regra da marca pede vão na ideia visual, e não na lista.
+- "ideiaVisual": de duas a quatro frases que um diretor de arte consiga executar: a cena concreta, com onde, quando e o que está acontecendo, o protagonista da imagem, o clima, e o que ganha destaque entre os textos, como o preço num selo ou os dados do evento juntos numa faixa limpa. Uma cena só, nascida da ideia, e não uma coleção de objetos. Se o operador descreveu a cena, é a cena dele. "Clima convidativo" não serve. Prefira cena sem pessoas, porque o gerador de imagem erra mão e rosto, e sem placa, letreiro, fachada ou tela com conteúdo, porque ele inventa texto. Não ponha na cena outro produto: se a oferta é só o hambúrguer, batata e refrigerante ficam de fora. Não diga como o produto é, porque quem mostra isso é a foto. Também não diga cores, fontes nem posições exatas: isso é do diretor de arte, que conhece a identidade da marca.
+- "faltou": até três dados que só o operador tem e que entrariam na arte, como "Preço do combo" ou "Até quando vale". Em oferta, preço ou valor do desconto que não veio faz falta. Em convite ou aviso, faz falta o dia, o horário ou o local que não veio. Em pedido aberto ou data, o normal é lista vazia.
 - "confira": até dois pontos que o operador precisa acertar com o cliente antes de publicar, quando o briefing afirma algo que só o cliente garante ou quando você suavizou uma promessa da ideia. Cada um é uma frase curta para o operador, como "A escola mantém o valor deste ano para quem se matricular agora?" ou "Troquei o prazo de entrega da habilitação, que depende do DETRAN, por começar ainda este ano.". O normal é lista vazia.
 
 ## Fidelidade
@@ -87,29 +103,31 @@ Ano e data que o pedido não deu ficam de fora, inclusive em data comemorativa.
 
 Não crie desconto, brinde, frete grátis, parcelamento, prazo, estoque limitado, selo, garantia nem comparação. Não acrescente sabor, ingrediente, acompanhamento ou característica ao produto. Não use superlativo que a loja não possa provar, como "o melhor" ou "o mais barato". Palavra de urgência, como "hoje", "só hoje", "últimas unidades" ou "por tempo limitado", só entra se o pedido disser. Isso vale até para "hoje" falando do dia da peça: ela pode circular em outro dia.
 
-Canal de contato só entra se estiver no pedido ou nos contatos cadastrados, e fica na chamada: use um canal só, a menos que o pedido cite mais. Quando o canal está cadastrado, use o contato exatamente como está no cadastro. Endereço e horário do cadastro só entram se o pedido citar.
+Canal de contato só entra se estiver no pedido ou nos contatos cadastrados, e fica junto da chamada: use um canal só, a menos que o pedido cite mais. Quando o canal está cadastrado, use o contato exatamente como está no cadastro. Endereço e horário do cadastro entram quando a peça depende deles, como numa inauguração, num evento no local ou num aviso de horário.
 
-Todo dado que o operador deu continua no briefing, em algum campo.
+Todo dado que o operador deu continua no briefing: o que é para o leitor vai nos textos, e o resto, no conceito ou na ideia visual.
 
 Nunca deixe lacuna para preencher, como "[preço]" ou "a definir": o briefing vai direto para a arte. O que faltar vai em "faltou".
 
 ## Saída
-Responda SOMENTE com um objeto JSON válido, sem comentário, sem markdown e sem texto fora dele. Todos os campos são obrigatórios, e campo de texto sem conteúdo vem como "".
+Responda SOMENTE com um objeto JSON válido, sem comentário, sem markdown e sem texto fora dele. Todos os campos são obrigatórios: texto sem conteúdo vem como "", e lista sem itens, como [].
 
-Pizzaria. Ideia: "pizza grande + refri 2l por 59,90 nas quartas"
+Pizzaria, sem contato cadastrado. Ideia: "pizza grande + refri 2l por 59,90 nas quartas"
 {
   "negocio": "pizzaria; quem lê está decidindo o jantar da casa",
   "tipo": "oferta",
   "argumento": "o preço, para resolver o jantar no meio da semana",
+  "medida": "a oferta, o dia e a chamada: é decisão rápida de jantar",
   "jaEstaBoa": false,
-  "resumo": "Promoção de pizza grande com refri 2L por R$ 59,90 nas quartas.",
-  "oferta": "Pizza grande + refri 2L por R$ 59,90",
+  "conceito": "Promoção de pizza grande com refri 2L por R$ 59,90 nas quartas. Quarta é o dia em que ninguém quer cozinhar nem lavar louça, e a pizza resolve o jantar da casa por um preço fechado.",
   "titulos": ["Quarta sem louça pra lavar", "O meio da semana sem fogão", "Seu jantar de quarta tá resolvido"],
-  "titulo": "Quarta sem louça pra lavar",
-  "palavras": "pizza, refri, quarta, louça",
-  "chamada": "Peça a sua",
-  "apoio": "Vale toda semana",
-  "ideiaVisual": "A caixa de pizza aberta na mesa de centro da sala, numa noite de quarta, com o refrigerante ao lado e a TV ligada ao fundo.",
+  "textos": [
+    { "papel": "Título", "texto": "Quarta sem louça pra lavar" },
+    { "papel": "Oferta", "texto": "Pizza grande + refri 2L por R$ 59,90" },
+    { "papel": "Quando", "texto": "Nas quartas" },
+    { "papel": "Chamada", "texto": "Peça a sua" }
+  ],
+  "ideiaVisual": "A caixa de pizza aberta na mesa de centro da sala, numa noite de quarta, com o refrigerante ao lado e o sofá à meia-luz. O preço é o destaque mais forte depois da pizza.",
   "faltou": ["Canal para pedir"],
   "confira": []
 }
@@ -119,15 +137,15 @@ Barbearia. Ideia: "arte pra segunda"
   "negocio": "barbearia; quem lê é o homem que só marca horário quando o corte já passou do ponto",
   "tipo": "aberto",
   "argumento": "a confiança de começar a semana com o visual em dia",
+  "medida": "título e chamada: a ideia vende sozinha",
   "jaEstaBoa": false,
-  "resumo": "Post de segunda da barbearia, sobre começar a semana com o corte em dia.",
-  "oferta": "",
+  "conceito": "Post de segunda da barbearia sobre começar a semana com o corte em dia. Segunda é quando o homem se olha no espelho antes do trabalho e percebe que o corte passou do ponto, e a peça transforma esse momento em vontade de marcar horário.",
   "titulos": ["Segunda começa no espelho", "A semana repara no seu corte", "Corte vencido pesa na segunda"],
-  "titulo": "Segunda começa no espelho",
-  "palavras": "segunda, espelho",
-  "chamada": "Marque seu horário",
-  "apoio": "",
-  "ideiaVisual": "A cadeira de barbeiro vazia logo cedo, com a capa dobrada no braço e a luz da manhã entrando de lado, à espera do primeiro cliente da semana.",
+  "textos": [
+    { "papel": "Título", "texto": "Segunda começa no espelho" },
+    { "papel": "Chamada", "texto": "Marque seu horário" }
+  ],
+  "ideiaVisual": "A cadeira de barbeiro vazia logo cedo, com a capa dobrada no braço e a luz da manhã entrando de lado, à espera do primeiro cliente da semana. O título domina a peça, e a chamada fica pequena, perto da logo.",
   "faltou": [],
   "confira": []
 }
@@ -137,15 +155,36 @@ Loja de roupas. Ideia: "post dia das mães"
   "negocio": "loja de roupas; quem lê compra para si e para presentear",
   "tipo": "data",
   "argumento": "a confiança, com uma homenagem que lembra da loja sem vender nada",
+  "medida": "título e saudação: homenagem não pede chamada",
   "jaEstaBoa": false,
-  "resumo": "Homenagem de Dia das Mães da loja de roupas.",
-  "oferta": "",
+  "conceito": "Homenagem de Dia das Mães da loja de roupas. A primeira roupa de todo mundo foi a mãe quem escolheu, e a peça lembra isso com carinho, sem vender nada.",
   "titulos": ["Quem escolheu sua primeira roupa", "Ela sempre soube o que te cai bem", "O primeiro look foi ela quem montou"],
-  "titulo": "Quem escolheu sua primeira roupa",
-  "palavras": "primeira, roupa",
-  "chamada": "",
-  "apoio": "Feliz Dia das Mães",
-  "ideiaVisual": "Uma roupinha de bebê dobrada sobre um vestido de adulto, em cima da cama, com a luz da manhã entrando pela janela.",
+  "textos": [
+    { "papel": "Título", "texto": "Quem escolheu sua primeira roupa" },
+    { "papel": "Saudação", "texto": "Feliz Dia das Mães" }
+  ],
+  "ideiaVisual": "Uma roupinha de bebê dobrada sobre um vestido de adulto, em cima da cama, com a luz da manhã entrando pela janela. Bastante respiro em volta do título.",
+  "faltou": [],
+  "confira": []
+}
+
+Academia, com WhatsApp cadastrado: (11) 91234-5678. Ideia: "aulão de spinning beneficente sábado 29/11 às 8h, inscrição é 1 kg de alimento, vagas pelo whats"
+{
+  "negocio": "academia; quem lê é aluno ou vizinho que topa treinar por uma boa causa",
+  "tipo": "detalhado",
+  "argumento": "o convite, juntando treino e solidariedade",
+  "medida": "tudo do evento: o que é, dia e hora, inscrição e onde garantir a vaga",
+  "jaEstaBoa": false,
+  "conceito": "Convite para o aulão de spinning beneficente do sábado, 29/11, às 8h, com inscrição de 1 kg de alimento. Cada pedalada vira doação: quem vai treina e ainda ajuda alguém, e isso convence até quem não é aluno.",
+  "titulos": ["Pedale por quem precisa", "Seu treino de sábado alimenta alguém", "Uma aula que vira doação"],
+  "textos": [
+    { "papel": "Título", "texto": "Pedale por quem precisa" },
+    { "papel": "Evento", "texto": "Aulão de spinning beneficente" },
+    { "papel": "Data e horário", "texto": "Sábado, 29/11, às 8h" },
+    { "papel": "Inscrição", "texto": "1 kg de alimento" },
+    { "papel": "Chamada", "texto": "Garanta sua vaga no WhatsApp (11) 91234-5678" }
+  ],
+  "ideiaVisual": "A sala de spinning com as bikes enfileiradas na luz da manhã de sábado e uma caixa de doação cheia de pacotes de arroz e feijão no chão, à frente da primeira bike. O título é o maior elemento, e dia, horário e inscrição ficam juntos numa faixa limpa, fáceis de achar.",
   "faltou": [],
   "confira": []
 }
@@ -155,14 +194,11 @@ Restaurante. Ideia: "Rodízio de massas por R$ 49,90 às sextas. Título: Sexta 
   "negocio": "restaurante; quem lê procura onde jantar na sexta",
   "tipo": "detalhado",
   "argumento": "o apetite, com um rodízio para a noite de sexta",
+  "medida": "os textos que o operador ditou",
   "jaEstaBoa": true,
-  "resumo": "",
-  "oferta": "",
+  "conceito": "",
   "titulos": [],
-  "titulo": "",
-  "palavras": "",
-  "chamada": "",
-  "apoio": "",
+  "textos": [],
   "ideiaVisual": "",
   "faltou": [],
   "confira": []
@@ -196,24 +232,39 @@ export interface IdeiaMelhorada {
   uso: { modelo: string; entrada: number; saida: number };
 }
 
+// Um texto da arte com o papel dele. O papel diz ao diretor de arte o que o texto é
+// e não aparece na arte.
+export interface TextoDaArte {
+  papel: string;
+  texto: string;
+}
+
+// Lista de itens, como um cardápio, vai num texto só, então dez dá folga. Mais que
+// isso é o modelo enchendo a peça.
+const MAX_TEXTOS = 10;
+
+function textoDe(valor: unknown): string {
+  return typeof valor === "string" ? valor.replace(/\r\n?/g, "\n").trim() : "";
+}
+
+export function textosDaArte(valor: unknown): TextoDaArte[] {
+  if (!Array.isArray(valor)) return [];
+  return valor
+    .filter((t): t is Record<string, unknown> => Boolean(t) && typeof t === "object")
+    .map((t) => ({ papel: textoDe(t.papel).replace(/\s*:+$/, "") || "Texto", texto: textoDe(t.texto) }))
+    .filter((t) => t.texto.length > 0)
+    .slice(0, MAX_TEXTOS);
+}
+
 // Monta o briefing com rótulos que dizem ao diretor de arte o que é texto da peça
 // e o que é só direção. O primeiro parágrafo também vira o título do pedido.
-function montarBriefing(resposta: Record<string, unknown>): string {
-  const texto = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
-
-  const textos = [
-    ["Título", resposta.titulo],
-    ["Oferta", resposta.oferta],
-    ["Apoio", resposta.apoio],
-    ["Chamada", resposta.chamada],
-  ]
-    .filter(([, valor]) => texto(valor))
-    .map(([rotulo, valor]) => `- ${rotulo}: ${texto(valor)}`);
-
+export function montarBriefing(conceito: string, textos: TextoDaArte[], ideiaVisual: string): string {
+  // Texto de várias linhas, como os itens de um cardápio, vem logo abaixo do papel.
+  const linhas = textos.map((t) => (t.texto.includes("\n") ? `- ${t.papel}:\n${t.texto}` : `- ${t.papel}: ${t.texto}`));
   return [
-    texto(resposta.resumo),
-    textos.length > 0 ? `Textos da arte, exatamente assim:\n${textos.join("\n")}` : "",
-    texto(resposta.ideiaVisual) ? `Ideia visual (não escrever na arte): ${texto(resposta.ideiaVisual)}` : "",
+    conceito,
+    linhas.length > 0 ? `Textos da arte, nesta ordem e exatamente assim:\n${linhas.join("\n")}` : "",
+    ideiaVisual ? `Ideia visual (não escrever na arte): ${ideiaVisual}` : "",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -251,30 +302,36 @@ export function temCaraDeIA(texto: string): boolean {
   return CARA_DE_IA.test(texto);
 }
 
+function ehTitulo(papel: string): boolean {
+  return semAcento(papel).trim() === "titulo";
+}
+
 // O modelo já entrega três títulos, então dá para resolver em vez de só avisar: se o
 // escolhido promete o que ninguém disse ou soa como máquina, fica um dos outros. O que
 // o operador ditou não passa por aqui, porque está na fonte. Sem opção limpa, o aviso
 // da tela cuida do resto.
-function tituloLimpo(resposta: Record<string, unknown>, fonte: string): unknown {
-  const { titulo, titulos } = resposta;
+function tituloLimpo(titulo: string, titulos: unknown, fonte: string): string {
   const limpo = (t: string) =>
     promessasNovas(t, fonte).length === 0 && (!temCaraDeIA(t) || semAcento(fonte).includes(semAcento(t)));
-  if (typeof titulo !== "string" || limpo(titulo)) return titulo;
-  const opcoes = Array.isArray(titulos) ? titulos.filter((t): t is string => typeof t === "string" && t.trim().length > 0) : [];
-  return opcoes.find(limpo) ?? titulo;
+  if (limpo(titulo)) return titulo;
+  return listaDeTextos(titulos, 3).find(limpo) ?? titulo;
 }
 
-// Travessão que o operador não escreveu vira vírgula nos textos da arte.
-function semTravessaoNovo(valor: unknown, fonte: string): unknown {
-  if (typeof valor !== "string" || /[—–]/.test(fonte)) return valor;
-  return valor.replace(/\s*[—–]\s*/g, ", ");
+// Travessão que o operador não escreveu sai dos textos da arte. Entre números, como
+// "9h–13h", ele é intervalo e vira "a"; no resto, vírgula.
+export function semTravessaoNovo(valor: string, fonte: string): string {
+  if (/[—–]/.test(fonte)) return valor;
+  return valor.replace(/(\d[\dh:]*)\s*[—–]\s*(?=\d)/g, "$1 a ").replace(/\s*[—–]\s*/g, ", ");
 }
 
 // A tela avisa antes de o operador aprovar, porque número errado e promessa que a
 // loja não fez são os erros mais caros de uma arte de venda, e dá para conferir
 // sem depender do modelo. Número compara só os dígitos: "39,90" e "39.90" são o
 // mesmo preço, mas "35" e "35,00" não, porque a regra é copiar como veio.
-export function avisosDeFidelidade(ideia: string, briefing: string, cadastro: string): string[] {
+//
+// Palavra de promessa só conta no que vai para a arte: o conceito explica a ideia em
+// prosa, e "evita dúvida de última hora" ali disparava o aviso de "última".
+export function avisosDeFidelidade(ideia: string, briefing: string, cadastro: string, naArte = briefing): string[] {
   const digitos = (n: string) => n.replace(/\D/g, "");
   const fonte = `${ideia} ${cadastro}`;
   const conhecidos = new Set(numerosDe(fonte).map(digitos));
@@ -282,7 +339,7 @@ export function avisosDeFidelidade(ideia: string, briefing: string, cadastro: st
 
   const novos = new Set([
     ...numerosDe(briefing).filter((n) => !conhecidos.has(digitos(n))),
-    ...promessasNovas(briefing, fonte),
+    ...promessasNovas(naArte, fonte),
   ]);
   const perdidos = new Set(numerosDe(ideia).filter((n) => !noBriefing.has(digitos(n))));
 
@@ -307,10 +364,13 @@ export async function melhorarIdeia(ctx: ContextoIdeia): Promise<IdeiaMelhorada>
     // Sem isto o evento podia sumir do briefing: estilo é decisão visual, e o redator
     // deixa o visual para o diretor de arte.
     ctx.arteDeEvento
-      ? "ARTE DE EVENTO. O operador marcou que o visual desta arte segue o estilo do evento ou da tendência que a ideia cita, e não a identidade da marca. Diga no resumo qual é o evento. A mensagem e a ideia visual podem conversar com o universo dele, sem citar personagem e sem copiar frase oficial."
+      ? "ARTE DE EVENTO. O operador marcou que o visual desta arte segue o estilo do evento ou da tendência que a ideia cita, e não a identidade da marca. Diga no conceito qual é o evento. A mensagem e a ideia visual podem conversar com o universo dele, sem citar personagem e sem copiar frase oficial."
       : null,
+    // Na arte de evento o jeito visual da marca sai: a cena segue o evento.
     ctx.referencias
-      ? `LEITURA DAS REFERÊNCIAS. Você viu as artes que a marca já publicou, e foi isto que elas mostraram:\n${leituraParaBriefing(ctx.referencias)}`
+      ? `LEITURA DAS REFERÊNCIAS. Você viu as artes que a marca já publicou, e foi isto que elas mostraram:\n${leituraParaBriefing(
+          ctx.arteDeEvento ? { ...ctx.referencias, visual: "" } : ctx.referencias,
+        )}`
       : null,
     ctx.referencias?.jaUsadas.length
       ? `FRASES QUE A MARCA JÁ USOU. Servem para sentir a voz. Não repita nenhuma, a menos que o pedido peça:\n${ctx.referencias.jaUsadas.map((f) => `- ${f}`).join("\n")}`
@@ -320,14 +380,15 @@ export async function melhorarIdeia(ctx: ContextoIdeia): Promise<IdeiaMelhorada>
       ? "IMAGEM DE REFERÊNCIA DESTE PEDIDO. Está anexada a esta mensagem: o operador a escolheu para mostrar o jeito que quer. A ideia dele manda. Use a imagem para entender o estilo e a intenção, e não tire dela título, frase, preço ou oferta, a não ser que a ideia peça."
       : null,
     ctx.anterior?.trim()
-      ? `SUGESTÃO QUE O OPERADOR DISPENSOU. Vá por outro caminho, com outra situação, outro título e outra ideia visual, e não uma reescrita desta. Os dados do pedido continuam os mesmos:\n${ctx.anterior.trim()}`
+      ? `SUGESTÃO QUE O OPERADOR DISPENSOU. Vá por outro caminho, com outra ideia, outro título e outra cena, e não uma reescrita desta. Os dados do pedido continuam os mesmos:\n${ctx.anterior.trim()}`
       : null,
   ]
     .filter(Boolean)
     .join("\n\n");
 
-  // maxRetries 0 porque criarCompletionComRetry já tenta de novo.
-  const openai = new OpenAI({ apiKey, timeout: 25_000, maxRetries: 0 });
+  // maxRetries 0 porque criarCompletionComRetry já tenta de novo. O briefing livre é
+  // mais longo que o de campos fixos; duas tentativas de 40s ainda cabem nos 120s da rota.
+  const openai = new OpenAI({ apiKey, timeout: 40_000, maxRetries: 0 });
   const completion = await criarCompletionComRetry(openai, {
     model: TEXT_PROMPT_BUILDER_MODEL,
     temperature: 0.85,
@@ -351,19 +412,24 @@ export async function melhorarIdeia(ctx: ContextoIdeia): Promise<IdeiaMelhorada>
 
   const resposta = JSON.parse(conteudo) as Record<string, unknown>;
   const cadastro = `${ctx.identidade} ${ctx.contatos ?? ""}`;
-  resposta.titulo = tituloLimpo(resposta, `${ctx.ideia} ${cadastro}`);
-  for (const campo of ["titulo", "oferta", "apoio", "chamada"]) {
-    resposta[campo] = semTravessaoNovo(resposta[campo], ctx.ideia);
-  }
+  const fonte = `${ctx.ideia} ${cadastro}`;
+  const textos = textosDaArte(resposta.textos).map(({ papel, texto }) => ({
+    papel,
+    texto: semTravessaoNovo(ehTitulo(papel) ? tituloLimpo(texto, resposta.titulos, fonte) : texto, ctx.ideia),
+  }));
 
-  const briefing = resposta.jaEstaBoa === true ? null : montarBriefing(resposta);
+  const briefing =
+    resposta.jaEstaBoa === true ? null : montarBriefing(textoDe(resposta.conceito), textos, textoDe(resposta.ideiaVisual));
   if (briefing === "") throw new Error("Briefing vazio.");
 
   return {
     briefing,
     faltou: listaDeTextos(resposta.faltou, 3),
     // O que só o cliente garante vale mesmo com a ideia aprovada como está.
-    avisos: [...(briefing ? avisosDeFidelidade(ctx.ideia, briefing, cadastro) : []), ...listaDeTextos(resposta.confira, 2)],
+    avisos: [
+      ...(briefing ? avisosDeFidelidade(ctx.ideia, briefing, cadastro, textos.map((t) => t.texto).join("\n")) : []),
+      ...listaDeTextos(resposta.confira, 2),
+    ],
     uso: {
       modelo: TEXT_PROMPT_BUILDER_MODEL,
       entrada: completion.usage?.prompt_tokens ?? 0,
